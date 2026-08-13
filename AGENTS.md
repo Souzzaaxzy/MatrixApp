@@ -8,7 +8,7 @@ visual interface and navigation, offline-capable, no real backend).
 - Flutter: 3.27.x (stable). SDK at `$HOME/flutter/bin`.
 - JDK 21 at `/usr/lib/jvm/java-21-openjdk-amd64`. Always export before building:
   `export JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64 && export PATH=$HOME/flutter/bin:$JAVA_HOME/bin:$PATH`
-- Android: AGP 8.7.0, Gradle 8.10.2, Kotlin 1.9.24, NDK 27.0.12077973,
+- Android: AGP 8.11.1, Gradle 8.14.3, Kotlin 2.2.20, NDK 27.0.12077973,
   Java/Kotlin compile target 17. `android/app/build.gradle` pins NDK version
   explicitly to satisfy plugin requirements.
 
