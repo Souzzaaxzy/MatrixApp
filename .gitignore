@@ -1,3 +1,7 @@
+# ──────────────────────────────────────────────
+# MATRIX monorepo root .gitignore
+# ──────────────────────────────────────────────
+
 # Miscellaneous
 *.class
 *.log
@@ -18,12 +22,7 @@ migrate_working_dir/
 *.iws
 .idea/
 
-# The .vscode folder contains launch configuration and tasks you configure in
-# VS Code which you may wish to be included in version control, so this line
-# is commented out by default.
-#.vscode/
-
-# Flutter/Dart/Pub related
+# ── Flutter app (app/) ─────────────────────────
 **/doc/api/
 **/ios/Flutter/.last_build_id
 .dart_tool/
@@ -31,15 +30,36 @@ migrate_working_dir/
 .flutter-plugins-dependencies
 .pub-cache/
 .pub/
-/build/
+**/build/
 
-# Symbolication related
+# Symbolication / obfuscation
 app.*.symbols
-
-# Obfuscation related
 app.*.map.json
 
-# Android Studio will place build artifacts here
+# Android Studio build artifacts
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Flutter local config (never commit)
+app/android/local.properties
+
+# ── Backend server (server/) ───────────────────
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+
+# Environment files — NEVER commit secrets
+.env
+.env.*
+!.env.example
+
+# Local file storage for uploads (dev only)
+server/uploads/
+
+# Prisma generated client (regenerated on install/build)
+server/src/generated/
+
+# ── General ───────────────────────────────────
+.vscode/
