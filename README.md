@@ -1,16 +1,41 @@
-# matrix_app
+# MATRIX 💤 — Flutter App
 
-A new Flutter project.
+Cyberpunk futuristic social platform — **app (cliente Flutter)**.
 
-## Getting Started
+> **Backend separado**: o servidor agora está em
+> [Souzzaaxzy/ServidorMtx](https://github.com/Souzzaaxzy/ServidorMtx).
+> Para rodar o backend localmente em container, clone aquele repositório
+> e execute `docker compose up -d --build`.
 
-This project is a starting point for a Flutter application.
+## O que é este repositório
 
-A few resources to get you started if this is your first Flutter project:
+Apenas o app Flutter (camada de apresentação). Ele consome a API do
+backend MATRIX e **não** contém código de servidor.
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+## Configurar o endereço do backend
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+O app aponta para o backend definido em `lib/data/api_config.dart`:
+
+| Modo | Endereço |
+|------|----------|
+| Debug (emulador Android) | `http://10.0.2.2:3000` |
+| Release | `--dart-define=API_BASE_URL=https://seu-host` |
+
+Para apontar para um servidor diferente:
+```bash
+flutter run --dart-define=API_BASE_URL=http://192.168.0.10:3000
+```
+
+## Comandos (dentro de `app/`)
+
+```bash
+flutter pub get
+flutter analyze
+flutter test
+flutter build apk --release
+```
+
+## CI
+
+`.github/workflows/android.yml` — usa `working-directory: app`.
+Pipeline: checkout → JDK 21 → Flutter → pub get → analyze → test → build apk.
