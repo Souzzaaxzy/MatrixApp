@@ -24,7 +24,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   final _usernameController = TextEditingController();
-  final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmController = TextEditingController();
   bool _obscure = true;
@@ -36,7 +35,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
   void dispose() {
     _nameController.dispose();
     _usernameController.dispose();
-    _emailController.dispose();
     _passwordController.dispose();
     _confirmController.dispose();
     super.dispose();
@@ -49,12 +47,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
       _error = null;
     });
     try {
-      await AppStateScope.of(context).register(
+      final recoveryCode = await AppStateScope.of(context).register(
         name: _nameController.text.trim(),
         username: _usernameController.text.trim().replaceAll('@', ''),
-        email: _emailController.text.trim(),
         password: _passwordController.text,
       );
+      if (!mounted) return;
+      // Show the one-time recovery code before entering the app.
+      await _showRecoveryCode(recoveryCode);
       if (!mounted) return;
       Navigator.of(context).pushReplacementNamed(AppRoutes.home);
     } on ApiException catch (e) {
@@ -66,6 +66,46 @@ class _RegisterScreenState extends State<RegisterScreen> {
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  Future<void> _showRecoveryCode(String code) async {
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: AppColors.cardSurface,
+        title: Text('CÓDIGO DE RECUPERAÇÃO',
+            style: AppTextStyles.h3.copyWith(color: AppColors.success)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Guarde este código em local seguro. Ele é a única forma de '
+              'recuperar sua conta se esquecer a senha. Não o perdemos e não '
+              'podemos reenviá-lo.',
+              style: AppTextStyles.bodyMuted,
+            ),
+            const SizedBox(height: AppDimensions.spaceLg),
+            SelectableText(
+              code,
+              textAlign: TextAlign.center,
+              style: AppTextStyles.h2.copyWith(
+                color: AppColors.electricBlue,
+                fontFamily: 'JetBrainsMono',
+                letterSpacing: 4,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          MatrixButton(
+            label: 'Entendi',
+            onPressed: () => Navigator.of(dialogContext).pop(),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -135,20 +175,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 ),
                 const SizedBox(height: AppDimensions.spaceLg),
                 FadeSlideTransition(
-                  delay: const Duration(milliseconds: 200),
-                  child: MatrixTextField(
-                    label: 'E-mail',
-                    hint: 'seu@email.com',
-                    controller: _emailController,
-                    keyboardType: TextInputType.emailAddress,
-                    textInputAction: TextInputAction.next,
-                    validator: Validators.email,
-                    prefix: const Icon(Icons.alternate_email_rounded,
-                        color: AppColors.holographicBlue, size: 20),
-                  ),
-                ),
-                const SizedBox(height: AppDimensions.spaceLg),
-                FadeSlideTransition(
                   delay: const Duration(milliseconds: 280),
                   child: MatrixTextField(
                     label: 'Senha',
@@ -206,31 +232,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     expanded: true,
                     isLoading: _loading,
                     onPressed: _submit,
-                  ),
-                ),
-                const SizedBox(height: AppDimensions.spaceLg),
-                FadeSlideTransition(
-                  delay: const Duration(milliseconds: 500),
-                  child: Row(
-                    children: [
-                      const Expanded(child: Divider(color: AppColors.deepBlue)),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: AppDimensions.spaceMd),
-                        child: Text('ou', style: AppTextStyles.caption),
-                      ),
-                      const Expanded(child: Divider(color: AppColors.deepBlue)),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: AppDimensions.spaceLg),
-                FadeSlideTransition(
-                  delay: const Duration(milliseconds: 560),
-                  child: MatrixButton(
-                    label: 'Continuar com Google',
-                    icon: Icons.g_mobiledata_rounded,
-                    variant: MatrixButtonVariant.outline,
-                    expanded: true,
-                    onPressed: () => Navigator.of(context).pushReplacementNamed(AppRoutes.home),
                   ),
                 ),
                 const SizedBox(height: AppDimensions.spaceXxl),

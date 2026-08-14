@@ -23,7 +23,7 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _identifierController = TextEditingController();
+  final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _obscure = true;
   bool _loading = false;
@@ -31,7 +31,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   void dispose() {
-    _identifierController.dispose();
+    _usernameController.dispose();
     _passwordController.dispose();
     super.dispose();
   }
@@ -44,7 +44,7 @@ class _LoginScreenState extends State<LoginScreen> {
     });
     try {
       await AppStateScope.of(context).login(
-        identifier: _identifierController.text.trim(),
+        username: _usernameController.text.trim().replaceAll('@', ''),
         password: _passwordController.text,
       );
       if (!mounted) return;
@@ -107,12 +107,12 @@ class _LoginScreenState extends State<LoginScreen> {
                 FadeSlideTransition(
                   delay: const Duration(milliseconds: 250),
                   child: MatrixTextField(
-                    label: 'Usuário ou e-mail',
-                    hint: 'usuario ou seu@email.com',
-                    controller: _identifierController,
+                    label: 'Username',
+                    hint: 'seu_usuario',
+                    controller: _usernameController,
                     keyboardType: TextInputType.text,
                     textInputAction: TextInputAction.next,
-                    validator: (v) => Validators.required(v, label: 'Informe usuário ou e-mail'),
+                    validator: Validators.username,
                     prefix: const Icon(Icons.alternate_email_rounded,
                         color: AppColors.holographicBlue, size: 20),
                   ),
@@ -142,7 +142,20 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ),
                 ),
-                const SizedBox(height: AppDimensions.spaceXxl),
+                const SizedBox(height: AppDimensions.spaceSm),
+                FadeSlideTransition(
+                  delay: const Duration(milliseconds: 360),
+                  child: Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton(
+                      onPressed: () => Navigator.of(context).pushNamed(AppRoutes.recover),
+                      child: Text('Esqueci a senha',
+                          style: AppTextStyles.label
+                              .copyWith(color: AppColors.holographicBlue)),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: AppDimensions.spaceLg),
                 FadeSlideTransition(
                   delay: const Duration(milliseconds: 400),
                   child: MatrixButton(
@@ -150,31 +163,6 @@ class _LoginScreenState extends State<LoginScreen> {
                     expanded: true,
                     isLoading: _loading,
                     onPressed: _submit,
-                  ),
-                ),
-                const SizedBox(height: AppDimensions.spaceLg),
-                FadeSlideTransition(
-                  delay: const Duration(milliseconds: 460),
-                  child: Row(
-                    children: [
-                      const Expanded(child: Divider(color: AppColors.deepBlue)),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: AppDimensions.spaceMd),
-                        child: Text('ou', style: AppTextStyles.caption),
-                      ),
-                      const Expanded(child: Divider(color: AppColors.deepBlue)),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: AppDimensions.spaceLg),
-                FadeSlideTransition(
-                  delay: const Duration(milliseconds: 520),
-                  child: MatrixButton(
-                    label: 'Google',
-                    icon: Icons.g_mobiledata_rounded,
-                    variant: MatrixButtonVariant.outline,
-                    expanded: true,
-                    onPressed: () => Navigator.of(context).pushReplacementNamed(AppRoutes.home),
                   ),
                 ),
                 const SizedBox(height: AppDimensions.spaceXxl),

@@ -63,28 +63,42 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  /// Logs in with a username/email + password.
-  Future<void> login({required String identifier, required String password}) async {
-    final dto = await _auth.login(identifier: identifier, password: password);
+  /// Logs in with a username + password.
+  Future<void> login({required String username, required String password}) async {
+    final dto = await _auth.login(username: username, password: password);
     _currentUser = dto.user.toModel();
     notifyListeners();
   }
 
-  /// Registers a new account and logs in.
-  Future<void> register({
+  /// Registers a new account and logs in. Returns the one-time recovery
+  /// code the backend generated so the UI can display it to the user.
+  Future<String> register({
     required String name,
     required String username,
-    required String email,
     required String password,
   }) async {
     final dto = await _auth.register(
       name: name,
       username: username,
-      email: email,
       password: password,
     );
     _currentUser = dto.user.toModel();
     notifyListeners();
+    return dto.recoveryCode ?? '';
+  }
+
+  /// Recovers an account via recovery code + new password. The user must
+  /// log in again afterwards.
+  Future<void> recover({
+    required String identifier,
+    required String recoveryCode,
+    required String newPassword,
+  }) async {
+    await _auth.recover(
+      identifier: identifier,
+      recoveryCode: recoveryCode,
+      newPassword: newPassword,
+    );
   }
 
   /// Logs out and clears local state.

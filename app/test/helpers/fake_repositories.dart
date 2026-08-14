@@ -85,7 +85,6 @@ class _FakeAuthRepository implements AuthRepository {
   Future<AuthDto> register({
     required String name,
     required String username,
-    required String email,
     required String password,
   }) async {
     final user = MatrixUser(
@@ -104,16 +103,16 @@ class _FakeAuthRepository implements AuthRepository {
         id: user.id,
         name: user.name,
         username: user.username,
-        email: email,
         avatarUrl: user.avatarSeed,
         bio: user.bio,
       ),
+      recoveryCode: '829147206153',
     );
   }
 
   @override
   Future<AuthDto> login({
-    required String identifier,
+    required String username,
     required String password,
   }) async {
     final u = _store.currentUser;
@@ -124,12 +123,18 @@ class _FakeAuthRepository implements AuthRepository {
         id: u.id,
         name: u.name,
         username: u.username,
-        email: 'test@test.com',
         avatarUrl: u.avatarSeed,
         bio: u.bio,
       ),
     );
   }
+
+  @override
+  Future<void> recover({
+    required String identifier,
+    required String recoveryCode,
+    required String newPassword,
+  }) async {}
 
   @override
   Future<AuthUserDto> me() async {
@@ -138,7 +143,6 @@ class _FakeAuthRepository implements AuthRepository {
       id: u.id,
       name: u.name,
       username: u.username,
-      email: 'test@test.com',
       avatarUrl: u.avatarSeed,
       bio: u.bio,
     );

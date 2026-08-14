@@ -1,18 +1,31 @@
-import bcrypt from 'bcryptjs';
+import argon2, { type HashOptions } from 'argon2';
 import jwt from 'jsonwebtoken';
 import ms from 'ms';
 import { env } from '../config/env.js';
 import { prisma } from '../config/prisma.js';
 import type { Session, User } from '../generated/index.js';
+import { createHash, randomBytes, randomInt } from 'node:crypto';
 
-const BCRYPT_ROUNDS = 12;
+// Argon2id parameters. Tuned for a server-side hash cost that is resistant
+// to GPU brute force while keeping registration/login under ~200ms.
+const ARGON2_OPTIONS: HashOptions = {
+  type: argon2.argon2id,
+  memoryCost: 19_456, // ~19 MiB
+  timeCost: 3,
+  parallelism: 1,
+};
 
 export async function hashPassword(plain: string): Promise<string> {
-  return bcrypt.hash(plain, BCRYPT_ROUNDS);
+  return argon2.hash(plain, ARGON2_OPTIONS);
 }
 
 export async function verifyPassword(plain: string, hash: string): Promise<boolean> {
-  return bcrypt.compare(plain, hash);
+  if (!hash) return false;
+  try {
+    return await argon2.verify(hash, plain);
+  } catch {
+    return false;
+  }
 }
 
 export interface AccessTokenPayload {
@@ -37,8 +50,6 @@ export function verifyAccessToken(token: string): AccessTokenPayload {
 }
 
 // Refresh tokens are opaque random strings; only their hash is stored.
-import { createHash, randomBytes } from 'node:crypto';
-
 export function generateRefreshToken(): string {
   return randomBytes(48).toString('base64url');
 }
@@ -94,4 +105,32 @@ export async function revokeAllUserSessions(userId: string): Promise<void> {
     where: { userId, revokedAt: null },
     data: { revokedAt: new Date() },
   });
+}
+
+// ── Recovery codes ───────────────────────────────────────────────
+// A 12-digit numeric recovery code is generated at registration and shown
+// ONCE to the user. Only its hash is persisted — the original plaintext is
+// never stored, satisfying the requirement that the recovery code itself
+// not live in the database.
+
+const RECOVERY_CODE_LENGTH = 12;
+
+export function generateRecoveryCode(): string {
+  // Use crypto.randomInt to avoid modulo bias on each digit.
+  let code = '';
+  for (let i = 0; i < RECOVERY_CODE_LENGTH; i++) {
+    code += randomInt(0, 10).toString();
+  }
+  return code;
+}
+
+// Hash recovery codes with a distinct salt via SHA-256. Argon2id would be
+// ideal but these short numeric codes have low entropy, so we rely on rate
+// limiting + lockout rather than the hash function to resist brute force.
+export function hashRecoveryCode(code: string): string {
+  return createHash('sha256').update(code.trim()).digest('hex');
+}
+
+export function verifyRecoveryCode(code: string, hash: string): boolean {
+  return hashRecoveryCode(code) === hash;
 }

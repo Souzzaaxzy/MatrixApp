@@ -2,6 +2,7 @@ import { prisma } from '../../config/prisma.js';
 import { ApiError } from '../../utils/errors.js';
 import { toPostComment, type PostComment } from '../../utils/dto.js';
 import type { CreateCommentInput, ListCommentsQuery } from './comment.schema.js';
+import { grantXp, XP_REWARDS, XpReason } from '../../gamification/xp.service.js';
 
 const COMMENT_INCLUDE = {
   user: { select: { id: true, name: true, username: true, avatarUrl: true } },
@@ -19,6 +20,10 @@ export async function createComment(
     data: { userId, postId, text: input.text.trim() },
     include: COMMENT_INCLUDE,
   });
+
+  // Server-controlled reward for engagement.
+  await grantXp({ userId, amount: XP_REWARDS.COMMENT_CREATED, reason: XpReason.COMMENT_CREATED, source: `comment:${postId}` }).catch(() => void 0);
+
   return toPostComment(comment);
 }
 

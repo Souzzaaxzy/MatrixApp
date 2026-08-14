@@ -17,7 +17,7 @@ describe('Posts — feed + create + delete', () => {
     const u = await createAndLoginUser(server, { username: 'poster1' });
     const res = await server.inject({
       method: 'POST',
-      url: '/posts',
+      url: '/api/posts',
       headers: { authorization: `Bearer ${u.accessToken}` },
       payload: { text: 'Meu primeiro post real!' },
     });
@@ -33,7 +33,7 @@ describe('Posts — feed + create + delete', () => {
     const u = await createAndLoginUser(server, { username: 'poster2' });
     const res = await server.inject({
       method: 'POST',
-      url: '/posts',
+      url: '/api/posts',
       headers: { authorization: `Bearer ${u.accessToken}` },
       payload: { text: '' },
     });
@@ -43,7 +43,7 @@ describe('Posts — feed + create + delete', () => {
   it('rejects unauthenticated post creation', async () => {
     const res = await server.inject({
       method: 'POST',
-      url: '/posts',
+      url: '/api/posts',
       payload: { text: 'anon' },
     });
     expect(res.statusCode).toBe(401);
@@ -57,7 +57,7 @@ describe('Posts — feed + create + delete', () => {
     await new Promise((r) => setTimeout(r, 10));
     await prisma.post.create({ data: { userId: b.id, text: 'segundo (mais novo)' } });
 
-    const res = await server.inject({ method: 'GET', url: '/posts?limit=10' });
+    const res = await server.inject({ method: 'GET', url: '/api/posts?limit=10' });
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.payload);
     expect(body.posts).toHaveLength(2);
@@ -71,14 +71,14 @@ describe('Posts — feed + create + delete', () => {
       await prisma.post.create({ data: { userId: u.id, text: `post ${i}` } });
       await new Promise((r) => setTimeout(r, 5));
     }
-    const first = await server.inject({ method: 'GET', url: '/posts?limit=2' });
+    const first = await server.inject({ method: 'GET', url: '/api/posts?limit=2' });
     const firstBody = JSON.parse(first.payload);
     expect(firstBody.posts).toHaveLength(2);
     expect(firstBody.nextCursor).not.toBeNull();
 
     const second = await server.inject({
       method: 'GET',
-      url: `/posts?limit=2&cursor=${encodeURIComponent(firstBody.nextCursor)}`,
+      url: `/api/posts?limit=2&cursor=${encodeURIComponent(firstBody.nextCursor)}`,
     });
     const secondBody = JSON.parse(second.payload);
     expect(secondBody.posts).toHaveLength(2);
@@ -88,14 +88,14 @@ describe('Posts — feed + create + delete', () => {
     const u = await createAndLoginUser(server, { username: 'deleter' });
     const created = await server.inject({
       method: 'POST',
-      url: '/posts',
+      url: '/api/posts',
       headers: { authorization: `Bearer ${u.accessToken}` },
       payload: { text: 'to be deleted' },
     });
     const postId = JSON.parse(created.payload).id;
     const res = await server.inject({
       method: 'DELETE',
-      url: `/posts/${postId}`,
+      url: `/api/posts/${postId}`,
       headers: { authorization: `Bearer ${u.accessToken}` },
     });
     expect(res.statusCode).toBe(204);
@@ -106,14 +106,14 @@ describe('Posts — feed + create + delete', () => {
     const other = await createAndLoginUser(server, { username: 'othera' });
     const created = await server.inject({
       method: 'POST',
-      url: '/posts',
+      url: '/api/posts',
       headers: { authorization: `Bearer ${owner.accessToken}` },
       payload: { text: 'not yours' },
     });
     const postId = JSON.parse(created.payload).id;
     const res = await server.inject({
       method: 'DELETE',
-      url: `/posts/${postId}`,
+      url: `/api/posts/${postId}`,
       headers: { authorization: `Bearer ${other.accessToken}` },
     });
     expect(res.statusCode).toBe(403);

@@ -57,6 +57,9 @@ export class ApiError extends Error {
   static rateLimited(message = 'Muitas requisições. Tente novamente em instantes.') {
     return new ApiError('RATE_LIMITED', message, 429);
   }
+  static tooManyRecoveryAttempts(message = 'Muitas tentativas de recuperação. Tente novamente mais tarde.') {
+    return new ApiError('RATE_LIMITED', message, 429);
+  }
   static internal(message = 'Erro interno do servidor.') {
     return new ApiError('INTERNAL_ERROR', message, 500);
   }
@@ -71,7 +74,7 @@ export function toApiError(err: unknown): ApiError {
   if (err instanceof Prisma.PrismaClientKnownRequestError) {
     if (err.code === 'P2002') {
       // Unique constraint violation — without revealing which field.
-      return ApiError.conflict('Usuário ou e-mail já cadastrado.');
+      return ApiError.conflict('Usuário já cadastrado.');
     }
     if (err.code === 'P2025') {
       return ApiError.notFound();

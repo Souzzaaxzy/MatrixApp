@@ -23,7 +23,7 @@ describe('Uploads — POST /uploads', () => {
     const png = readFileSync(path.join(FIXTURES, 'pixel.png'));
     const res = await server.inject({
       method: 'POST',
-      url: '/uploads',
+      url: '/api/uploads',
       headers: {
         authorization: `Bearer ${u.accessToken}`,
         'content-type': `multipart/form-data; boundary=----test`,
@@ -50,7 +50,7 @@ describe('Uploads — POST /uploads', () => {
   });
 
   it('requires authentication', async () => {
-    const res = await server.inject({ method: 'POST', url: '/uploads' });
+    const res = await server.inject({ method: 'POST', url: '/api/uploads' });
     expect(res.statusCode).toBe(401);
   });
 });

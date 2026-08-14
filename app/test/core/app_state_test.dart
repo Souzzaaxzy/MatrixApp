@@ -109,7 +109,7 @@ void main() {
 
   group('login', () {
     test('sets the current user', () async {
-      await state.login(identifier: 'leonardo', password: 'whatever');
+      await state.login(username: 'leonardo', password: 'whatever');
       expect(state.currentUser, isNotNull);
       expect(state.currentUser!.username, 'leonardo');
       expect(state.isAuthenticated, isTrue);

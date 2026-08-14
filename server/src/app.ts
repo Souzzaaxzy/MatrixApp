@@ -11,7 +11,7 @@ import swaggerUi from '@fastify/swagger-ui';
 import { env } from './config/env.js';
 import { logger } from './config/logger.js';
 import { ApiError, toApiError } from './utils/errors.js';
-import { authenticate, optionalAuth } from './middleware/authenticate.js';
+import { authenticate, optionalAuth, requireRole } from './middleware/authenticate.js';
 
 import { authRoutes } from './modules/auth/auth.routes.js';
 import { postRoutes } from './modules/posts/post.routes.js';
@@ -20,6 +20,14 @@ import { commentRoutes } from './modules/comments/comment.routes.js';
 import { userRoutes } from './modules/users/user.routes.js';
 import { searchRoutes } from './modules/search/search.routes.js';
 import { uploadRoutes } from './modules/uploads/upload.routes.js';
+import { gamificationRoutes } from './modules/gamification/gamification.routes.js';
+import { customizationRoutes } from './modules/customization/customization.routes.js';
+import { musicRoutes } from './modules/music/music.routes.js';
+import { gameRoutes } from './modules/games/game.routes.js';
+import { callRoutes } from './modules/calls/call.routes.js';
+import { akameRoutes } from './modules/akame/akame.routes.js';
+import { configRoutes } from './modules/config/config.routes.js';
+import { adminRoutes } from './modules/admin/admin.routes.js';
 
 export async function buildServer() {
   const app = Fastify({
@@ -29,6 +37,7 @@ export async function buildServer() {
 
   app.decorate('authenticate', authenticate);
   app.decorate('optionalAuth', optionalAuth);
+  app.decorate('requireRole', requireRole);
 
   // ── Security & infra plugins ───────────────────────────────
   await app.register(helmet, {
@@ -100,13 +109,24 @@ export async function buildServer() {
   // ── Routes ──────────────────────────────────────────────────
   // IMPORTANT: register /users/search BEFORE /users/:username so the
   // static "search" path isn't captured as a username param.
-  await app.register(authRoutes, { prefix: '/auth' });
-  await app.register(searchRoutes, { prefix: '' });
-  await app.register(postRoutes, { prefix: '' });
-  await app.register(likeRoutes, { prefix: '' });
-  await app.register(commentRoutes, { prefix: '' });
-  await app.register(userRoutes, { prefix: '' });
-  await app.register(uploadRoutes, { prefix: '' });
+  //
+  // All app-facing routes are mounted under /api so the server can later
+  // host the staff admin web panel on a separate prefix without collision.
+  await app.register(authRoutes, { prefix: '/api/auth' });
+  await app.register(configRoutes, { prefix: '/api' });
+  await app.register(gamificationRoutes, { prefix: '/api' });
+  await app.register(customizationRoutes, { prefix: '/api' });
+  await app.register(musicRoutes, { prefix: '/api' });
+  await app.register(gameRoutes, { prefix: '/api' });
+  await app.register(callRoutes, { prefix: '/api' });
+  await app.register(akameRoutes, { prefix: '/api' });
+  await app.register(adminRoutes, { prefix: '/api' });
+  await app.register(searchRoutes, { prefix: '/api' });
+  await app.register(postRoutes, { prefix: '/api' });
+  await app.register(likeRoutes, { prefix: '/api' });
+  await app.register(commentRoutes, { prefix: '/api' });
+  await app.register(userRoutes, { prefix: '/api' });
+  await app.register(uploadRoutes, { prefix: '/api' });
 
   // Health check (unauthenticated, unrate-limited-friendly).
   app.get('/health', async (_request, reply) => reply.status(200).send({ status: 'ok' }));

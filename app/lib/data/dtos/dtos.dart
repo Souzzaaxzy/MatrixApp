@@ -11,17 +11,20 @@ class AuthDto {
   final String accessToken;
   final String refreshToken;
   final AuthUserDto user;
+  final String? recoveryCode;
 
   const AuthDto({
     required this.accessToken,
     required this.refreshToken,
     required this.user,
+    this.recoveryCode,
   });
 
   factory AuthDto.fromJson(Map<String, dynamic> json) => AuthDto(
         accessToken: json['accessToken'] as String,
         refreshToken: json['refreshToken'] as String,
         user: AuthUserDto.fromJson(json['user'] as Map<String, dynamic>),
+        recoveryCode: json['recoveryCode'] as String?,
       );
 }
 
@@ -29,7 +32,6 @@ class AuthUserDto {
   final String id;
   final String name;
   final String username;
-  final String email;
   final String? avatarUrl;
   final String bio;
 
@@ -37,7 +39,6 @@ class AuthUserDto {
     required this.id,
     required this.name,
     required this.username,
-    required this.email,
     this.avatarUrl,
     required this.bio,
   });
@@ -54,7 +55,6 @@ class AuthUserDto {
         id: json['id'] as String,
         name: json['name'] as String,
         username: json['username'] as String,
-        email: json['email'] as String,
         avatarUrl: json['avatarUrl'] as String?,
         bio: (json['bio'] as String?) ?? '',
       );

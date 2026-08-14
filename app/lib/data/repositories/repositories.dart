@@ -8,24 +8,25 @@ import '../../models/post.dart';
 import '../api_client.dart';
 import '../dtos/dtos.dart';
 
-/// Authentication repository — register, login, current user, logout.
+/// Authentication repository — register, login, current user, logout,
+/// and account recovery. Username-only (no email/phone).
 class AuthRepository {
   AuthRepository(this._api);
 
   final ApiClient _api;
 
+  /// Registers a new account. The backend returns a recovery code that
+  /// must be shown to the user once — it is never sent again.
   Future<AuthDto> register({
     required String name,
     required String username,
-    required String email,
     required String password,
   }) async {
     final json = await _api.post<Map<String, dynamic>>(
-      '/auth/register',
+      '/api/auth/register',
       data: {
         'name': name,
         'username': username,
-        'email': email,
         'password': password,
       },
     );
@@ -38,12 +39,12 @@ class AuthRepository {
   }
 
   Future<AuthDto> login({
-    required String identifier,
+    required String username,
     required String password,
   }) async {
     final json = await _api.post<Map<String, dynamic>>(
-      '/auth/login',
-      data: {'identifier': identifier, 'password': password},
+      '/api/auth/login',
+      data: {'username': username, 'password': password},
     );
     final dto = AuthDto.fromJson(json);
     await _api.tokenStore.save(
@@ -53,15 +54,32 @@ class AuthRepository {
     return dto;
   }
 
+  /// Recovers an account using the recovery code + a new password.
+  /// Does not return tokens — the user must log in afterwards.
+  Future<void> recover({
+    required String identifier,
+    required String recoveryCode,
+    required String newPassword,
+  }) async {
+    await _api.post(
+      '/api/auth/recover',
+      data: {
+        'identifier': identifier,
+        'recoveryCode': recoveryCode,
+        'newPassword': newPassword,
+      },
+    );
+  }
+
   Future<AuthUserDto> me() async {
-    final json = await _api.get<Map<String, dynamic>>('/auth/me');
+    final json = await _api.get<Map<String, dynamic>>('/api/auth/me');
     return AuthUserDto.fromJson((json['user'] as Map<String, dynamic>));
   }
 
   Future<void> logout() async {
     final refresh = await _api.tokenStore.refreshToken;
     try {
-      await _api.post('/auth/logout', data: {'refreshToken': refresh});
+      await _api.post('/api/auth/logout', data: {'refreshToken': refresh});
     } finally {
       await _api.tokenStore.clear();
     }
@@ -82,7 +100,7 @@ class PostRepository {
   }) async {
     final query = <String, dynamic>{'limit': limit};
     if (cursor != null) query['cursor'] = cursor;
-    final json = await _api.get<Map<String, dynamic>>('/posts', queryParameters: query);
+    final json = await _api.get<Map<String, dynamic>>('/api/posts', queryParameters: query);
     final list = (json['posts'] as List).cast<Map<String, dynamic>>();
     final posts = list.map(FeedPostDto.fromJson).map((d) => d.toModel()).toList();
     final next = json['nextCursor'] as String?;
@@ -91,14 +109,14 @@ class PostRepository {
 
   Future<Post> create({required String text, String? imageUrl}) async {
     final json = await _api.post<Map<String, dynamic>>(
-      '/posts',
+      '/api/posts',
       data: {'text': text, if (imageUrl != null) 'imageUrl': imageUrl},
     );
     return FeedPostDto.fromJson(json).toModel();
   }
 
   Future<void> delete(String id) async {
-    await _api.delete('/posts/$id');
+    await _api.delete('/api/posts/$id');
   }
 }
 
@@ -110,7 +128,7 @@ class LikeRepository {
 
   /// Toggles the like on a post. Returns the new state and count.
   Future<({bool liked, int likeCount})> toggle(String postId) async {
-    final json = await _api.post<Map<String, dynamic>>('/posts/$postId/like');
+    final json = await _api.post<Map<String, dynamic>>('/api/posts/$postId/like');
     return (
       liked: json['liked'] as bool,
       likeCount: (json['likeCount'] as num).toInt(),
@@ -125,21 +143,21 @@ class CommentRepository {
   final ApiClient _api;
 
   Future<List<Comment>> list(String postId) async {
-    final json = await _api.get<Map<String, dynamic>>('/posts/$postId/comments');
+    final json = await _api.get<Map<String, dynamic>>('/api/posts/$postId/comments');
     final list = (json['comments'] as List).cast<Map<String, dynamic>>();
     return list.map(CommentDto.fromJson).map((d) => d.toModel()).toList();
   }
 
   Future<Comment> create({required String postId, required String text}) async {
     final json = await _api.post<Map<String, dynamic>>(
-      '/posts/$postId/comments',
+      '/api/posts/$postId/comments',
       data: {'text': text},
     );
     return CommentDto.fromJson(json).toModel();
   }
 
   Future<void> delete(String commentId) async {
-    await _api.delete('/comments/$commentId');
+    await _api.delete('/api/comments/$commentId');
   }
 }
 
@@ -151,7 +169,7 @@ class UserRepository {
 
   /// Fetches a public profile by username, including that user's posts.
   Future<({MatrixUser user, List<Post> posts})> profile(String username) async {
-    final json = await _api.get<Map<String, dynamic>>('/users/$username');
+    final json = await _api.get<Map<String, dynamic>>('/api/users/$username');
     final user = PublicUserDto.fromJson(json['user'] as Map<String, dynamic>).toModel();
     final list = (json['posts'] as List).cast<Map<String, dynamic>>();
     final posts = list.map(FeedPostDto.fromJson).map((d) => d.toModel()).toList();
@@ -160,7 +178,7 @@ class UserRepository {
 
   Future<MatrixUser> updateProfile({String? name, String? bio}) async {
     final json = await _api.patch<Map<String, dynamic>>(
-      '/users/me',
+      '/api/users/me',
       data: {if (name != null) 'name': name, if (bio != null) 'bio': bio},
     );
     return AuthUserDto.fromJson(json['user'] as Map<String, dynamic>).toModel();
@@ -168,7 +186,7 @@ class UserRepository {
 
   Future<List<MatrixUser>> search(String query) async {
     final json = await _api.get<Map<String, dynamic>>(
-      '/users/search',
+      '/api/users/search',
       queryParameters: {'q': query},
     );
     final list = (json['users'] as List).cast<Map<String, dynamic>>();
@@ -186,7 +204,7 @@ class UploadRepository {
   Future<String> upload(File file) async {
     final multipart = await MultipartFile.fromFile(file.path);
     final json = await _api.upload<Map<String, dynamic>>(
-      '/uploads',
+      '/api/uploads',
       file: multipart,
     );
     return json['url'] as String;

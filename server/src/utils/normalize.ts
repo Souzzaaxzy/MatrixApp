@@ -1,9 +1,5 @@
 // Input normalization helpers. Centralized so every endpoint treats
-// email/username consistently regardless of where they enter the system.
-
-export function normalizeEmail(email: string): string {
-  return email.trim().toLowerCase();
-}
+// username consistently regardless of where they enter the system.
 
 // Usernames: lowercase, trim. Allow letters, numbers, underscores, dots, hyphens.
 export function normalizeUsername(username: string): string {
@@ -12,9 +8,13 @@ export function normalizeUsername(username: string): string {
 
 export function isValidUsername(username: string): boolean {
   const normalized = normalizeUsername(username);
+  // 3-20 chars, start with a letter/digit, allow _ . -
   return /^[a-z0-9._-]{3,20}$/.test(normalized) && /^[a-z0-9]/.test(normalized);
 }
 
-export function isValidEmail(email: string): boolean {
-  return /^[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}$/i.test(normalizeEmail(email));
+// MATRIX ID / identifier used during account recovery — accepts a username
+// or the raw internal id. We don't expose whether a lookup matched so the
+// endpoint can't be used for user enumeration.
+export function normalizeIdentifier(identifier: string): string {
+  return identifier.trim();
 }

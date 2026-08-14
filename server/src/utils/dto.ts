@@ -1,7 +1,8 @@
 import type { Post, User } from '../generated/index.js';
 import type { Comment } from '../generated/index.js';
 
-// Public user shape — never exposes passwordHash or email to other users.
+// Public user shape — never exposes passwordHash, recoveryCodeHash or role
+// internals to other users.
 export interface PublicUser {
   id: string;
   name: string;
@@ -22,16 +23,16 @@ export function toPublicUser(user: User): PublicUser {
   };
 }
 
-// Authenticated user — includes email (only the current user's own data).
+// Authenticated user — includes role (only the current user's own data).
 export interface AuthUser extends PublicUser {
-  email: string;
+  role: string;
   updatedAt: string;
 }
 
 export function toAuthUser(user: User): AuthUser {
   return {
     ...toPublicUser(user),
-    email: user.email,
+    role: user.role,
     updatedAt: user.updatedAt.toISOString(),
   };
 }

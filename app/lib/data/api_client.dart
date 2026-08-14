@@ -99,7 +99,7 @@ class ApiClient {
     if (refresh == null) return false;
     try {
       final response = await _dio.post<Map<String, dynamic>>(
-        '/auth/refresh',
+        '/api/auth/refresh',
         data: {'refreshToken': refresh},
       );
       final data = response.data!;
@@ -132,9 +132,10 @@ class _AuthInterceptor extends Interceptor {
   ) async {
     // The refresh endpoint authenticates with the refresh token in the body;
     // never attach an (expired) access token to it.
-    if (options.path == '/auth/refresh' ||
-        options.path == '/auth/login' ||
-        options.path == '/auth/register') {
+    if (options.path == '/api/auth/refresh' ||
+        options.path == '/api/auth/login' ||
+        options.path == '/api/auth/register' ||
+        options.path == '/api/auth/recover') {
       return handler.next(options);
     }
     final token = await _tokenStore.accessToken;
@@ -151,8 +152,8 @@ class _AuthInterceptor extends Interceptor {
   ) async {
     final isUnauthorized =
         err.response?.statusCode == 401 &&
-            err.requestOptions.path != '/auth/refresh' &&
-            err.requestOptions.path != '/auth/login';
+            err.requestOptions.path != '/api/auth/refresh' &&
+            err.requestOptions.path != '/api/auth/login';
 
     if (!isUnauthorized) {
       return handler.next(err);

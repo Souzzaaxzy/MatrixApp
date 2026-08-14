@@ -24,7 +24,7 @@ describe('Likes', () => {
 
     const res = await server.inject({
       method: 'POST',
-      url: `/posts/${post.id}/like`,
+      url: `/api/posts/${post.id}/like`,
       headers: { authorization: `Bearer ${liker.accessToken}` },
     });
     expect(res.statusCode).toBe(200);
@@ -38,10 +38,10 @@ describe('Likes', () => {
     const liker = await createAndLoginUser(server, { username: 'liker2' });
     const post = await seedPost(author.id);
 
-    await server.inject({ method: 'POST', url: `/posts/${post.id}/like`, headers: { authorization: `Bearer ${liker.accessToken}` } });
+    await server.inject({ method: 'POST', url: `/api/posts/${post.id}/like`, headers: { authorization: `Bearer ${liker.accessToken}` } });
     const res = await server.inject({
       method: 'POST',
-      url: `/posts/${post.id}/like`,
+      url: `/api/posts/${post.id}/like`,
       headers: { authorization: `Bearer ${liker.accessToken}` },
     });
     expect(res.statusCode).toBe(200);
@@ -54,11 +54,11 @@ describe('Likes', () => {
     const author = await createAndLoginUser(server, { username: 'likeauthor3' });
     const liker = await createAndLoginUser(server, { username: 'liker3' });
     const post = await seedPost(author.id);
-    await server.inject({ method: 'POST', url: `/posts/${post.id}/like`, headers: { authorization: `Bearer ${liker.accessToken}` } });
+    await server.inject({ method: 'POST', url: `/api/posts/${post.id}/like`, headers: { authorization: `Bearer ${liker.accessToken}` } });
 
     const res = await server.inject({
       method: 'GET',
-      url: '/posts',
+      url: '/api/posts',
       headers: { authorization: `Bearer ${liker.accessToken}` },
     });
     const body = JSON.parse(res.payload);
@@ -69,7 +69,7 @@ describe('Likes', () => {
   it('requires authentication', async () => {
     const author = await createAndLoginUser(server, { username: 'likeauthor4' });
     const post = await seedPost(author.id);
-    const res = await server.inject({ method: 'POST', url: `/posts/${post.id}/like` });
+    const res = await server.inject({ method: 'POST', url: `/api/posts/${post.id}/like` });
     expect(res.statusCode).toBe(401);
   });
 
@@ -77,7 +77,7 @@ describe('Likes', () => {
     const liker = await createAndLoginUser(server, { username: 'liker4' });
     const res = await server.inject({
       method: 'POST',
-      url: '/posts/nonexistent-id/like',
+      url: '/api/posts/nonexistent-id/like',
       headers: { authorization: `Bearer ${liker.accessToken}` },
     });
     expect(res.statusCode).toBe(404);

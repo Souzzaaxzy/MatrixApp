@@ -3,6 +3,8 @@ import { prisma } from '../../config/prisma.js';
 import { ApiError } from '../../utils/errors.js';
 import { toFeedPost, type FeedPost } from '../../utils/dto.js';
 import type { CreatePostInput, FeedQuery } from './post.schema.js';
+import { grantXp, XP_REWARDS, XpReason } from '../../gamification/xp.service.js';
+import { grantCoins, COIN_REWARDS, CoinReason } from '../../gamification/coin.service.js';
 
 const FEED_INCLUDE = {
   user: { select: { id: true, name: true, username: true, avatarUrl: true } },
@@ -24,6 +26,12 @@ export async function createPost(
       likes: { where: { userId }, select: { userId: true } },
     },
   });
+
+  // Server-controlled reward for content creation. The client never decides
+  // the amount — these constants live only on the server.
+  await grantXp({ userId, amount: XP_REWARDS.POST_CREATED, reason: XpReason.POST_CREATED, source: 'post:create' }).catch(() => void 0);
+  await grantCoins({ userId, amount: COIN_REWARDS.POST_CREATED, type: 'EARN', reason: CoinReason.POST_CREATED }).catch(() => void 0);
+
   return toFeedPost(post, userId);
 }
 

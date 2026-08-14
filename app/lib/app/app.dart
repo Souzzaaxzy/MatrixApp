@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../core/services/app_state.dart';
 import '../core/widgets/app_state_scope.dart';
 import '../features/auth/login/login_screen.dart';
+import '../features/auth/recover/recover_screen.dart';
 import '../features/auth/register/register_screen.dart';
 import '../features/create_post/create_post_screen.dart';
 import '../features/home/home_screen.dart';
@@ -32,6 +33,8 @@ class MatrixApp extends StatelessWidget {
               return _fade(const LoginScreen());
             case AppRoutes.register:
               return _fade(const RegisterScreen());
+            case AppRoutes.recover:
+              return _fade(const RecoverScreen());
             case AppRoutes.home:
               return _fade(HomeScreen(initialIndex: (settings.arguments as int?) ?? 0));
             case AppRoutes.createPost:

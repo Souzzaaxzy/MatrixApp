@@ -16,11 +16,11 @@ describe('Users — profile', () => {
     const u = await createAndLoginUser(server, { username: 'profileuser', name: 'Profile User' });
     await server.inject({
       method: 'POST',
-      url: '/posts',
+      url: '/api/posts',
       headers: { authorization: `Bearer ${u.accessToken}` },
       payload: { text: 'profile post' },
     });
-    const res = await server.inject({ method: 'GET', url: '/users/profileuser' });
+    const res = await server.inject({ method: 'GET', url: '/api/users/profileuser' });
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.payload);
     expect(body.user.username).toBe('profileuser');
@@ -30,7 +30,7 @@ describe('Users — profile', () => {
   });
 
   it('returns 404 for unknown user', async () => {
-    const res = await server.inject({ method: 'GET', url: '/users/ghost' });
+    const res = await server.inject({ method: 'GET', url: '/api/users/ghost' });
     expect(res.statusCode).toBe(404);
   });
 
@@ -38,7 +38,7 @@ describe('Users — profile', () => {
     const u = await createAndLoginUser(server, { username: 'updateme' });
     const res = await server.inject({
       method: 'PATCH',
-      url: '/users/me',
+      url: '/api/users/me',
       headers: { authorization: `Bearer ${u.accessToken}` },
       payload: { name: 'Nome Atualizado', bio: 'Nova bio' },
     });
@@ -48,7 +48,7 @@ describe('Users — profile', () => {
   });
 
   it('requires auth to update profile', async () => {
-    const res = await server.inject({ method: 'PATCH', url: '/users/me', payload: { bio: 'x' } });
+    const res = await server.inject({ method: 'PATCH', url: '/api/users/me', payload: { bio: 'x' } });
     expect(res.statusCode).toBe(401);
   });
 });
@@ -56,7 +56,7 @@ describe('Users — profile', () => {
 describe('Search — GET /users/search', () => {
   it('finds users by username substring', async () => {
     await createAndLoginUser(server, { username: 'searchable', name: 'Alice Search' });
-    const res = await server.inject({ method: 'GET', url: '/users/search?q=searc' });
+    const res = await server.inject({ method: 'GET', url: '/api/users/search?q=searc' });
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.payload);
     expect(body.users.map((u: { username: string }) => u.username)).toContain('searchable');
@@ -64,7 +64,7 @@ describe('Search — GET /users/search', () => {
 
   it('finds users by name substring', async () => {
     await createAndLoginUser(server, { username: 'nameuser', name: 'Zoe Unique' });
-    const res = await server.inject({ method: 'GET', url: '/users/search?q=unique' });
+    const res = await server.inject({ method: 'GET', url: '/api/users/search?q=unique' });
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.payload);
     expect(body.users).toHaveLength(1);
@@ -72,13 +72,13 @@ describe('Search — GET /users/search', () => {
   });
 
   it('returns empty list for no matches', async () => {
-    const res = await server.inject({ method: 'GET', url: '/users/search?q=zzzznotfound' });
+    const res = await server.inject({ method: 'GET', url: '/api/users/search?q=zzzznotfound' });
     expect(res.statusCode).toBe(200);
     expect(JSON.parse(res.payload).users).toHaveLength(0);
   });
 
   it('rejects empty query', async () => {
-    const res = await server.inject({ method: 'GET', url: '/users/search?q=' });
+    const res = await server.inject({ method: 'GET', url: '/api/users/search?q=' });
     expect(res.statusCode).toBe(400);
   });
 });

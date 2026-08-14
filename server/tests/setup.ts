@@ -1,6 +1,10 @@
 import { afterAll, afterEach, beforeAll, vi } from 'vitest';
 import { execSync } from 'node:child_process';
+import { config } from 'dotenv';
 import { prisma } from '../src/config/prisma.js';
+
+// Load .env.test before anything reads process.env.
+config({ path: '.env.test' });
 
 // ── Env ──────────────────────────────────────────────────────
 // Tests target a real PostgreSQL instance. A dedicated test database
@@ -41,7 +45,17 @@ beforeAll(async () => {
 afterEach(async () => {
   // Cascade truncates all rows in dependency-safe order.
   await prisma.$executeRawUnsafe(
-    'TRUNCATE TABLE "comments", "likes", "posts", "sessions", "users" RESTART IDENTITY CASCADE;',
+    'TRUNCATE TABLE ' +
+      '"game_results", "game_sessions", "games", ' +
+      '"music_votes", "playlist_tracks", "playlists", "tracks", ' +
+      '"event_rewards", "event_participants", "events", ' +
+      '"equipped_items", "user_items", "items", ' +
+      '"user_badges", "badges", "user_achievements", "achievements", ' +
+      '"coin_transactions", "matrix_coins", "xp_transactions", "levels", ' +
+      '"call_participants", "call_rooms", ' +
+      '"app_config", ' +
+      '"comments", "likes", "posts", "sessions", "users" ' +
+      'RESTART IDENTITY CASCADE;',
   );
 });
 
