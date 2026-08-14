@@ -6,9 +6,11 @@ import '../../../app/theme/app_dimensions.dart';
 import '../../../app/theme/app_text_styles.dart';
 import '../../../core/animations/fade_slide_transition.dart';
 import '../../../core/utils/validators.dart';
+import '../../../core/widgets/app_state_scope.dart';
 import '../../../core/widgets/hud_label.dart';
 import '../../../core/widgets/matrix_button.dart';
 import '../../../core/widgets/matrix_text_field.dart';
+import '../../../data/api_config.dart';
 
 /// Register screen. Validation is local in Phase 1 (no real auth).
 class RegisterScreen extends StatefulWidget {
@@ -21,16 +23,19 @@ class RegisterScreen extends StatefulWidget {
 class _RegisterScreenState extends State<RegisterScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
+  final _usernameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmController = TextEditingController();
   bool _obscure = true;
   bool _confirmObscure = true;
   bool _loading = false;
+  String? _error;
 
   @override
   void dispose() {
     _nameController.dispose();
+    _usernameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
     _confirmController.dispose();
@@ -39,12 +44,28 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   Future<void> _submit() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
-    setState(() => _loading = true);
-    // Simulated registration — replace with real auth later.
-    await Future.delayed(const Duration(milliseconds: 700));
-    if (!mounted) return;
-    setState(() => _loading = false);
-    Navigator.of(context).pushReplacementNamed(AppRoutes.home);
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      await AppStateScope.of(context).register(
+        name: _nameController.text.trim(),
+        username: _usernameController.text.trim().replaceAll('@', ''),
+        email: _emailController.text.trim(),
+        password: _passwordController.text,
+      );
+      if (!mounted) return;
+      Navigator.of(context).pushReplacementNamed(AppRoutes.home);
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() => _error = e.message);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _error = 'Erro ao criar conta.');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
   }
 
   @override
@@ -78,6 +99,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   ),
                 ),
                 const SizedBox(height: AppDimensions.spaceXxl),
+                if (_error != null)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: AppDimensions.spaceMd),
+                    child: Text(
+                      _error!,
+                      style: AppTextStyles.caption.copyWith(color: AppColors.error),
+                    ),
+                  ),
                 FadeSlideTransition(
                   delay: const Duration(milliseconds: 120),
                   child: MatrixTextField(
@@ -89,6 +118,19 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     validator: Validators.name,
                     prefix: const Icon(Icons.person_outline_rounded,
                         color: AppColors.holographicBlue, size: 20),
+                  ),
+                ),
+                const SizedBox(height: AppDimensions.spaceLg),
+                FadeSlideTransition(
+                  delay: const Duration(milliseconds: 160),
+                  child: MatrixTextField(
+                    label: 'Username',
+                    hint: 'seu_usuario',
+                    controller: _usernameController,
+                    textInputAction: TextInputAction.next,
+                    validator: Validators.username,
+                    prefix: const Text('@',
+                        style: TextStyle(color: AppColors.holographicBlue)),
                   ),
                 ),
                 const SizedBox(height: AppDimensions.spaceLg),

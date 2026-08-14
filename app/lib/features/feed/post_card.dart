@@ -8,12 +8,13 @@ import '../../app/theme/app_dimensions.dart';
 import '../../app/theme/app_text_styles.dart';
 import '../../core/utils/date_utils.dart';
 import '../../models/post.dart';
+import '../../core/widgets/app_state_scope.dart';
 import '../../core/widgets/matrix_card.dart';
 import '../../core/widgets/user_avatar.dart';
 
 /// Reusable post card for the feed.
 ///
-/// Likes work locally in Phase 1 (no persistence).
+/// Likes are toggled remotely via AppState (optimistic update).
 class PostCard extends StatefulWidget {
   const PostCard({
     super.key,
@@ -52,11 +53,7 @@ class _PostCardState extends State<PostCard>
   }
 
   void _toggleLike() {
-    setState(() {
-      final post = widget.post;
-      post.liked = !post.liked;
-      post.likes += post.liked ? 1 : -1;
-    });
+    AppStateScope.of(context).toggleLike(widget.post.id);
     _likeController.forward(from: 1.0).then((_) => _likeController.reverse());
   }
 

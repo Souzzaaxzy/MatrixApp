@@ -2,6 +2,9 @@ import 'dart:io';
 
 import 'package:dio/dio.dart';
 
+import '../../models/comment.dart';
+import '../../models/matrix_user.dart';
+import '../../models/post.dart';
 import '../api_client.dart';
 import '../dtos/dtos.dart';
 
@@ -188,4 +191,24 @@ class UploadRepository {
     );
     return json['url'] as String;
   }
+}
+
+/// Bundles all repositories so they can be injected as a unit (e.g. into
+/// [AppState] for tests, or constructed once in [Services] for production).
+class Repositories {
+  const Repositories({
+    required this.auth,
+    required this.posts,
+    required this.likes,
+    required this.comments,
+    required this.users,
+    required this.uploads,
+  });
+
+  final AuthRepository auth;
+  final PostRepository posts;
+  final LikeRepository likes;
+  final CommentRepository comments;
+  final UserRepository users;
+  final UploadRepository uploads;
 }

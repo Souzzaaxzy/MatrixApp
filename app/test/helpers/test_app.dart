@@ -11,17 +11,23 @@ import 'package:matrix_app/features/home/home_screen.dart';
 import 'package:matrix_app/features/profile/edit_profile_screen.dart';
 import 'package:matrix_app/features/splash/splash_screen.dart';
 
+import 'fake_repositories.dart';
+
 /// Pumps a given [child] inside a MaterialApp with the MATRIX theme and an
-/// [AppStateScope], so widget tests share the same dependency wiring as
-/// the real app.
+/// [AppStateScope] backed by in-memory fake repositories, so widget tests
+/// share the same dependency wiring as the real app without a network.
 Future<void> pumpMatrixApp(
   WidgetTester tester,
   Widget child, {
   AppState? state,
 }) async {
+  state ??= AppState(repositories: FakeRepositories());
+  // Restore the session so screens relying on currentUser render content.
+  await state.restoreSession();
+  await state.loadFeed();
   await tester.pumpWidget(
     AppStateScope(
-      state: state ?? AppState(),
+      state: state,
       child: MaterialApp(
         theme: AppTheme.dark,
         home: child,
@@ -36,4 +42,15 @@ Future<void> pumpMatrixApp(
       ),
     ),
   );
+  // Let any post-frame callbacks (feed load, etc.) run.
+  await tester.pump();
+}
+
+/// Creates an [AppState] ready for widget tests — restores the session and
+/// loads the feed against the fake repositories.
+Future<AppState> seededAppState() async {
+  final state = AppState(repositories: FakeRepositories());
+  await state.restoreSession();
+  await state.loadFeed();
+  return state;
 }

@@ -13,12 +13,14 @@ class EmptyState extends StatelessWidget {
     this.subtitle,
     this.icon = Icons.grid_view_rounded,
     this.hud,
+    this.action,
   });
 
   final String title;
   final String? subtitle;
   final IconData icon;
   final String? hud;
+  final Widget? action;
 
   @override
   Widget build(BuildContext context) {
@@ -54,6 +56,10 @@ class EmptyState extends StatelessWidget {
                 textAlign: TextAlign.center,
                 style: AppTextStyles.bodyMuted,
               ),
+            ],
+            if (action != null) ...[
+              const SizedBox(height: AppDimensions.spaceXl),
+              SizedBox(width: 200, child: action),
             ],
           ],
         ),

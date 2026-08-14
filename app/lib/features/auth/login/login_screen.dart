@@ -6,10 +6,12 @@ import '../../../app/theme/app_dimensions.dart';
 import '../../../app/theme/app_text_styles.dart';
 import '../../../core/animations/fade_slide_transition.dart';
 import '../../../core/utils/validators.dart';
+import '../../../core/widgets/app_state_scope.dart';
 import '../../../core/widgets/glow_container.dart';
 import '../../../core/widgets/hud_label.dart';
 import '../../../core/widgets/matrix_button.dart';
 import '../../../core/widgets/matrix_text_field.dart';
+import '../../../data/api_config.dart';
 
 /// Login screen. The flow is simulated in Phase 1 (no real auth).
 class LoginScreen extends StatefulWidget {
@@ -21,26 +23,41 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _emailController = TextEditingController();
+  final _identifierController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _obscure = true;
   bool _loading = false;
+  String? _error;
 
   @override
   void dispose() {
-    _emailController.dispose();
+    _identifierController.dispose();
     _passwordController.dispose();
     super.dispose();
   }
 
   Future<void> _submit() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
-    setState(() => _loading = true);
-    // Simulated access flow — replace with real authentication later.
-    await Future.delayed(const Duration(milliseconds: 700));
-    if (!mounted) return;
-    setState(() => _loading = false);
-    Navigator.of(context).pushReplacementNamed(AppRoutes.home);
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      await AppStateScope.of(context).login(
+        identifier: _identifierController.text.trim(),
+        password: _passwordController.text,
+      );
+      if (!mounted) return;
+      Navigator.of(context).pushReplacementNamed(AppRoutes.home);
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() => _error = e.message);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _error = 'Erro ao entrar.');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
   }
 
   @override
@@ -79,15 +96,23 @@ class _LoginScreenState extends State<LoginScreen> {
                   child: const Center(child: HudLabel(text: 'ACCESS NETWORK', dot: true)),
                 ),
                 const SizedBox(height: AppDimensions.spaceXxl),
+                if (_error != null)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: AppDimensions.spaceMd),
+                    child: Text(
+                      _error!,
+                      style: AppTextStyles.caption.copyWith(color: AppColors.error),
+                    ),
+                  ),
                 FadeSlideTransition(
                   delay: const Duration(milliseconds: 250),
                   child: MatrixTextField(
-                    label: 'E-mail',
-                    hint: 'seu@email.com',
-                    controller: _emailController,
-                    keyboardType: TextInputType.emailAddress,
+                    label: 'Usuário ou e-mail',
+                    hint: 'usuario ou seu@email.com',
+                    controller: _identifierController,
+                    keyboardType: TextInputType.text,
                     textInputAction: TextInputAction.next,
-                    validator: Validators.email,
+                    validator: (v) => Validators.required(v, label: 'Informe usuário ou e-mail'),
                     prefix: const Icon(Icons.alternate_email_rounded,
                         color: AppColors.holographicBlue, size: 20),
                   ),

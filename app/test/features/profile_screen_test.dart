@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:matrix_app/core/services/app_state.dart';
 import 'package:matrix_app/features/profile/edit_profile_screen.dart';
 import 'package:matrix_app/features/profile/profile_screen.dart';
 
@@ -48,19 +47,17 @@ void main() {
       expect(find.text('Username obrigatório'), findsOneWidget);
     });
 
-    testWidgets('saves updated profile locally', (tester) async {
-      final state = AppState();
+    testWidgets('saves updated profile remotely', (tester) async {
+      final state = await seededAppState();
       await pumpMatrixApp(tester, const EditProfileScreen(), state: state);
 
       await tester.enterText(find.byType(TextField).at(0), 'Neo');
-      await tester.enterText(find.byType(TextField).at(1), 'neo');
       await tester.enterText(find.byType(TextField).at(2), 'The one');
       await tester.tap(find.text('SALVAR'));
       await tester.pumpAndSettle();
 
-      expect(state.currentUser.name, 'Neo');
-      expect(state.currentUser.username, 'neo');
-      expect(state.currentUser.bio, 'The one');
+      expect(state.currentUser!.name, 'Neo');
+      expect(state.currentUser!.bio, 'The one');
     });
   });
 }

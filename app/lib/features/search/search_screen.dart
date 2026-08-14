@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_dimensions.dart';
 import '../../app/theme/app_text_styles.dart';
-import '../../core/utils/mock_data_service.dart';
+import '../../core/widgets/app_state_scope.dart';
 import '../../core/widgets/empty_state.dart';
 import '../../core/widgets/hud_label.dart';
 import '../../core/widgets/matrix_card.dart';
@@ -11,7 +11,7 @@ import '../../core/widgets/matrix_text_field.dart';
 import '../../core/widgets/user_avatar.dart';
 import '../../models/matrix_user.dart';
 
-/// MATRIX search — local search by name / username.
+/// MATRIX search — backend search by name / username.
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});
 
@@ -21,7 +21,17 @@ class SearchScreen extends StatefulWidget {
 
 class _SearchScreenState extends State<SearchScreen> {
   final _controller = TextEditingController();
-  String _query = '';
+  List<MatrixUser> _results = const [];
+  bool _loading = false;
+  bool _searched = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_searched) {
+      _search('');
+    }
+  }
 
   @override
   void dispose() {
@@ -29,15 +39,24 @@ class _SearchScreenState extends State<SearchScreen> {
     super.dispose();
   }
 
-  List<MatrixUser> get _results {
-    final users = MockDataService.users();
-    if (_query.trim().isEmpty) return users;
-    final q = _query.toLowerCase();
-    return users
-        .where((u) =>
-            u.name.toLowerCase().contains(q) ||
-            u.username.toLowerCase().contains(q))
-        .toList();
+  Future<void> _search(String query) async {
+    setState(() => _loading = true);
+    try {
+      final users = await AppStateScope.of(context).searchUsers(query.trim());
+      if (!mounted) return;
+      setState(() {
+        _results = users;
+        _searched = true;
+        _loading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _results = const [];
+        _searched = true;
+        _loading = false;
+      });
+    }
   }
 
   @override
@@ -72,11 +91,16 @@ class _SearchScreenState extends State<SearchScreen> {
                 controller: _controller,
                 prefix: const Icon(Icons.search_rounded,
                     color: AppColors.holographicBlue, size: 20),
-                onChanged: (v) => setState(() => _query = v),
+                onChanged: (v) => _search(v),
               ),
             ),
           ),
-          if (results.isEmpty)
+          if (_loading && results.isEmpty)
+            const SliverFillRemaining(
+              hasScrollBody: false,
+              child: Center(child: HudLabel(text: 'SEARCHING...', dot: true)),
+            )
+          else if (results.isEmpty && _searched)
             const SliverFillRemaining(
               hasScrollBody: false,
               child: EmptyState(

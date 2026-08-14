@@ -12,6 +12,8 @@ import '../../core/widgets/app_state_scope.dart';
 import '../../core/widgets/hud_label.dart';
 import '../../core/widgets/matrix_button.dart';
 import '../../core/widgets/matrix_text_field.dart';
+import '../../data/api_config.dart';
+import '../../data/services.dart';
 
 /// Create publication screen.
 ///
@@ -49,17 +51,31 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
   Future<void> _publish() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
     setState(() => _publishing = true);
-    // Simulated local publish — no remote upload in Phase 1.
-    await Future.delayed(const Duration(milliseconds: 400));
-    if (!mounted) return;
-    AppStateScope.of(context).createPost(
-      text: _controller.text,
-      imageUrl: _imagePath,
-    );
-    setState(() => _publishing = false);
-    Navigator.of(context)
-      ..pop()
-      ..pushReplacementNamed(AppRoutes.home);
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
+    final state = AppStateScope.of(context);
+    try {
+      String? imageUrl;
+      if (_imagePath != null) {
+        imageUrl = await Services.instance.uploads.upload(File(_imagePath!));
+      }
+      await state.createPost(
+        text: _controller.text,
+        imageUrl: imageUrl,
+      );
+      if (!mounted) return;
+      navigator
+        ..pop()
+        ..pushReplacementNamed(AppRoutes.home);
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+    } catch (_) {
+      if (!mounted) return;
+      messenger.showSnackBar(const SnackBar(content: Text('Erro ao publicar.')));
+    } finally {
+      if (mounted) setState(() => _publishing = false);
+    }
   }
 
   @override
@@ -129,7 +145,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
                     Expanded(child: Divider(color: AppColors.deepBlue)),
                     Padding(
                       padding: EdgeInsets.symmetric(horizontal: AppDimensions.spaceMd),
-                      child: HudLabel(text: 'LOCAL PUBLISH'),
+                      child: HudLabel(text: 'PUBLISH'),
                     ),
                     Expanded(child: Divider(color: AppColors.deepBlue)),
                   ],

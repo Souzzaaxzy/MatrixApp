@@ -21,6 +21,16 @@ class Validators {
     return null;
   }
 
+  static final RegExp _username = RegExp(r'^[a-zA-Z0-9_.]+$');
+
+  static String? username(String? value) {
+    final v = (value ?? '').trim().replaceAll('@', '');
+    if (v.isEmpty) return 'Informe um username';
+    if (v.length < 3) return 'Mínimo de 3 caracteres';
+    if (!_username.hasMatch(v)) return 'Apenas letras, números, _ e .';
+    return null;
+  }
+
   static String? password(String? value) {
     final v = value ?? '';
     if (v.isEmpty) return 'Informe sua senha';

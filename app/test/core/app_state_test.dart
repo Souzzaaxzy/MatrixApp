@@ -1,88 +1,127 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:matrix_app/core/services/app_state.dart';
 
+import '../helpers/fake_repositories.dart';
+
 void main() {
   late AppState state;
 
-  setUp(() {
-    state = AppState();
+  setUp(() async {
+    state = AppState(repositories: FakeRepositories());
+    await state.restoreSession();
+    await state.loadFeed();
   });
 
-  test('initial state loads mocked posts and akame messages', () {
+  test('initial state restores the current user and loads the feed', () {
     expect(state.posts, isNotEmpty);
+    expect(state.currentUser, isNotNull);
+    expect(state.currentUser!.name, isNotEmpty);
+    expect(state.isAuthenticated, isTrue);
+  });
+
+  test('akame messages start seeded', () {
     expect(state.akameMessages, isNotEmpty);
-    expect(state.currentUser.name, isNotEmpty);
   });
 
   group('toggleLike', () {
-    test('increments likes and sets liked when toggled on', () {
+    test('toggles the like state and count remotely', () async {
       final first = state.posts.first;
       final initial = first.likes;
       final wasLiked = first.liked;
 
-      state.toggleLike(first.id);
+      await state.toggleLike(first.id);
 
       expect(state.posts.first.liked, !wasLiked);
       expect(state.posts.first.likes, wasLiked ? initial - 1 : initial + 1);
     });
 
-    test('is reversible — toggling twice returns to the original count', () {
+    test('is reversible — toggling twice returns to the original count',
+        () async {
       final first = state.posts.first;
       final initialLikes = first.likes;
       final initialLiked = first.liked;
 
-      state.toggleLike(first.id);
-      state.toggleLike(first.id);
+      await state.toggleLike(first.id);
+      await state.toggleLike(first.id);
 
       expect(state.posts.first.likes, initialLikes);
       expect(state.posts.first.liked, initialLiked);
     });
 
-    test('does nothing for an unknown post id', () {
+    test('does nothing for an unknown post id', () async {
       final length = state.posts.length;
-      state.toggleLike('does-not-exist');
+      await state.toggleLike('does-not-exist');
       expect(state.posts.length, length);
     });
   });
 
   group('addComment', () {
-    test('appends a comment from the current user', () {
+    test('creates a comment remotely with the current user as author', () async {
       final first = state.posts.first;
-      final initialCount = first.comments.length;
 
-      state.addComment(first.id, 'Olá');
+      final comment = await state.addComment(first.id, 'Olá');
 
-      expect(state.posts.first.comments.length, initialCount + 1);
-      expect(state.posts.first.comments.last.text, 'Olá');
-      expect(state.posts.first.comments.last.author, state.currentUser.name);
+      expect(comment.text, 'Olá');
+      expect(comment.author, state.currentUser!.name);
     });
+  });
 
-    test('ignores empty comments', () {
+  group('loadComments', () {
+    test('returns the list of comments for a post', () async {
       final first = state.posts.first;
-      final initialCount = first.comments.length;
+      await state.addComment(first.id, 'Comentário 1');
+      await state.addComment(first.id, 'Comentário 2');
 
-      state.addComment(first.id, '   ');
+      final comments = await state.loadComments(first.id);
 
-      expect(state.posts.first.comments.length, initialCount);
+      expect(comments.length, 2);
+      expect(
+        comments.map((c) => c.text),
+        containsAll(['Comentário 1', 'Comentário 2']),
+      );
     });
   });
 
   group('createPost', () {
-    test('prepends a new post authored by the current user', () {
+    test('prepends a new post authored by the current user', () async {
       final initialLength = state.posts.length;
-      final id = state.createPost(text: 'Nova publicação');
+      final id = await state.createPost(text: 'Nova publicação');
 
       expect(state.posts.length, initialLength + 1);
       expect(state.posts.first.id, id);
       expect(state.posts.first.text, 'Nova publicação');
-      expect(state.posts.first.authorUsername, state.currentUser.username);
+      expect(state.posts.first.authorUsername, state.currentUser!.username);
       expect(state.posts.first.likes, 0);
       expect(state.posts.first.liked, isFalse);
     });
 
-    test('keeps imageUrl optional', () {
-      final id = state.createPost(text: 'Com imagem', imageUrl: 'file://x');
-      expect(state.posts.firstWhere((p) => p.id == id).imageUrl, 'file://x');
+    test('keeps imageUrl optional', () async {
+      final id = await state.createPost(
+        text: 'Com imagem',
+        imageUrl: 'https://x/y.png',
+      );
+      expect(
+        state.posts.firstWhere((p) => p.id == id).imageUrl,
+        'https://x/y.png',
+      );
+    });
+  });
+
+  group('login', () {
+    test('sets the current user', () async {
+      await state.login(identifier: 'leonardo', password: 'whatever');
+      expect(state.currentUser, isNotNull);
+      expect(state.currentUser!.username, 'leonardo');
+      expect(state.isAuthenticated, isTrue);
+    });
+  });
+
+  group('logout', () {
+    test('clears the current user and posts', () async {
+      expect(state.isAuthenticated, isTrue);
+      await state.logout();
+      expect(state.isAuthenticated, isFalse);
+      expect(state.posts, isEmpty);
     });
   });
 
@@ -111,19 +150,18 @@ void main() {
   });
 
   group('updateProfile', () {
-    test('updates name, username and bio locally', () {
-      state.updateProfile(name: 'Neo', username: 'neo', bio: 'The one');
-      expect(state.currentUser.name, 'Neo');
-      expect(state.currentUser.username, 'neo');
-      expect(state.currentUser.bio, 'The one');
+    test('updates name and bio remotely', () async {
+      await state.updateProfile(name: 'Neo', bio: 'The one');
+      expect(state.currentUser!.name, 'Neo');
+      expect(state.currentUser!.bio, 'The one');
     });
 
-    test('preserves previous values when fields are null', () {
-      state.updateProfile(name: 'Neo');
-      expect(state.currentUser.name, 'Neo');
-      state.updateProfile(bio: 'updated bio');
-      expect(state.currentUser.name, 'Neo');
-      expect(state.currentUser.bio, 'updated bio');
+    test('preserves previous values when fields are null', () async {
+      await state.updateProfile(name: 'Neo');
+      expect(state.currentUser!.name, 'Neo');
+      await state.updateProfile(bio: 'updated bio');
+      expect(state.currentUser!.name, 'Neo');
+      expect(state.currentUser!.bio, 'updated bio');
     });
   });
 }

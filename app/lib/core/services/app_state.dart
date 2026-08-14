@@ -18,27 +18,33 @@ import '../utils/mock_data_service.dart';
 /// Akame chat (still mock — no AI backend yet). All network mutations go
 /// through this class so the UI can stay declarative.
 class AppState extends ChangeNotifier {
-  AppState() {
-    _akameMessages = MockDataService.initialAkameMessages();
-  }
+  /// When [repositories] is null (production), the real repositories from
+  /// [Services.instance] are used. Tests inject an in-memory set so the
+  /// optimistic-update / caching logic can be exercised without a network.
+  AppState({Repositories? repositories})
+      : _repos = repositories,
+        _akameMessages = MockDataService.initialAkameMessages();
 
-  final List<Post> _posts = [];
+  final Repositories? _repos;
   List<AkameMessage> _akameMessages = [];
   MatrixUser? _currentUser;
   String? _feedCursor;
   bool _loadingFeed = false;
   bool _disposed = false;
 
+  final List<Post> _posts = [];
   List<Post> get posts => List.unmodifiable(_posts);
   List<AkameMessage> get akameMessages => List.unmodifiable(_akameMessages);
   MatrixUser? get currentUser => _currentUser;
   bool get isLoadingFeed => _loadingFeed;
   bool get isAuthenticated => _currentUser != null;
 
-  AuthRepository get _auth => Services.instance.auth;
-  PostRepository get _postsRepo => Services.instance.posts;
-  LikeRepository get _likes => Services.instance.likes;
-  CommentRepository get _comments => Services.instance.comments;
+  AuthRepository get _auth => _repos?.auth ?? Services.instance.auth;
+  PostRepository get _postsRepo => _repos?.posts ?? Services.instance.posts;
+  LikeRepository get _likes => _repos?.likes ?? Services.instance.likes;
+  CommentRepository get _comments =>
+      _repos?.comments ?? Services.instance.comments;
+  UserRepository get _users => _repos?.users ?? Services.instance.users;
 
   /// Restores the session from a stored refresh token. Called at startup.
   /// Returns true when the user is authenticated afterwards.
@@ -197,12 +203,14 @@ class AppState extends ChangeNotifier {
 
   /// Updates the current user profile remotely.
   Future<void> updateProfile({String? name, String? bio}) async {
-    final updated = await Services.instance.users.updateProfile(
-      name: name,
-      bio: bio,
-    );
+    final updated = await _users.updateProfile(name: name, bio: bio);
     _currentUser = updated;
     notifyListeners();
+  }
+
+  /// Searches users by name / username.
+  Future<List<MatrixUser>> searchUsers(String query) async {
+    return _users.search(query);
   }
 
   @override

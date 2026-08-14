@@ -5,11 +5,13 @@ import '../../app/theme/app_dimensions.dart';
 import '../../app/theme/app_text_styles.dart';
 import '../../app/routes.dart';
 import '../../core/animations/fade_slide_transition.dart';
+import '../../core/widgets/app_state_scope.dart';
 import '../../core/widgets/glow_container.dart';
 
 /// Elegant MATRIX splash screen.
 ///
-/// Plays a short, smooth animation then navigates to login.
+/// Plays a short animation, attempts to restore a stored session, then
+/// routes to home (if authenticated) or the login screen.
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
 
@@ -20,6 +22,7 @@ class SplashScreen extends StatefulWidget {
 class _SplashScreenState extends State<SplashScreen>
     with SingleTickerProviderStateMixin {
   late final AnimationController _progressController;
+  bool _navigated = false;
 
   @override
   void initState() {
@@ -30,10 +33,21 @@ class _SplashScreenState extends State<SplashScreen>
     )..forward();
 
     _progressController.addStatusListener((status) {
-      if (status == AnimationStatus.completed && mounted) {
-        Navigator.of(context).pushReplacementNamed(AppRoutes.login);
+      if (status == AnimationStatus.completed) {
+        _restoreAndNavigate();
       }
     });
+  }
+
+  Future<void> _restoreAndNavigate() async {
+    if (_navigated) return;
+    _navigated = true;
+    final state = AppStateScope.of(context);
+    final authenticated = await state.restoreSession();
+    if (!mounted) return;
+    Navigator.of(context).pushReplacementNamed(
+      authenticated ? AppRoutes.home : AppRoutes.login,
+    );
   }
 
   @override

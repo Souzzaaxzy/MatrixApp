@@ -20,19 +20,20 @@ void main() {
     await tester.tap(find.text('ENTRAR'));
     await tester.pump();
 
-    expect(find.text('Informe seu e-mail'), findsOneWidget);
+    expect(find.text('Informe usuário ou e-mail'), findsOneWidget);
     expect(find.text('Informe sua senha'), findsOneWidget);
   });
 
-  testWidgets('validates invalid email format', (tester) async {
+  testWidgets('accepts a username or email as identifier', (tester) async {
     await pumpMatrixApp(tester, const LoginScreen());
 
-    await tester.enterText(find.byType(TextField).at(0), 'not-an-email');
+    await tester.enterText(find.byType(TextField).at(0), 'leonardo');
     await tester.enterText(find.byType(TextField).at(1), '123456');
     await tester.tap(find.text('ENTRAR'));
-    await tester.pump();
+    await tester.pumpAndSettle();
 
-    expect(find.text('E-mail inválido'), findsOneWidget);
+    // Successful login navigates to the home route.
+    expect(find.text('MATRIX'), findsWidgets);
   });
 
   testWidgets('toggles password visibility', (tester) async {

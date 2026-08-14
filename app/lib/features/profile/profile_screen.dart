@@ -10,6 +10,7 @@ import '../../core/widgets/glow_container.dart';
 import '../../core/widgets/hud_label.dart';
 import '../../core/widgets/matrix_button.dart';
 import '../../core/widgets/user_avatar.dart';
+import '../../models/post.dart';
 
 /// Profile screen showing the current user and their posts grid.
 class ProfileScreen extends StatelessWidget {
@@ -19,9 +20,18 @@ class ProfileScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final state = AppStateScope.of(context);
     final user = state.currentUser;
-    final userPosts = state.posts
-        .where((p) => p.authorUsername == user.username)
-        .toList();
+    final userPosts = user == null
+        ? <Post>[]
+        : state.posts.where((p) => p.authorUsername == user.username).toList();
+
+    if (user == null) {
+      return Scaffold(
+        backgroundColor: AppColors.absoluteBlack,
+        body: const Center(
+          child: HudLabel(text: 'NOT AUTHENTICATED', dot: true),
+        ),
+      );
+    }
 
     return Scaffold(
       backgroundColor: AppColors.absoluteBlack,

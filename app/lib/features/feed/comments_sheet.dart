@@ -7,6 +7,7 @@ import '../../core/utils/date_utils.dart';
 import '../../core/widgets/app_state_scope.dart';
 import '../../core/widgets/hud_label.dart';
 import '../../core/widgets/user_avatar.dart';
+import '../../models/comment.dart';
 import '../../models/post.dart';
 
 /// Bottom sheet showing comments for a post.
@@ -43,6 +44,37 @@ class CommentsSheet extends StatefulWidget {
 
 class _CommentsSheetState extends State<CommentsSheet> {
   final _controller = TextEditingController();
+  List<Comment>? _comments;
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadComments();
+  }
+
+  Future<void> _loadComments() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final comments =
+          await AppStateScope.of(context).loadComments(widget.post.id);
+      if (!mounted) return;
+      setState(() {
+        _comments = comments;
+        _loading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _error = 'Erro ao carregar comentários.';
+        _loading = false;
+      });
+    }
+  }
 
   @override
   void dispose() {
@@ -50,23 +82,28 @@ class _CommentsSheetState extends State<CommentsSheet> {
     super.dispose();
   }
 
-  void _send() {
+  Future<void> _send() async {
     final text = _controller.text;
     if (text.trim().isEmpty) return;
-    AppStateScope.of(context).addComment(widget.post.id, text);
     _controller.clear();
     FocusScope.of(context).unfocus();
+    try {
+      final comment =
+          await AppStateScope.of(context).addComment(widget.post.id, text);
+      setState(() {
+        _comments = [...?_comments, comment];
+      });
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Erro ao enviar comentário.')),
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final state = AppStateScope.of(context);
-    // Re-read comments from state so the sheet reflects additions.
-    final post = state.posts.firstWhere(
-      (p) => p.id == widget.post.id,
-      orElse: () => widget.post,
-    );
-    final comments = post.comments;
+    final comments = _comments ?? <Comment>[];
 
     return SizedBox(
       height: MediaQuery.sizeOf(context).height * 0.7,
@@ -84,18 +121,36 @@ class _CommentsSheetState extends State<CommentsSheet> {
           const HudLabel(text: 'COMMENTS'),
           const Divider(color: AppColors.deepBlue, height: AppDimensions.spaceXl),
           Expanded(
-            child: comments.isEmpty
-                ? Center(
-                    child: Text(
-                      'Seja o primeiro a comentar.',
-                      style: AppTextStyles.bodyMuted,
-                    ),
+            child: _loading
+                ? const Center(
+                    child: HudLabel(text: 'LOADING...', dot: true),
                   )
-                : ListView.separated(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: AppDimensions.spaceLg,
-                    ),
-                    itemCount: comments.length,
+                : _error != null
+                    ? Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(_error!, style: AppTextStyles.bodyMuted),
+                            const SizedBox(height: AppDimensions.spaceMd),
+                            TextButton(
+                              onPressed: _loadComments,
+                              child: const Text('Tentar novamente'),
+                            ),
+                          ],
+                        ),
+                      )
+                    : comments.isEmpty
+                        ? Center(
+                            child: Text(
+                              'Seja o primeiro a comentar.',
+                              style: AppTextStyles.bodyMuted,
+                            ),
+                          )
+                        : ListView.separated(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: AppDimensions.spaceLg,
+                            ),
+                            itemCount: comments.length,
                     separatorBuilder: (_, __) =>
                         const Divider(color: AppColors.deepBlue, height: 1),
                     itemBuilder: (context, i) {

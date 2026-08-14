@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:matrix_app/core/services/app_state.dart';
 import 'package:matrix_app/features/create_post/create_post_screen.dart';
 import 'package:matrix_app/features/home/home_screen.dart';
 
@@ -25,9 +24,8 @@ void main() {
     expect(find.text('Escreva algo'), findsOneWidget);
   });
 
-  testWidgets('creates a post locally when valid text is published',
-      (tester) async {
-    final state = AppState();
+  testWidgets('creates a post when valid text is published', (tester) async {
+    final state = await seededAppState();
     final initialCount = state.posts.length;
     // Open create-post from the home shell so the navigator has a proper
     // route stack (the screen pops back on publish).
@@ -38,9 +36,7 @@ void main() {
 
     await tester.enterText(find.byType(TextField), 'Post de teste');
     await tester.tap(find.text('PUBLICAR'));
-
-    // Advance past the simulated publish delay.
-    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pumpAndSettle();
 
     expect(state.posts.length, initialCount + 1);
     expect(state.posts.first.text, 'Post de teste');

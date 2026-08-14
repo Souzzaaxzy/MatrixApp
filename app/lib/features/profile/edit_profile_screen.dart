@@ -31,10 +31,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     super.didChangeDependencies();
     if (_initialized) return;
     final user = AppStateScope.of(context).currentUser;
-    _nameController = TextEditingController(text: user.name);
+    _nameController = TextEditingController(text: user?.name ?? '');
     _usernameController =
-        TextEditingController(text: user.username.replaceAll('@', ''));
-    _bioController = TextEditingController(text: user.bio);
+        TextEditingController(text: (user?.username ?? '').replaceAll('@', ''));
+    _bioController = TextEditingController(text: user?.bio ?? '');
     _initialized = true;
   }
 
@@ -49,14 +49,20 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   Future<void> _save() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
     setState(() => _saving = true);
-    await Future.delayed(const Duration(milliseconds: 400));
+    try {
+      await AppStateScope.of(context).updateProfile(
+        name: _nameController.text.trim(),
+        bio: _bioController.text.trim(),
+      );
+    } catch (_) {
+      // Surface error to user via snackbar.
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Erro ao salvar perfil.')),
+        );
+      }
+    }
     if (!mounted) return;
-    final username = _usernameController.text.trim().replaceAll('@', '');
-    AppStateScope.of(context).updateProfile(
-      name: _nameController.text.trim(),
-      username: username,
-      bio: _bioController.text.trim(),
-    );
     setState(() => _saving = false);
     if (mounted) Navigator.of(context).pop();
   }
@@ -88,9 +94,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                     children: [
                       UserAvatar(
                         name: _nameController.text.isEmpty
-                            ? user.name
+                            ? (user?.name ?? '')
                             : _nameController.text,
-                        seed: user.avatarSeed,
+                        seed: user?.avatarSeed,
                         size: 96,
                         ring: true,
                       ),
