@@ -11,17 +11,29 @@ class ApiConfig {
   const ApiConfig._();
 
   static String get baseUrl {
-    // Allow override at build time for release/profile builds.
+    // Highest priority: build-time override (`--dart-define=API_BASE_URL=...`).
+    // The CI release build injects this from the API_BASE_URL secret.
     const defined = String.fromEnvironment('API_BASE_URL');
     if (defined.isNotEmpty) return defined;
 
-    // Debug defaults — the Android emulator maps 10.0.2.2 to the host's
-    // localhost. iOS simulators can use plain localhost.
     if (kReleaseMode) {
-      return 'https://api.matrix.app';
+      // Production default — the MATRIX API hosted on the panel
+      // (Pterodactyl/Bronxys). Update this to your server's public URL, or
+      // (better) set the API_BASE_URL secret so the CI build injects it.
+      // Must be reachable from the device; do NOT use localhost/10.0.2.2 here.
+      return _productionUrl;
     }
+    // Debug default — the Android emulator maps 10.0.2.2 to the host machine's
+    // localhost (where `npm start` / `npm run dev` runs the API).
     return 'http://10.0.2.2:3000';
   }
+
+  /// Production API URL used when no `--dart-define` override is provided.
+  /// Can also be overridden at build time with `--dart-define=API_PROD_URL=...`.
+  static const String _productionUrl = String.fromEnvironment(
+    'API_PROD_URL',
+    defaultValue: 'https://api.matrix.app',
+  );
 
   static const Duration connectTimeout = Duration(seconds: 10);
   static const Duration receiveTimeout = Duration(seconds: 30);

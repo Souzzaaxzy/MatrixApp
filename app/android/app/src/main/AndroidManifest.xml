@@ -3,11 +3,16 @@
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32"/>
+    <!--
+      usesCleartextTraffic allows plain-HTTP API hosts (e.g. a Pterodactyl
+      server without TLS yet). Remove it once the API is served over HTTPS.
+    -->
     <application
         android:label="MATRIX"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
-        android:roundIcon="@mipmap/ic_launcher">
+        android:roundIcon="@mipmap/ic_launcher"
+        android:usesCleartextTraffic="true">
         <activity
             android:name=".MainActivity"
             android:exported="true"

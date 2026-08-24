@@ -51,8 +51,20 @@ jobs:
       - name: Run tests
         run: flutter test
 
+      # Inject the production API URL. Set the API_BASE_URL repository secret
+      # (Settings → Secrets and variables → Actions) to your server's public
+      # URL, e.g. http://meu-servidor.bronxys.cloud:4316 (no trailing slash).
+      # If unset, the app falls back to the default in lib/data/api_config.dart.
       - name: Build APK
-        run: flutter build apk --release
+        env:
+          API_BASE_URL: ${{ secrets.API_BASE_URL }}
+        run: |
+          if [ -n "$API_BASE_URL" ]; then
+            flutter build apk --release --dart-define=API_BASE_URL="$API_BASE_URL"
+          else
+            echo "::warning::API_BASE_URL secret not set — building with the default URL in api_config.dart"
+            flutter build apk --release
+          fi
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
