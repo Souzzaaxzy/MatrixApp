@@ -126,7 +126,11 @@ class _LoginScreenState extends State<LoginScreen> {
                     controller: _passwordController,
                     obscureText: _obscure,
                     textInputAction: TextInputAction.done,
-                    validator: Validators.password,
+                    // Login aceita qualquer senha não vazia — quem valida a
+                    // regra de força é o cadastro (e o servidor decide se a
+                    // credencial confere). Bloquear aqui impediria o envio.
+                    validator: (v) =>
+                        Validators.required(v, label: 'Informe sua senha'),
                     onFieldSubmitted: (_) => _submit(),
                     prefix: const Icon(Icons.lock_outline_rounded,
                         color: AppColors.holographicBlue, size: 20),

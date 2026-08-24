@@ -178,7 +178,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   delay: const Duration(milliseconds: 280),
                   child: MatrixTextField(
                     label: 'Senha',
-                    hint: 'Mínimo de 6 caracteres',
+                    hint: 'Mínimo de 8, com letras e números',
                     controller: _passwordController,
                     obscureText: _obscure,
                     textInputAction: TextInputAction.next,

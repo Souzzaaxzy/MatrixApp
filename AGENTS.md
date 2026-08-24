@@ -5,7 +5,8 @@ MATRIX 💤 — cyberpunk futuristic social platform. Split across two repos:
 - **This repo (`MatrixApp`)** — Flutter app (presentation layer; calls backend API).
   Only `app/` (Flutter) + `.github/`. The server was moved out.
 - **`Souzzaaxzy/ServidorMtx`** — Node/TypeScript backend (Fastify + Prisma +
-  PostgreSQL). Container-ready: `docker compose up -d --build`.
+  **SQLite** `data/matrix.db`). Hospedado na Bronxys/Pterodactyl via
+  `npm start` (self-provisions). Container-ready: `docker compose up -d --build`.
   See https://github.com/Souzzaaxzy/ServidorMtx
 
 ## Environment

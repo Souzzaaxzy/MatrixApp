@@ -36,7 +36,7 @@ void main() {
     expect(find.text('Informe um username'), findsOneWidget);
   });
 
-  testWidgets('rejects password shorter than 6 chars', (tester) async {
+  testWidgets('rejects password shorter than 8 chars', (tester) async {
     await pumpMatrixApp(tester, const RegisterScreen());
     await tester.pumpAndSettle();
 
@@ -48,7 +48,7 @@ void main() {
     await tester.tap(createButton());
     await tester.pump();
 
-    expect(find.text('Mínimo de 6 caracteres'), findsWidgets);
+    expect(find.text('Mínimo de 8 caracteres'), findsWidgets);
   });
 
   testWidgets('rejects mismatched passwords', (tester) async {
@@ -57,8 +57,8 @@ void main() {
 
     await tester.enterText(find.byType(TextField).at(0), 'Leonardo');
     await tester.enterText(find.byType(TextField).at(1), 'leo');
-    await tester.enterText(find.byType(TextField).at(2), '123456');
-    await tester.enterText(find.byType(TextField).at(3), '654321');
+    await tester.enterText(find.byType(TextField).at(2), 'Matrix123');
+    await tester.enterText(find.byType(TextField).at(3), 'Matrix321');
     await tester.ensureVisible(createButton());
     await tester.tap(createButton());
     await tester.pump();
@@ -72,8 +72,8 @@ void main() {
 
     await tester.enterText(find.byType(TextField).at(0), 'Leonardo');
     await tester.enterText(find.byType(TextField).at(1), 'leo');
-    await tester.enterText(find.byType(TextField).at(2), '123456');
-    await tester.enterText(find.byType(TextField).at(3), '123456');
+    await tester.enterText(find.byType(TextField).at(2), 'Matrix123');
+    await tester.enterText(find.byType(TextField).at(3), 'Matrix123');
     await tester.ensureVisible(createButton());
     await tester.tap(createButton());
     // The register flow uses simulated async; advance the fake clock so the

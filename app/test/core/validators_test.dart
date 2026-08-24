@@ -28,8 +28,13 @@ void main() {
 
   group('Validators.password', () {
     test('rejects empty', () => expect(Validators.password(''), isNotNull));
-    test('rejects short', () => expect(Validators.password('12345'), isNotNull));
-    test('accepts 6+ chars', () => expect(Validators.password('123456'), isNull));
+    test('rejects short', () => expect(Validators.password('ab1'), isNotNull));
+    test('rejects without letters',
+        () => expect(Validators.password('12345678'), isNotNull));
+    test('rejects without numbers',
+        () => expect(Validators.password('abcdefgh'), isNotNull));
+    test('accepts 8+ chars with letters and numbers',
+        () => expect(Validators.password('Matrix123'), isNull));
   });
 
   group('Validators.confirmPassword', () {

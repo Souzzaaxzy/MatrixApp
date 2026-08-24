@@ -144,7 +144,7 @@ class _RecoverScreenState extends State<RecoverScreen> {
             delay: const Duration(milliseconds: 240),
             child: MatrixTextField(
               label: 'Nova senha',
-              hint: 'Mínimo de 6 caracteres',
+              hint: 'Mínimo de 8, com letras e números',
               controller: _passwordController,
               obscureText: _obscure,
               textInputAction: TextInputAction.next,
