@@ -31,10 +31,15 @@ class Validators {
     return null;
   }
 
+  // Must mirror the server rule (ServidorMtx auth.schema.ts): mínimo de 8
+  // caracteres, com letras e números. If they diverge, the form passes
+  // locally and the API rejects with 400.
   static String? password(String? value) {
     final v = value ?? '';
     if (v.isEmpty) return 'Informe sua senha';
-    if (v.length < 6) return 'Mínimo de 6 caracteres';
+    if (v.length < 8) return 'Mínimo de 8 caracteres';
+    if (!RegExp(r'[A-Za-z]').hasMatch(v)) return 'A senha deve conter letras';
+    if (!RegExp(r'[0-9]').hasMatch(v)) return 'A senha deve conter números';
     return null;
   }
 

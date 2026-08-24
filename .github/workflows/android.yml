@@ -51,20 +51,21 @@ jobs:
       - name: Run tests
         run: flutter test
 
-      # Inject the production API URL. Set the API_BASE_URL repository secret
-      # (Settings → Secrets and variables → Actions) to your server's public
-      # URL, e.g. http://meu-servidor.bronxys.cloud:4316 (no trailing slash).
-      # If unset, the app falls back to the default in lib/data/api_config.dart.
+      # Inject the production API URL. REQUIRED: set the API_BASE_URL
+      # repository secret (Settings → Secrets and variables → Actions) to the
+      # server's public address on the Bronxys/Pterodactyl panel — the node
+      # host/IP + allocated port, e.g. http://123.45.67.89:4316 (no trailing
+      # slash). The build FAILS without it: an APK without a real API URL
+      # would be useless on a physical device.
       - name: Build APK
         env:
           API_BASE_URL: ${{ secrets.API_BASE_URL }}
         run: |
-          if [ -n "$API_BASE_URL" ]; then
-            flutter build apk --release --dart-define=API_BASE_URL="$API_BASE_URL"
-          else
-            echo "::warning::API_BASE_URL secret not set — building with the default URL in api_config.dart"
-            flutter build apk --release
+          if [ -z "$API_BASE_URL" ]; then
+            echo "::error::API_BASE_URL secret não configurado. Defina em Settings → Secrets and variables → Actions com o endereço público do servidor (painel Bronxys/Pterodactyl → alocação)."
+            exit 1
           fi
+          flutter build apk --release --dart-define=API_BASE_URL="$API_BASE_URL"
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4

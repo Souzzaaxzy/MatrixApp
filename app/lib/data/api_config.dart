@@ -10,32 +10,41 @@ import 'package:flutter/foundation.dart';
 class ApiConfig {
   const ApiConfig._();
 
+  /// URL oficial da API em produção — a ÚNICA API do app.
+  ///
+  /// É o endereço público REAL do ServidorMtx hospedado na
+  /// Bronxys/Pterodactyl: o IP/host público do node + a porta alocada,
+  /// visível na página do servidor no painel (seção de alocação/network),
+  /// ex.: `http://123.45.67.89:4316`. Use HTTPS somente se o painel
+  /// fornecer um domínio/proxy com SSL válido. NUNCA use localhost,
+  /// 127.0.0.1, 0.0.0.0 ou 10.0.2.2 aqui — esses endereços só existem
+  /// dentro do servidor/emulador.
+  ///
+  /// Prioridade: `--dart-define=API_BASE_URL=...` (o CI injeta a partir do
+  /// secret API_BASE_URL) → esta constante. Sem barra final.
+  static const String _productionUrl = String.fromEnvironment(
+    'API_BASE_URL',
+    defaultValue: '',
+  );
+
   static String get baseUrl {
-    // Highest priority: build-time override (`--dart-define=API_BASE_URL=...`).
-    // The CI release build injects this from the API_BASE_URL secret.
-    const defined = String.fromEnvironment('API_BASE_URL');
-    if (defined.isNotEmpty) return defined;
+    if (_productionUrl.isNotEmpty) return _productionUrl;
 
     if (kReleaseMode) {
-      // Production default — the MATRIX API hosted on the panel
-      // (Pterodactyl/Bronxys). Update this to your server's public URL, or
-      // (better) set the API_BASE_URL secret so the CI build injects it.
-      // Must be reachable from the device; do NOT use localhost/10.0.2.2 here.
-      return _productionUrl;
+      // Falha explícita em vez de apontar para um endereço errado: um APK
+      // de produção sem URL configurada não conseguiria falar com API
+      // nenhuma, e o erro precisa ser óbvio no build, não no celular.
+      throw StateError(
+        'API_BASE_URL não configurada. Configure o secret API_BASE_URL no '
+        'GitHub Actions (usado pelo build de release) ou preencha '
+        '_productionUrl em lib/data/api_config.dart com o endereço público '
+        'do servidor no painel Bronxys/Pterodactyl.',
+      );
     }
-    // Debug default — the Android emulator maps 10.0.2.2 to the host machine's
-    // localhost (where `npm start` / `npm run dev` runs the API).
+    // Debug default — o emulador Android mapeia 10.0.2.2 para o localhost
+    // da máquina de desenvolvimento (onde `npm start` roda a API).
     return 'http://10.0.2.2:3000';
   }
-
-  /// Production API URL used when no `--dart-define` override is provided.
-  /// Points to the public tunnel fronting the MATRIX API (verified
-  /// end-to-end: /health + auth). Can be overridden at build time with
-  /// `--dart-define=API_PROD_URL=...`.
-  static const String _productionUrl = String.fromEnvironment(
-    'API_PROD_URL',
-    defaultValue: 'https://bar-integration-ball-examination.trycloudflare.com',
-  );
 
   static const Duration connectTimeout = Duration(seconds: 10);
   static const Duration receiveTimeout = Duration(seconds: 30);
@@ -64,19 +73,32 @@ class ApiException implements Exception {
 
   /// Converts a Dio error into an [ApiException], extracting the backend's
   /// normalized `{ "error": { "message": "..." } }` envelope when present.
+  /// Each failure mode maps to a DISTINCT message so the user (and support)
+  /// can tell a wrong password apart from a dead server or a bad
+  /// certificate.
   factory ApiException.fromDioError(DioException err) {
     if (err.type == DioExceptionType.connectionTimeout ||
         err.type == DioExceptionType.sendTimeout ||
         err.type == DioExceptionType.receiveTimeout) {
       return const ApiException(
         statusCode: 0,
-        message: 'Tempo de conexão esgotado. Verifique sua internet.',
+        message: 'O servidor não respondeu a tempo. Tente novamente.',
+      );
+    }
+    if (err.type == DioExceptionType.badCertificate || _isTlsError(err)) {
+      return const ApiException(
+        statusCode: 0,
+        message:
+            'Erro de certificado SSL. A URL da API pode estar usando HTTPS '
+            'sem um certificado válido.',
       );
     }
     if (err.type == DioExceptionType.connectionError) {
       return const ApiException(
         statusCode: 0,
-        message: 'Não foi possível conectar ao servidor.',
+        message:
+            'Não foi possível conectar ao servidor. Verifique sua internet '
+            'e se a API está online.',
       );
     }
 
@@ -88,23 +110,58 @@ class ApiException implements Exception {
       );
     }
 
+    final statusCode = response.statusCode ?? 0;
     final data = response.data;
-    String message = 'Ocorreu um erro inesperado.';
+    String? message;
     String? code;
     if (data is Map<String, dynamic>) {
       final error = data['error'];
       if (error is Map<String, dynamic>) {
-        message = (error['message'] as String?) ?? message;
+        message = error['message'] as String?;
         code = error['code'] as String?;
+        // 400 envelope carries per-field details — surface the first one
+        // (e.g. "A senha deve ter no mínimo 8 caracteres") instead of the
+        // generic "Dados inválidos.".
+        final details = error['details'];
+        if (details is List && details.isNotEmpty) {
+          final first = details.first;
+          if (first is Map<String, dynamic> && first['message'] is String) {
+            message = first['message'] as String;
+          }
+        }
       } else if (data['message'] is String) {
         message = data['message'] as String;
       }
     }
 
     return ApiException(
-      statusCode: response.statusCode ?? 0,
-      message: message,
+      statusCode: statusCode,
+      message: message ?? _statusFallback(statusCode),
       code: code,
     );
+  }
+
+  /// TLS/SSL failures surface as connectionError wrapping a handshake
+  /// exception — detect them so they aren't mislabeled as "server offline".
+  static bool _isTlsError(DioException err) {
+    final cause = err.error;
+    if (cause == null) return false;
+    final text = cause.toString();
+    return text.contains('HandshakeException') ||
+        text.contains('CertificateException') ||
+        text.contains('TlsException');
+  }
+
+  static String _statusFallback(int statusCode) {
+    if (statusCode == 400) return 'Dados inválidos.';
+    if (statusCode == 401) return 'Credenciais inválidas.';
+    if (statusCode == 403) return 'Acesso negado.';
+    if (statusCode == 404) return 'Recurso não encontrado no servidor.';
+    if (statusCode == 409) return 'Este registro já existe.';
+    if (statusCode == 429) {
+      return 'Muitas tentativas. Aguarde um momento e tente novamente.';
+    }
+    if (statusCode >= 500) return 'Erro interno do servidor.';
+    return 'Ocorreu um erro inesperado.';
   }
 }
