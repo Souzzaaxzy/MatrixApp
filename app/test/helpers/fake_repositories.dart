@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:matrix_app/data/api_config.dart';
 import 'package:matrix_app/data/dtos/dtos.dart';
 import 'package:matrix_app/data/repositories/repositories.dart';
 import 'package:matrix_app/models/comment.dart';
@@ -22,12 +23,12 @@ class FakeRepositories extends Repositories {
     required super.uploads,
   });
 
-  factory FakeRepositories() {
+  factory FakeRepositories({bool failLikes = false}) {
     final store = _Store();
     return FakeRepositories._(
       auth: _FakeAuthRepository(store),
       posts: _FakePostRepository(store),
-      likes: _FakeLikeRepository(store),
+      likes: _FakeLikeRepository(store, fail: failLikes),
       comments: _FakeCommentRepository(store),
       users: _FakeUserRepository(store),
       uploads: const _FakeUploadRepository(),
@@ -92,7 +93,6 @@ class _FakeAuthRepository implements AuthRepository {
       name: name,
       username: username,
       bio: '',
-      avatarSeed: username,
     );
     _store.users[user.id] = user;
     _store.currentUserId = user.id;
@@ -103,7 +103,7 @@ class _FakeAuthRepository implements AuthRepository {
         id: user.id,
         name: user.name,
         username: user.username,
-        avatarUrl: user.avatarSeed,
+        avatarUrl: user.avatarUrl,
         bio: user.bio,
       ),
       recoveryCode: '829147206153',
@@ -123,7 +123,7 @@ class _FakeAuthRepository implements AuthRepository {
         id: u.id,
         name: u.name,
         username: u.username,
-        avatarUrl: u.avatarSeed,
+        avatarUrl: u.avatarUrl,
         bio: u.bio,
       ),
     );
@@ -143,7 +143,7 @@ class _FakeAuthRepository implements AuthRepository {
       id: u.id,
       name: u.name,
       username: u.username,
-      avatarUrl: u.avatarSeed,
+      avatarUrl: u.avatarUrl,
       bio: u.bio,
     );
   }
@@ -166,15 +166,22 @@ class _FakePostRepository implements PostRepository {
   }
 
   @override
+  Future<Post> getById(String id) async {
+    return _store.posts.firstWhere((p) => p.id == id);
+  }
+
+  @override
   Future<Post> create({required String text, String? imageUrl}) async {
     final u = _store.currentUser;
     final post = Post(
       id: 'p${DateTime.now().millisecondsSinceEpoch}',
+      authorId: u.id,
       authorName: u.name,
       authorUsername: u.username,
       text: text,
       createdAt: DateTime.now(),
       avatarSeed: u.avatarSeed,
+      authorAvatarUrl: u.avatarUrl,
       imageUrl: imageUrl,
       likes: 0,
       liked: false,
@@ -191,12 +198,22 @@ class _FakePostRepository implements PostRepository {
 }
 
 class _FakeLikeRepository implements LikeRepository {
-  _FakeLikeRepository(this._store);
+  _FakeLikeRepository(this._store, {this.fail = false});
 
   final _Store _store;
 
+  /// When true, every toggle throws — simulates an API failure so tests can
+  /// verify the optimistic update is rolled back.
+  final bool fail;
+
   @override
   Future<({bool liked, int likeCount})> toggle(String postId) async {
+    if (fail) {
+      throw const ApiException(
+        statusCode: 500,
+        message: 'Erro interno do servidor.',
+      );
+    }
     final post = _store.posts.firstWhere((p) => p.id == postId);
     final wasLiked = _store.likedPostIds.contains(postId);
     final nowLiked = !wasLiked;
@@ -263,14 +280,20 @@ class _FakeUserRepository implements UserRepository {
   }
 
   @override
-  Future<MatrixUser> updateProfile({String? name, String? bio}) async {
+  Future<MatrixUser> updateProfile({
+    String? name,
+    String? username,
+    String? bio,
+    String? avatarUrl,
+  }) async {
     final old = _store.currentUser;
     final updated = MatrixUser(
       id: old.id,
       name: name ?? old.name,
-      username: old.username,
+      username: username ?? old.username,
       bio: bio ?? old.bio,
       avatarSeed: old.avatarSeed,
+      avatarUrl: avatarUrl ?? old.avatarUrl,
     );
     _store.users[old.id] = updated;
     return updated;

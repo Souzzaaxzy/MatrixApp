@@ -48,7 +48,7 @@ class AuthUserDto {
         name: name,
         username: username,
         bio: bio,
-        avatarSeed: avatarUrl,
+        avatarUrl: avatarUrl,
       );
 
   factory AuthUserDto.fromJson(Map<String, dynamic> json) => AuthUserDto(
@@ -65,6 +65,7 @@ class FeedPostDto {
   final String text;
   final String? imageUrl;
   final DateTime createdAt;
+  final String authorId;
   final String authorName;
   final String authorUsername;
   final String? authorAvatarUrl;
@@ -77,6 +78,7 @@ class FeedPostDto {
     required this.text,
     this.imageUrl,
     required this.createdAt,
+    required this.authorId,
     required this.authorName,
     required this.authorUsername,
     this.authorAvatarUrl,
@@ -87,15 +89,17 @@ class FeedPostDto {
 
   Post toModel() => Post(
         id: id,
+        authorId: authorId,
         authorName: authorName,
         authorUsername: authorUsername,
         text: text,
         createdAt: createdAt,
-        avatarSeed: authorAvatarUrl,
+        avatarSeed: authorUsername,
+        authorAvatarUrl: authorAvatarUrl,
         imageUrl: imageUrl,
         likes: likeCount,
         liked: liked,
-        comments: List.generate(commentCount, (_) => Comment.placeholder()),
+        commentCount: commentCount,
       );
 
   factory FeedPostDto.fromJson(Map<String, dynamic> json) {
@@ -105,6 +109,7 @@ class FeedPostDto {
       text: (json['text'] as String?) ?? '',
       imageUrl: json['imageUrl'] as String?,
       createdAt: DateTime.parse(json['createdAt'] as String),
+      authorId: (author['id'] as String?) ?? '',
       authorName: author['name'] as String,
       authorUsername: author['username'] as String,
       authorAvatarUrl: author['avatarUrl'] as String?,
@@ -169,7 +174,7 @@ class PublicUserDto {
         name: name,
         username: username,
         bio: bio,
-        avatarSeed: avatarUrl,
+        avatarUrl: avatarUrl,
       );
 
   factory PublicUserDto.fromJson(Map<String, dynamic> json) => PublicUserDto(

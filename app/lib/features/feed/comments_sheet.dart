@@ -51,7 +51,10 @@ class _CommentsSheetState extends State<CommentsSheet> {
   @override
   void initState() {
     super.initState();
-    _loadComments();
+    // Defer: AppStateScope.of() cannot be called from initState.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _loadComments();
+    });
   }
 
   Future<void> _loadComments() async {

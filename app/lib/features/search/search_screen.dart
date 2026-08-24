@@ -69,6 +69,7 @@ class _SearchScreenState extends State<SearchScreen> {
         slivers: [
           SliverAppBar(
             pinned: true,
+            automaticallyImplyLeading: false,
             backgroundColor: AppColors.absoluteBlack,
             surfaceTintColor: Colors.transparent,
             title: Row(
@@ -123,7 +124,12 @@ class _SearchScreenState extends State<SearchScreen> {
                     margin: const EdgeInsets.symmetric(vertical: AppDimensions.spaceSm),
                     child: Row(
                       children: [
-                        UserAvatar(name: user.name, seed: user.avatarSeed, size: 42),
+                        UserAvatar(
+                          name: user.name,
+                          seed: user.avatarSeed ?? user.username,
+                          imageUrl: user.avatarUrl,
+                          size: 42,
+                        ),
                         const SizedBox(width: AppDimensions.spaceMd),
                         Expanded(
                           child: Column(

@@ -53,6 +53,57 @@ void main() {
       await state.toggleLike('does-not-exist');
       expect(state.posts.length, length);
     });
+
+    test('rolls back the optimistic update when the API fails', () async {
+      final failing = AppState(repositories: FakeRepositories(failLikes: true));
+      await failing.restoreSession();
+      await failing.loadFeed();
+      final first = failing.posts.first;
+      final initialLikes = first.likes;
+      final initialLiked = first.liked;
+
+      final ok = await failing.toggleLike(first.id);
+
+      expect(ok, isFalse);
+      expect(failing.posts.first.liked, initialLiked);
+      expect(failing.posts.first.likes, initialLikes);
+    });
+
+    test('returns true when the server confirms the toggle', () async {
+      final ok = await state.toggleLike(state.posts.first.id);
+      expect(ok, isTrue);
+    });
+  });
+
+  group('loadProfile', () {
+    test('loads the user and their posts from the server', () async {
+      await state.loadProfile('leonardo');
+      expect(state.profileUser, isNotNull);
+      expect(state.profileUser!.username, 'leonardo');
+      expect(state.profilePosts, isNotEmpty);
+      expect(
+        state.profilePosts.every((p) => p.authorUsername == 'leonardo'),
+        isTrue,
+      );
+    });
+
+    test('keeps the session user in sync when viewing the own profile',
+        () async {
+      await state.updateProfile(name: 'Neo');
+      await state.loadProfile('leonardo');
+      expect(state.currentUser!.name, 'Neo');
+    });
+  });
+
+  group('getPost', () {
+    test('fetches a post by id and caches it for engagement', () async {
+      final post = await state.getPost('p1');
+      expect(post.id, 'p1');
+      // Likes work on the cached copy even if the post left the feed.
+      final ok = await state.toggleLike('p1');
+      expect(ok, isTrue);
+      expect(post.liked, isTrue);
+    });
   });
 
   group('addComment', () {

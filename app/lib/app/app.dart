@@ -7,6 +7,7 @@ import '../features/auth/recover/recover_screen.dart';
 import '../features/auth/register/register_screen.dart';
 import '../features/create_post/create_post_screen.dart';
 import '../features/home/home_screen.dart';
+import '../features/post/post_detail_screen.dart';
 import '../features/profile/edit_profile_screen.dart';
 import '../features/splash/splash_screen.dart';
 import 'routes.dart';
@@ -41,7 +42,15 @@ class MatrixApp extends StatelessWidget {
               return _fade(const CreatePostScreen());
             case AppRoutes.editProfile:
               return _fade(const EditProfileScreen());
+            case AppRoutes.postDetail:
+              final postId = settings.arguments as String?;
+              if (postId != null && postId.isNotEmpty) {
+                return _fade(PostDetailScreen(postId: postId));
+              }
+              return _fade(const HomeScreen());
             default:
+              // Unreachable through the app's own navigation — every route
+              // above is wired. Kept only as a defensive fallback.
               return _fade(const Scaffold(
                 body: Center(child: Text('Rota não encontrada')),
               ));

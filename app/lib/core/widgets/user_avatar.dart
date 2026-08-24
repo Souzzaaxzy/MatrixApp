@@ -1,65 +1,93 @@
 import 'dart:convert';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_dimensions.dart';
+import '../../data/api_config.dart';
 
-/// Deterministic avatar built from a seed string (initials on gradient).
-///
-/// No network dependency — fully offline for Phase 1.
+/// User avatar. Shows the remote profile photo when [imageUrl] is set
+/// (served by the API); otherwise falls back to deterministic
+/// initials-on-gradient built from the seed/name.
 class UserAvatar extends StatelessWidget {
   const UserAvatar({
     super.key,
     required this.name,
     this.seed,
+    this.imageUrl,
     this.size = 44,
     this.ring = false,
   });
 
   final String name;
   final String? seed;
+
+  /// Remote profile photo URL (absolute or API-relative `/static/...`).
+  final String? imageUrl;
   final double size;
   final bool ring;
 
   @override
   Widget build(BuildContext context) {
-    final initials = _initials(name);
-    final palette = _palette(seed ?? name);
+    final decoration = BoxDecoration(
+      shape: BoxShape.circle,
+      gradient: imageUrl == null
+          ? LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: _palette(seed ?? name),
+            )
+          : null,
+      color: imageUrl != null ? AppColors.nightBlue : null,
+      border: ring
+          ? Border.all(color: AppColors.electricBlue, width: 1.5)
+          : null,
+      boxShadow: ring
+          ? [
+              BoxShadow(
+                color: AppColors.glowSmall,
+                blurRadius: AppDimensions.glowSmallBlur,
+              ),
+            ]
+          : null,
+    );
+
+    if (imageUrl != null) {
+      return Container(
+        width: size,
+        height: size,
+        decoration: decoration,
+        child: ClipOval(
+          child: CachedNetworkImage(
+            imageUrl: ApiConfig.resolveUrl(imageUrl!),
+            fit: BoxFit.cover,
+            width: size,
+            height: size,
+            placeholder: (_, __) => const SizedBox.shrink(),
+            errorWidget: (_, __, ___) => _initialsChild(),
+          ),
+        ),
+      );
+    }
 
     return Container(
       width: size,
       height: size,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: palette,
-        ),
-        border: ring
-            ? Border.all(color: AppColors.electricBlue, width: 1.5)
-            : null,
-        boxShadow: ring
-            ? [
-                BoxShadow(
-                  color: AppColors.glowSmall,
-                  blurRadius: AppDimensions.glowSmallBlur,
-                ),
-              ]
-            : null,
-      ),
+      decoration: decoration,
       alignment: Alignment.center,
-      child: Text(
-        initials,
+      child: _initialsChild(),
+    );
+  }
+
+  Widget _initialsChild() => Text(
+        _initials(name),
         style: TextStyle(
           color: AppColors.techWhite,
           fontWeight: FontWeight.w800,
           fontSize: size * 0.38,
         ),
-      ),
-    );
-  }
+      );
 
   String _initials(String name) {
     final parts = name.trim().split(RegExp(r'\s+'));

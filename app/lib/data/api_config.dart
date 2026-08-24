@@ -48,6 +48,15 @@ class ApiConfig {
 
   static const Duration connectTimeout = Duration(seconds: 10);
   static const Duration receiveTimeout = Duration(seconds: 30);
+
+  /// Resolves a possibly-relative URL returned by the API (e.g.
+  /// `/static/avatar.png`) into an absolute URL the app can load.
+  /// Absolute http(s) URLs are returned unchanged.
+  static String resolveUrl(String url) {
+    if (url.startsWith('http://') || url.startsWith('https://')) return url;
+    if (url.startsWith('/')) return '$baseUrl$url';
+    return '$baseUrl/$url';
+  }
 }
 
 /// Typed exception raised by the API layer. Carries an HTTP status code and

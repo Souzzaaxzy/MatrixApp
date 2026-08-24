@@ -9,5 +9,7 @@ class AppRoutes {
   static const String home = '/home';
   static const String createPost = '/home/create-post';
   static const String editProfile = '/home/edit-profile';
-  static const String comments = '/comments';
+
+  /// Post detail. Argument: the post's server id (String).
+  static const String postDetail = '/home/post';
 }

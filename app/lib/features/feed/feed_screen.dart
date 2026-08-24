@@ -47,6 +47,7 @@ class _FeedScreenState extends State<FeedScreen> {
           slivers: [
             SliverAppBar(
               pinned: true,
+              automaticallyImplyLeading: false,
               backgroundColor: AppColors.absoluteBlack,
               surfaceTintColor: Colors.transparent,
               title: Row(

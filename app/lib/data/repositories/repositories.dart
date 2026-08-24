@@ -107,6 +107,12 @@ class PostRepository {
     return (posts: posts, nextCursor: next);
   }
 
+  /// Fetches a single post by its server id (post detail screen).
+  Future<Post> getById(String id) async {
+    final json = await _api.get<Map<String, dynamic>>('/api/posts/$id');
+    return FeedPostDto.fromJson(json).toModel();
+  }
+
   Future<Post> create({required String text, String? imageUrl}) async {
     final json = await _api.post<Map<String, dynamic>>(
       '/api/posts',
@@ -176,10 +182,20 @@ class UserRepository {
     return (user: user, posts: posts);
   }
 
-  Future<MatrixUser> updateProfile({String? name, String? bio}) async {
+  Future<MatrixUser> updateProfile({
+    String? name,
+    String? username,
+    String? bio,
+    String? avatarUrl,
+  }) async {
     final json = await _api.patch<Map<String, dynamic>>(
       '/api/users/me',
-      data: {if (name != null) 'name': name, if (bio != null) 'bio': bio},
+      data: {
+        if (name != null) 'name': name,
+        if (username != null) 'username': username,
+        if (bio != null) 'bio': bio,
+        if (avatarUrl != null) 'avatarUrl': avatarUrl,
+      },
     );
     return AuthUserDto.fromJson(json['user'] as Map<String, dynamic>).toModel();
   }

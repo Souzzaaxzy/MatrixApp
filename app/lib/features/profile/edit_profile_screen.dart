@@ -1,4 +1,7 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_dimensions.dart';
@@ -9,8 +12,13 @@ import '../../core/widgets/hud_label.dart';
 import '../../core/widgets/matrix_button.dart';
 import '../../core/widgets/matrix_text_field.dart';
 import '../../core/widgets/user_avatar.dart';
+import '../../data/api_config.dart';
 
-/// Edit profile screen. Changes are local in Phase 1.
+/// Edit profile screen.
+///
+/// All changes are persisted on the server (PATCH /api/users/me). The
+/// avatar flow is pick → preview → upload (POST /api/uploads) → persist
+/// the returned URL on the profile. Nothing here is local-only.
 class EditProfileScreen extends StatefulWidget {
   const EditProfileScreen({super.key});
 
@@ -24,6 +32,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   late final TextEditingController _usernameController;
   late final TextEditingController _bioController;
   bool _saving = false;
+  bool _uploadingAvatar = false;
   bool _initialized = false;
 
   @override
@@ -46,25 +55,92 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     super.dispose();
   }
 
+  void _showError(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<void> _pickAvatar() async {
+    if (_uploadingAvatar) return;
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      backgroundColor: AppColors.nightBlue,
+      shape: const RoundedRectangleBorder(
+        borderRadius:
+            BorderRadius.vertical(top: Radius.circular(AppDimensions.radiusXl)),
+      ),
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: AppDimensions.spaceMd),
+            const HudLabel(text: 'SELECIONAR FOTO'),
+            const SizedBox(height: AppDimensions.spaceMd),
+            ListTile(
+              leading: const Icon(Icons.photo_library_rounded,
+                  color: AppColors.electricBlue),
+              title: Text('Galeria', style: AppTextStyles.body),
+              onTap: () => Navigator.of(sheetContext).pop(ImageSource.gallery),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_camera_rounded,
+                  color: AppColors.electricBlue),
+              title: Text('Câmera', style: AppTextStyles.body),
+              onTap: () => Navigator.of(sheetContext).pop(ImageSource.camera),
+            ),
+            const SizedBox(height: AppDimensions.spaceMd),
+          ],
+        ),
+      ),
+    );
+    if (source == null || !mounted) return;
+
+    final picked = await ImagePicker().pickImage(
+      source: source,
+      imageQuality: 85,
+      maxWidth: 1024,
+      maxHeight: 1024,
+    );
+    if (picked == null || !mounted) return;
+
+    setState(() => _uploadingAvatar = true);
+    try {
+      await AppStateScope.of(context).changeAvatar(File(picked.path));
+      if (!mounted) return;
+      setState(() {});
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Foto de perfil atualizada.')),
+      );
+    } on ApiException catch (e) {
+      _showError(e.message);
+    } catch (_) {
+      _showError('Não foi possível enviar a foto. Tente novamente.');
+    } finally {
+      if (mounted) setState(() => _uploadingAvatar = false);
+    }
+  }
+
   Future<void> _save() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
     setState(() => _saving = true);
     try {
       await AppStateScope.of(context).updateProfile(
         name: _nameController.text.trim(),
+        username: _usernameController.text.trim(),
         bio: _bioController.text.trim(),
       );
+      if (!mounted) return;
+      Navigator.of(context).pop();
+    } on ApiException catch (e) {
+      // Surface the server's real message (validation, conflict, network) —
+      // never a generic "credenciais inválidas".
+      _showError(e.message);
     } catch (_) {
-      // Surface error to user via snackbar.
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Erro ao salvar perfil.')),
-        );
-      }
+      _showError('Erro ao salvar perfil. Tente novamente.');
+    } finally {
+      if (mounted) setState(() => _saving = false);
     }
-    if (!mounted) return;
-    setState(() => _saving = false);
-    if (mounted) Navigator.of(context).pop();
   }
 
   @override
@@ -90,34 +166,62 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               children: [
                 const SizedBox(height: AppDimensions.spaceXl),
                 Center(
-                  child: Stack(
-                    children: [
-                      UserAvatar(
-                        name: _nameController.text.isEmpty
-                            ? (user?.name ?? '')
-                            : _nameController.text,
-                        seed: user?.avatarSeed,
-                        size: 96,
-                        ring: true,
-                      ),
-                      Positioned(
-                        right: 0,
-                        bottom: 0,
-                        child: Container(
-                          decoration: const BoxDecoration(
-                            color: AppColors.primaryBlue,
-                            shape: BoxShape.circle,
-                          ),
-                          padding: const EdgeInsets.all(AppDimensions.spaceSm),
-                          child: const Icon(Icons.camera_alt_rounded,
-                              color: AppColors.techWhite, size: 16),
+                  child: GestureDetector(
+                    onTap: _pickAvatar,
+                    child: Stack(
+                      children: [
+                        UserAvatar(
+                          name: _nameController.text.isEmpty
+                              ? (user?.name ?? '')
+                              : _nameController.text,
+                          seed: user?.avatarSeed ?? user?.username,
+                          imageUrl: user?.avatarUrl,
+                          size: 96,
+                          ring: true,
                         ),
-                      ),
-                    ],
+                        if (_uploadingAvatar)
+                          const Positioned.fill(
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                color: Colors.black54,
+                                shape: BoxShape.circle,
+                              ),
+                              child: Center(
+                                child: SizedBox(
+                                  width: 28,
+                                  height: 28,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: AppColors.electricBlue,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          )
+                        else
+                          Positioned(
+                            right: 0,
+                            bottom: 0,
+                            child: Container(
+                              decoration: const BoxDecoration(
+                                color: AppColors.primaryBlue,
+                                shape: BoxShape.circle,
+                              ),
+                              padding: const EdgeInsets.all(AppDimensions.spaceSm),
+                              child: const Icon(Icons.camera_alt_rounded,
+                                  color: AppColors.techWhite, size: 16),
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
                 ),
                 const SizedBox(height: AppDimensions.spaceSm),
-                const Center(child: HudLabel(text: 'ALTERAR FOTO')),
+                Center(
+                  child: HudLabel(
+                    text: _uploadingAvatar ? 'ENVIANDO FOTO...' : 'ALTERAR FOTO',
+                  ),
+                ),
                 const SizedBox(height: AppDimensions.spaceXxl),
                 MatrixTextField(
                   label: 'Nome',
@@ -145,7 +249,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                 ),
                 const SizedBox(height: AppDimensions.spaceXxl),
                 MatrixButton(
-                  label: 'Salvar',
+                  label: _saving ? 'Salvando...' : 'Salvar',
                   icon: Icons.check_rounded,
                   expanded: true,
                   isLoading: _saving,
