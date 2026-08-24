@@ -29,10 +29,12 @@ class ApiConfig {
   }
 
   /// Production API URL used when no `--dart-define` override is provided.
-  /// Can also be overridden at build time with `--dart-define=API_PROD_URL=...`.
+  /// Points to the public tunnel fronting the MATRIX API (verified
+  /// end-to-end: /health + auth). Can be overridden at build time with
+  /// `--dart-define=API_PROD_URL=...`.
   static const String _productionUrl = String.fromEnvironment(
     'API_PROD_URL',
-    defaultValue: 'https://api.matrix.app',
+    defaultValue: 'https://bar-integration-ball-examination.trycloudflare.com',
   );
 
   static const Duration connectTimeout = Duration(seconds: 10);
