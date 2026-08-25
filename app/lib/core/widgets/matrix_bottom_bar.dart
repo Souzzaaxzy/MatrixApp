@@ -11,11 +11,15 @@ class MatrixNavDestination {
     required this.icon,
     required this.activeIcon,
     required this.label,
+    this.badgeCount = 0,
   });
 
   final IconData icon;
   final IconData activeIcon;
   final String label;
+
+  /// Unread counter shown as a small badge (hidden when zero).
+  final int badgeCount;
 }
 
 /// Persistent futuristic bottom navigation bar.
@@ -99,26 +103,37 @@ class _NavButton extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 200),
-                  transitionBuilder: (child, anim) =>
-                      ScaleTransition(scale: anim, child: child),
-                  child: active
-                      ? GlowContainer(
-                          key: ValueKey('active-${destination.label}'),
-                          glow: Glow.small,
-                          color: AppColors.glowSmall,
-                          background: AppColors.primaryBlue.withValues(alpha: 0.12),
-                          borderRadius:
-                              BorderRadius.circular(AppDimensions.radiusMd),
-                          padding: const EdgeInsets.all(AppDimensions.spaceSm),
-                          child: Icon(destination.activeIcon, color: color, size: 22),
-                        )
-                      : Padding(
-                          key: ValueKey('idle-${destination.label}'),
-                          padding: const EdgeInsets.all(AppDimensions.spaceSm),
-                          child: Icon(destination.icon, color: color, size: 22),
-                        ),
+                Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 200),
+                      transitionBuilder: (child, anim) =>
+                          ScaleTransition(scale: anim, child: child),
+                      child: active
+                          ? GlowContainer(
+                              key: ValueKey('active-${destination.label}'),
+                              glow: Glow.small,
+                              color: AppColors.glowSmall,
+                              background: AppColors.primaryBlue.withValues(alpha: 0.12),
+                              borderRadius:
+                                  BorderRadius.circular(AppDimensions.radiusMd),
+                              padding: const EdgeInsets.all(AppDimensions.spaceSm),
+                              child: Icon(destination.activeIcon, color: color, size: 22),
+                            )
+                          : Padding(
+                              key: ValueKey('idle-${destination.label}'),
+                              padding: const EdgeInsets.all(AppDimensions.spaceSm),
+                              child: Icon(destination.icon, color: color, size: 22),
+                            ),
+                    ),
+                    if (destination.badgeCount > 0)
+                      Positioned(
+                        top: -2,
+                        right: -2,
+                        child: _Badge(count: destination.badgeCount),
+                      ),
+                  ],
                 ),
                 Text(
                   destination.label,
@@ -130,6 +145,38 @@ class _NavButton extends StatelessWidget {
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Small neon unread-counter badge rendered on top of a destination icon.
+class _Badge extends StatelessWidget {
+  const _Badge({required this.count});
+
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppDimensions.spaceXs,
+        vertical: 2,
+      ),
+      decoration: const BoxDecoration(
+        color: AppColors.primaryBlue,
+        shape: BoxShape.circle,
+        boxShadow: [
+          BoxShadow(color: AppColors.glowSmall, blurRadius: 6),
+        ],
+      ),
+      child: Text(
+        count > 99 ? '99+' : '$count',
+        style: const TextStyle(
+          color: AppColors.techWhite,
+          fontSize: 10,
+          fontWeight: FontWeight.w800,
         ),
       ),
     );

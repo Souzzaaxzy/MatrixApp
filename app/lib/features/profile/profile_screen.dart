@@ -12,15 +12,20 @@ import '../../core/widgets/hud_label.dart';
 import '../../core/widgets/matrix_button.dart';
 import '../../core/widgets/user_avatar.dart';
 import '../../data/api_config.dart';
+import '../../models/friend_request.dart';
+import '../../models/matrix_user.dart';
 import '../../models/post.dart';
 
 /// Profile screen — the server is the single source of truth.
 ///
-/// Every time the tab is opened the profile (user + posts) is fetched
-/// fresh from GET /api/users/:username; nothing here is derived from the
-/// local feed cache.
+/// [username] null (or equal to the session user's) means "own profile":
+/// renders the Edit button and the floating "+" create-post button, and
+/// NEVER the friendship button. Another user's profile shows the big
+/// Seguir / Solicitado / Amigos friendship button (server-managed state).
 class ProfileScreen extends StatefulWidget {
-  const ProfileScreen({super.key});
+  const ProfileScreen({super.key, this.username});
+
+  final String? username;
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
@@ -29,6 +34,14 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   bool _requested = false;
   String? _error;
+  bool _sending = false;
+
+  bool get _isOwn {
+    final state = AppStateScope.of(context);
+    return widget.username == null ||
+        widget.username!.toLowerCase() ==
+            (state.currentUser?.username.toLowerCase() ?? '');
+  }
 
   @override
   void didChangeDependencies() {
@@ -43,7 +56,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _load() async {
     final state = AppStateScope.of(context);
-    final username = state.currentUser?.username;
+    final username = widget.username ?? state.currentUser?.username;
     if (username == null) return;
     setState(() => _error = null);
     try {
@@ -71,9 +84,29 @@ class _ProfileScreenState extends State<ProfileScreen> {
     Navigator.of(context).pushNamed(AppRoutes.postDetail, arguments: post.id);
   }
 
+  Future<void> _sendFriendRequest(String userId) async {
+    setState(() => _sending = true);
+    try {
+      await AppStateScope.of(context).sendFriendRequest(userId);
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message)),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Erro de conexão.')),
+      );
+    } finally {
+      if (mounted) setState(() => _sending = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = AppStateScope.of(context);
+    final isOwn = _isOwn;
     final sessionUser = state.currentUser;
 
     if (sessionUser == null) {
@@ -84,12 +117,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
 
     // The server profile wins over the session snapshot when available.
-    final user = state.profileUser ?? sessionUser;
+    final user = state.profileUser ?? (isOwn ? sessionUser : null);
     final posts = state.profilePosts;
+    final friendship = state.profileFriendship;
     final loading = state.isLoadingProfile && state.profileUser == null;
 
     return Scaffold(
       backgroundColor: AppColors.absoluteBlack,
+      floatingActionButton: isOwn ? const CreatePostFab() : null,
       body: RefreshIndicator(
         color: AppColors.electricBlue,
         backgroundColor: AppColors.nightBlue,
@@ -127,53 +162,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                 ),
               )
-            else ...[
+            else if (user != null) ...[
               SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.all(AppDimensions.spaceXl),
-                  child: Column(
-                    children: [
-                      GlowContainer(
-                        glow: Glow.medium,
-                        color: AppColors.glowSmall,
-                        background: Colors.transparent,
-                        borderRadius: BorderRadius.circular(999),
-                        child: UserAvatar(
-                          name: user.name,
-                          seed: user.avatarSeed ?? user.username,
-                          imageUrl: user.avatarUrl,
-                          size: 96,
-                          ring: true,
-                        ),
-                      ),
-                      const SizedBox(height: AppDimensions.spaceLg),
-                      Text(user.name, style: AppTextStyles.h1.copyWith(fontSize: 22)),
-                      const SizedBox(height: AppDimensions.spaceXs),
-                      Text('@${user.username}', style: AppTextStyles.caption),
-                      const SizedBox(height: AppDimensions.spaceMd),
-                      const HudLabel(text: 'USER CONNECTED', dot: true),
-                      const SizedBox(height: AppDimensions.spaceLg),
-                      if (user.bio.isNotEmpty)
-                        Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: AppDimensions.spaceXl,
-                          ),
-                          child: Text(
-                            user.bio,
-                            textAlign: TextAlign.center,
-                            style: AppTextStyles.bodyMuted,
-                          ),
-                        ),
-                      const SizedBox(height: AppDimensions.spaceXl),
-                      MatrixButton(
-                        label: 'Editar perfil',
-                        icon: Icons.edit_rounded,
-                        variant: MatrixButtonVariant.outline,
-                        expanded: true,
-                        onPressed: _openEditProfile,
-                      ),
-                    ],
-                  ),
+                child: _ProfileHeader(
+                  user: user,
+                  isOwn: isOwn,
+                  friendship: friendship,
+                  sending: _sending,
+                  onEdit: _openEditProfile,
+                  onSend: () => _sendFriendRequest(user.id),
                 ),
               ),
               const SliverToBoxAdapter(
@@ -186,13 +183,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
               ),
               if (posts.isEmpty)
-                const SliverFillRemaining(
+                SliverFillRemaining(
                   hasScrollBody: false,
                   child: EmptyState(
                     icon: Icons.grid_view_rounded,
                     title: 'NO POSTS YET',
                     hud: 'SYSTEM WAITING...',
-                    subtitle: 'Você ainda não publicou nada.',
+                    subtitle: isOwn
+                        ? 'Você ainda não publicou nada.'
+                        : 'Este usuário ainda não publicou nada.',
                   ),
                 )
               else
@@ -220,10 +219,178 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                 ),
             ],
+            // Room for the floating "+" so it never covers the last tile.
             const SliverToBoxAdapter(
-              child: SizedBox(height: AppDimensions.spaceXxl),
+              child: SizedBox(height: AppDimensions.spaceHuge * 2),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The centered header: big avatar, @nickname with a subtle glow on the @,
+/// and either the edit CTA (own profile) or the friendship button.
+class _ProfileHeader extends StatelessWidget {
+  const _ProfileHeader({
+    required this.user,
+    required this.isOwn,
+    required this.friendship,
+    required this.sending,
+    required this.onEdit,
+    required this.onSend,
+  });
+
+  final MatrixUser user;
+  final bool isOwn;
+  final Friendship? friendship;
+  final bool sending;
+  final VoidCallback onEdit;
+  final VoidCallback onSend;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(AppDimensions.spaceXl),
+      child: Column(
+        children: [
+          GlowContainer(
+            glow: Glow.medium,
+            color: AppColors.glowSmall,
+            background: Colors.transparent,
+            borderRadius: BorderRadius.circular(999),
+            child: UserAvatar(
+              name: user.name,
+              seed: user.avatarSeed ?? user.username,
+              imageUrl: user.avatarUrl,
+              size: 110,
+              ring: true,
+            ),
+          ),
+          const SizedBox(height: AppDimensions.spaceLg),
+          // The server username (not the display name) with a discreet
+          // glowing "@" — blurred shadow per the design spec.
+          RichText(
+            text: TextSpan(
+              children: [
+                TextSpan(
+                  text: '@',
+                  style: TextStyle(
+                    color: AppColors.holographicBlue,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w600,
+                    shadows: const [
+                      Shadow(color: AppColors.electricBlue, blurRadius: 10),
+                    ],
+                  ),
+                ),
+                TextSpan(
+                  text: user.username,
+                  style: AppTextStyles.h2.copyWith(fontSize: 20),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: AppDimensions.spaceMd),
+          if (user.name.isNotEmpty)
+            Text(user.name, style: AppTextStyles.bodyMuted),
+          const SizedBox(height: AppDimensions.spaceXs),
+          const HudLabel(text: 'USER CONNECTED', dot: true),
+          if (user.bio.isNotEmpty) ...[
+            const SizedBox(height: AppDimensions.spaceMd),
+            Text(
+              user.bio,
+              textAlign: TextAlign.center,
+              style: AppTextStyles.bodyMuted,
+            ),
+          ],
+          const SizedBox(height: AppDimensions.spaceXl),
+          if (isOwn)
+            MatrixButton(
+              label: 'Editar perfil',
+              icon: Icons.edit_rounded,
+              variant: MatrixButtonVariant.outline,
+              expanded: true,
+              onPressed: onEdit,
+            )
+          else
+            FriendshipButton(
+              friendship: friendship,
+              sending: sending,
+              onSend: onSend,
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The big friendship button with the three server-managed states:
+/// Seguir (sends a request) / Solicitado (disabled) / Amigos (disabled).
+class FriendshipButton extends StatelessWidget {
+  const FriendshipButton({
+    super.key,
+    required this.friendship,
+    required this.sending,
+    required this.onSend,
+  });
+
+  final Friendship? friendship;
+  final bool sending;
+  final VoidCallback onSend;
+
+  @override
+  Widget build(BuildContext context) {
+    final state = friendship ?? Friendship.none;
+    switch (state) {
+      case Friendship.friends:
+        return const MatrixButton(
+          label: 'Amigos',
+          icon: Icons.favorite_rounded,
+          variant: MatrixButtonVariant.outline,
+          expanded: true,
+          onPressed: null,
+        );
+      case Friendship.outgoingPending:
+      case Friendship.incomingPending:
+        return const MatrixButton(
+          label: 'Solicitado',
+          icon: Icons.watch_later_rounded,
+          variant: MatrixButtonVariant.outline,
+          expanded: true,
+          onPressed: null,
+        );
+      case Friendship.none:
+        return MatrixButton(
+          label: 'Seguir',
+          icon: Icons.person_add_rounded,
+          expanded: true,
+          isLoading: sending,
+          onPressed: onSend,
+        );
+    }
+  }
+}
+
+/// The floating "+" button — only rendered on the own profile. Reuses the
+/// existing create-post flow (same target the old menu entry used).
+class CreatePostFab extends StatelessWidget {
+  const CreatePostFab({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return GlowContainer(
+      glow: Glow.medium,
+      color: AppColors.glowMedium,
+      background: AppColors.primaryBlue,
+      borderRadius: BorderRadius.circular(999),
+      child: InkWell(
+        onTap: () => Navigator.of(context).pushNamed(AppRoutes.createPost),
+        borderRadius: BorderRadius.circular(999),
+        child: const Padding(
+          padding: EdgeInsets.all(AppDimensions.spaceLg),
+          child: Icon(Icons.add_rounded, size: 28, color: AppColors.techWhite),
         ),
       ),
     );

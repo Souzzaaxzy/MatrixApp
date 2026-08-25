@@ -31,7 +31,11 @@ void main() {
     // route stack (the screen pops back on publish).
     await pumpMatrixApp(tester, const HomeScreen(), state: state);
 
-    await tester.tap(find.text('Criar'));
+    // The old bottom-bar entry is gone: the flow now starts from the
+    // floating "+" button on the own profile tab.
+    await tester.tap(find.text('Perfil'));
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.tap(find.byIcon(Icons.add_rounded));
     await tester.pumpAndSettle();
 
     await tester.enterText(find.byType(TextField), 'Post de teste');

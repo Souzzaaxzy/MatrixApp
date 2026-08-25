@@ -12,4 +12,8 @@ class AppRoutes {
 
   /// Post detail. Argument: the post's server id (String).
   static const String postDetail = '/home/post';
+
+  /// Profile of another user. Argument: the username (String). A null/
+  /// empty argument means the session user's own profile.
+  static const String profile = '/home/profile';
 }

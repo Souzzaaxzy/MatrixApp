@@ -10,6 +10,7 @@ import 'package:matrix_app/features/create_post/create_post_screen.dart';
 import 'package:matrix_app/features/home/home_screen.dart';
 import 'package:matrix_app/features/post/post_detail_screen.dart';
 import 'package:matrix_app/features/profile/edit_profile_screen.dart';
+import 'package:matrix_app/features/profile/profile_screen.dart';
 import 'package:matrix_app/features/splash/splash_screen.dart';
 
 import 'fake_repositories.dart';
@@ -43,6 +44,13 @@ Future<void> pumpMatrixApp(
             final id = ModalRoute.of(context)!.settings.arguments as String;
             return PostDetailScreen(postId: id);
           },
+          AppRoutes.profile: (context) {
+            final username =
+                ModalRoute.of(context)!.settings.arguments as String?;
+            return ProfileScreen(
+              username: (username != null && username.isNotEmpty) ? username : null,
+            );
+          },
         },
       ),
     ),
@@ -57,5 +65,25 @@ Future<AppState> seededAppState() async {
   final state = AppState(repositories: FakeRepositories());
   await state.restoreSession();
   await state.loadFeed();
+  return state;
+}
+
+/// Logged-in [AppState] with social data (notifications, friend requests)
+/// seeded in the fake store, as if the server had persisted them.
+Future<AppState> seededAppStateWithSocial({
+  List<dynamic> notifications = const [],
+  List<dynamic> friendRequests = const [],
+}) async {
+  final repos = FakeRepositories();
+  for (final n in notifications) {
+    repos.store.notifications.add(n);
+  }
+  for (final r in friendRequests) {
+    repos.store.friendRequests[r.id] = r;
+  }
+  final state = AppState(repositories: repos);
+  await state.restoreSession();
+  await state.loadFeed();
+  await state.loadNotifications();
   return state;
 }

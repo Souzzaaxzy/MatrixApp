@@ -9,6 +9,7 @@ import '../features/create_post/create_post_screen.dart';
 import '../features/home/home_screen.dart';
 import '../features/post/post_detail_screen.dart';
 import '../features/profile/edit_profile_screen.dart';
+import '../features/profile/profile_screen.dart';
 import '../features/splash/splash_screen.dart';
 import 'routes.dart';
 import 'theme/app_theme.dart';
@@ -48,6 +49,10 @@ class MatrixApp extends StatelessWidget {
                 return _fade(PostDetailScreen(postId: postId));
               }
               return _fade(const HomeScreen());
+            case AppRoutes.profile:
+              final username = settings.arguments as String?;
+              return _fade(ProfileScreen(
+                  username: (username != null && username.isNotEmpty) ? username : null));
             default:
               // Unreachable through the app's own navigation — every route
               // above is wired. Kept only as a defensive fallback.

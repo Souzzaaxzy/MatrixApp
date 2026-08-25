@@ -1,4 +1,6 @@
 import '../../models/comment.dart';
+import '../../models/friend_request.dart';
+import '../../models/matrix_notification.dart';
 import '../../models/matrix_user.dart';
 import '../../models/post.dart';
 
@@ -193,4 +195,91 @@ class PublicUserDto {
         avatarUrl: json['avatarUrl'] as String?,
         bio: (json['bio'] as String?) ?? '',
       );
+}
+
+/// A pending friend request (sender embedded).
+class FriendRequestDto {
+  final String id;
+  final String status;
+  final DateTime createdAt;
+  final PublicUserDto sender;
+
+  const FriendRequestDto({
+    required this.id,
+    required this.status,
+    required this.createdAt,
+    required this.sender,
+  });
+
+  FriendRequest toModel() => FriendRequest(
+        id: id,
+        status: status,
+        createdAt: createdAt,
+        sender: sender.toModel(),
+      );
+
+  factory FriendRequestDto.fromJson(Map<String, dynamic> json) {
+    final senderJson = json['sender'] as Map<String, dynamic>;
+    return FriendRequestDto(
+      id: json['id'] as String,
+      status: (json['status'] as String?) ?? 'PENDING',
+      createdAt: DateTime.parse(json['createdAt'] as String),
+      sender: PublicUserDto.fromJson(senderJson),
+    );
+  }
+}
+
+/// A notification (actor embedded; references post/comment/request).
+class NotificationDto {
+  final String id;
+  final String type;
+  final bool read;
+  final DateTime createdAt;
+  final PublicUserDto actor;
+  final String? postId;
+  final String? commentId;
+  final String? friendRequestId;
+  final String? friendRequestStatus;
+
+  const NotificationDto({
+    required this.id,
+    required this.type,
+    required this.read,
+    required this.createdAt,
+    required this.actor,
+    this.postId,
+    this.commentId,
+    this.friendRequestId,
+    this.friendRequestStatus,
+  });
+
+  MatrixNotification toModel() => MatrixNotification(
+        id: id,
+        type: type,
+        read: read,
+        createdAt: createdAt,
+        actorId: actor.id,
+        actorName: actor.name,
+        actorUsername: actor.username,
+        actorAvatarUrl: actor.avatarUrl,
+        postId: postId,
+        commentId: commentId,
+        friendRequestId: friendRequestId,
+        friendRequestStatus: friendRequestStatus,
+      );
+
+  factory NotificationDto.fromJson(Map<String, dynamic> json) {
+    final actorJson = json['actor'] as Map<String, dynamic>;
+    return NotificationDto(
+      id: json['id'] as String,
+      type: json['type'] as String,
+      read: (json['read'] as bool?) ?? false,
+      createdAt: DateTime.parse(json['createdAt'] as String),
+      actor: PublicUserDto.fromJson(actorJson),
+      postId: json['postId'] as String?,
+      commentId: json['commentId'] as String?,
+      friendRequestId: json['friendRequestId'] as String?,
+      friendRequestStatus: json['friendRequestStatus'] as String?,
+    );
+  }
 }

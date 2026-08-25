@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../app/routes.dart';
 import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_dimensions.dart';
 import '../../app/theme/app_text_styles.dart';
@@ -57,6 +58,10 @@ class _SearchScreenState extends State<SearchScreen> {
         _loading = false;
       });
     }
+  }
+
+  void _openUser(MatrixUser user) {
+    Navigator.of(context).pushNamed(AppRoutes.profile, arguments: user.username);
   }
 
   @override
@@ -122,6 +127,7 @@ class _SearchScreenState extends State<SearchScreen> {
                   final user = results[i];
                   return MatrixCard(
                     margin: const EdgeInsets.symmetric(vertical: AppDimensions.spaceSm),
+                    onTap: () => _openUser(user),
                     child: Row(
                       children: [
                         UserAvatar(

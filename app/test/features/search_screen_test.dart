@@ -23,6 +23,23 @@ void main() {
     expect(find.text('@leonardo'), findsOneWidget);
   });
 
+  testWidgets('tapping a result opens that user profile', (tester) async {
+    await pumpMatrixApp(tester, const SearchScreen());
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextField), 'joao');
+    await tester.pumpAndSettle();
+
+    expect(find.text('@joao'), findsOneWidget);
+    await tester.tap(find.text('@joao'));
+    await tester.pump(const Duration(milliseconds: 800));
+    await tester.pump(const Duration(milliseconds: 800));
+
+    // The profile screen loads with the searched user and the Seguir button.
+    expect(find.text('PERFIL'), findsOneWidget);
+    expect(find.text('SEGUIR'), findsOneWidget);
+  });
+
   testWidgets('shows empty state when no user matches', (tester) async {
     await pumpMatrixApp(tester, const SearchScreen());
     await tester.pumpAndSettle();

@@ -10,7 +10,7 @@ void main() {
     expect(find.text('Início'), findsOneWidget);
     expect(find.text('Buscar'), findsOneWidget);
     expect(find.text('Akame'), findsOneWidget);
-    expect(find.text('Criar'), findsOneWidget);
+    expect(find.text('Notificações'), findsOneWidget);
     expect(find.text('Perfil'), findsOneWidget);
   });
 
@@ -25,6 +25,15 @@ void main() {
 
     // Akame chat header is shown.
     expect(find.text('ONLINE'), findsOneWidget);
+  });
+
+  testWidgets('switches to notifications tab on tap', (tester) async {
+    await pumpMatrixApp(tester, const HomeScreen());
+
+    await tester.tap(find.text('Notificações'));
+    await tester.pump(const Duration(milliseconds: 400));
+
+    expect(find.text('NOTIFICAÇÕES'), findsOneWidget);
   });
 
   testWidgets('switches to profile tab on tap', (tester) async {

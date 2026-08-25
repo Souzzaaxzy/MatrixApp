@@ -8,6 +8,8 @@ import '../../data/repositories/repositories.dart';
 import '../../data/services.dart';
 import '../../models/akame_message.dart';
 import '../../models/comment.dart';
+import '../../models/friend_request.dart';
+import '../../models/matrix_notification.dart';
 import '../../models/matrix_user.dart';
 import '../../models/post.dart';
 import '../utils/mock_data_service.dart';
@@ -41,6 +43,14 @@ class AppState extends ChangeNotifier {
   MatrixUser? _profileUser;
   bool _loadingProfile = false;
 
+  /// Friendship state between the session user and [_profileUser], per the
+  /// server. Null when viewing our own profile (button never renders).
+  Friendship? _profileFriendship;
+
+  /// Notifications of the session user (persistent server-side list).
+  final List<MatrixNotification> _notifications = [];
+  bool _loadingNotifications = false;
+
   /// Posts fetched individually (detail screen) that may not be present in
   /// the feed/profile caches. Lets likes/comments work uniformly by id.
   final Map<String, Post> _postCache = {};
@@ -48,7 +58,11 @@ class AppState extends ChangeNotifier {
   List<Post> get posts => List.unmodifiable(_posts);
   List<Post> get profilePosts => List.unmodifiable(_profilePosts);
   MatrixUser? get profileUser => _profileUser;
+  Friendship? get profileFriendship => _profileFriendship;
   bool get isLoadingProfile => _loadingProfile;
+  List<MatrixNotification> get notifications => List.unmodifiable(_notifications);
+  int get unreadNotifications => _notifications.where((n) => !n.read).length;
+  bool get isLoadingNotifications => _loadingNotifications;
   List<AkameMessage> get akameMessages => List.unmodifiable(_akameMessages);
   MatrixUser? get currentUser => _currentUser;
   bool get isLoadingFeed => _loadingFeed;
@@ -60,6 +74,9 @@ class AppState extends ChangeNotifier {
   CommentRepository get _comments =>
       _repos?.comments ?? Services.instance.comments;
   UserRepository get _users => _repos?.users ?? Services.instance.users;
+  FriendRepository get _friends => _repos?.friends ?? Services.instance.friends;
+  NotificationRepository get _notificationRepo =>
+      _repos?.notifications ?? Services.instance.notifications;
 
   /// Restores the session from a stored refresh token. Called at startup.
   /// Returns true when the user is authenticated afterwards.
@@ -123,6 +140,8 @@ class AppState extends ChangeNotifier {
     _posts.clear();
     _profilePosts.clear();
     _profileUser = null;
+    _profileFriendship = null;
+    _notifications.clear();
     _feedCursor = null;
     notifyListeners();
   }
@@ -279,8 +298,9 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Loads a profile (user + their posts) from the server. This is the
-  /// ONLY source for the profile screen — never the local feed cache.
+  /// Loads a profile (user + their posts + friendship state) from the
+  /// server. This is the ONLY source for the profile screen — never the
+  /// local feed cache.
   Future<void> loadProfile(String username) async {
     if (_loadingProfile) return;
     _loadingProfile = true;
@@ -288,6 +308,7 @@ class AppState extends ChangeNotifier {
     try {
       final result = await _users.profile(username);
       _profileUser = result.user;
+      _profileFriendship = result.friendship;
       _profilePosts
         ..clear()
         ..addAll(result.posts);
@@ -303,6 +324,84 @@ class AppState extends ChangeNotifier {
       _loadingProfile = false;
       notifyListeners();
     }
+  }
+
+  /// Reloads the notifications list (server is the source of truth).
+  Future<void> loadNotifications() async {
+    if (_loadingNotifications) return;
+    _loadingNotifications = true;
+    notifyListeners();
+    try {
+      final result = await _notificationRepo.list();
+      _notifications
+        ..clear()
+        ..addAll(result.notifications);
+    } finally {
+      _loadingNotifications = false;
+      notifyListeners();
+    }
+  }
+
+  /// Marks a notification as read remotely (the unread badge is derived).
+  Future<void> markNotificationRead(String id) async {
+    try {
+      await _notificationRepo.markRead(id);
+    } catch (_) {
+      // A failed mark-read is non-blocking: the badge may stay for a bit.
+    }
+    for (var i = 0; i < _notifications.length; i++) {
+      if (_notifications[i].id == id && !_notifications[i].read) {
+        _notifications[i] = _notifications[i].copyWith(read: true);
+      }
+    }
+    notifyListeners();
+  }
+
+  /// Marks every notification as read.
+  Future<void> markAllNotificationsRead() async {
+    try {
+      await _notificationRepo.markAllRead();
+    } catch (_) {
+      // Non-blocking (see above).
+    }
+    for (var i = 0; i < _notifications.length; i++) {
+      if (!_notifications[i].read) {
+        _notifications[i] = _notifications[i].copyWith(read: true);
+      }
+    }
+    notifyListeners();
+  }
+
+  /// Sends a friend request to another user. On success the profile
+  /// friendship state moves to Solicitado (OUTGOING_PENDING).
+  Future<void> sendFriendRequest(String userId) async {
+    await _friends.send(userId);
+    _profileFriendship = Friendship.outgoingPending;
+    notifyListeners();
+  }
+
+  /// Accepts a pending friend request received by the current user. The
+  /// actionable notification card disappears and the relation becomes
+  /// Amigos on both sides (server-managed).
+  Future<void> acceptFriendRequest(String requestId) async {
+    await _friends.accept(requestId);
+    _removeNotificationWhere((n) => n.friendRequestId == requestId);
+    // If the accepted request belongs to the profile being viewed, refresh
+    // the friendship state to Amigos.
+    _profileFriendship = Friendship.friends;
+    notifyListeners();
+  }
+
+  /// Rejects a pending friend request. The card disappears and the sender
+  /// can request again later.
+  Future<void> rejectFriendRequest(String requestId) async {
+    await _friends.reject(requestId);
+    _removeNotificationWhere((n) => n.friendRequestId == requestId);
+    notifyListeners();
+  }
+
+  void _removeNotificationWhere(bool Function(MatrixNotification n) kill) {
+    _notifications.removeWhere(kill);
   }
 
   /// Refreshes the session user from the server (GET /api/auth/me).

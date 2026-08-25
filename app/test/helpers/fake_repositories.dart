@@ -4,6 +4,8 @@ import 'package:matrix_app/data/api_config.dart';
 import 'package:matrix_app/data/dtos/dtos.dart';
 import 'package:matrix_app/data/repositories/repositories.dart';
 import 'package:matrix_app/models/comment.dart';
+import 'package:matrix_app/models/friend_request.dart';
+import 'package:matrix_app/models/matrix_notification.dart';
 import 'package:matrix_app/models/matrix_user.dart';
 import 'package:matrix_app/models/post.dart';
 
@@ -15,35 +17,47 @@ import 'package:matrix_app/models/post.dart';
 /// deterministically so tests are reproducible.
 class FakeRepositories extends Repositories {
   FakeRepositories._({
+    required FakeStore store,
     required super.auth,
     required super.posts,
     required super.likes,
     required super.comments,
     required super.users,
+    required super.friends,
+    required super.notifications,
     required super.uploads,
-  });
+  }) : _store = store;
 
   factory FakeRepositories({
     bool failLikes = false,
     Map<String, List<Comment>> seedComments = const {},
+    List<MatrixNotification> seedNotifications = const [],
   }) {
-    final store = _Store();
+    final store = FakeStore();
     seedComments.forEach((postId, comments) {
       store.commentsByPost[postId] = List.of(comments);
     });
+    store.notifications.addAll(seedNotifications);
     return FakeRepositories._(
+      store: store,
       auth: _FakeAuthRepository(store),
       posts: _FakePostRepository(store),
       likes: _FakeLikeRepository(store, fail: failLikes),
       comments: _FakeCommentRepository(store),
       users: _FakeUserRepository(store),
+      friends: _FakeFriendRepository(store),
+      notifications: _FakeNotificationRepository(store),
       uploads: const _FakeUploadRepository(),
     );
   }
+
+  /// Direct access to the in-memory store for richer test seeding.
+  FakeStore get store => _store;
+  final FakeStore _store;
 }
 
-class _Store {
-  _Store() {
+class FakeStore {
+  FakeStore() {
     users = {
       'u0': MatrixUser(
         id: 'u0',
@@ -51,6 +65,14 @@ class _Store {
         username: 'leonardo',
         bio: 'Construindo o futuro. ⚡',
         avatarSeed: 'leonardo',
+      ),
+      // A second full user — needed for search/profile/friendship tests.
+      'u2': MatrixUser(
+        id: 'u2',
+        name: 'João',
+        username: 'joao',
+        bio: '',
+        avatarSeed: 'joao',
       ),
     };
     currentUserId = 'u0';
@@ -86,6 +108,9 @@ class _Store {
     // Authoritative like counts, independent of AppState's optimistic writes.
     likeCountByPost = {'p1': 5};
     commentsByPost = <String, List<Comment>>{};
+    notifications = <MatrixNotification>[];
+    friendRequests = <String, FriendRequest>{};
+    friendships = <String>{};
   }
 
   late final Map<String, MatrixUser> users;
@@ -95,13 +120,43 @@ class _Store {
   late Map<String, int> likeCountByPost;
   late Map<String, List<Comment>> commentsByPost;
 
+  /// Server-side persistent notifications (recipient = current user).
+  late final List<MatrixNotification> notifications;
+
+  /// Friend requests by id; status is a plain string (PENDING/ACCEPTED).
+  late final Map<String, FriendRequest> friendRequests;
+
+  /// Friendship pairs stored as `a|b` with ids sorted — one row per
+  /// friendship, no duplicates, just like the SQLite schema.
+  late final Set<String> friendships;
+
   MatrixUser get currentUser => users[currentUserId]!;
+
+  String _pairKey(String a, String b) => a.compareTo(b) < 0 ? '$a|$b' : '$b|$a';
+
+  Friendship friendshipState(String otherUserId) {
+    final me = currentUserId;
+    if (me == otherUserId) return Friendship.none;
+    if (friendships.contains(_pairKey(me, otherUserId))) {
+      return Friendship.friends;
+    }
+    final pending = friendRequests.values.where((r) =>
+        r.status == 'PENDING' &&
+        ((r.sender.id == me && r.receiverId == otherUserId) ||
+            (r.sender.id == otherUserId && r.receiverId == me)));
+    for (final r in pending) {
+      return r.sender.id == me
+          ? Friendship.outgoingPending
+          : Friendship.incomingPending;
+    }
+    return Friendship.none;
+  }
 }
 
 class _FakeAuthRepository implements AuthRepository {
   _FakeAuthRepository(this._store);
 
-  final _Store _store;
+  final FakeStore _store;
 
   @override
   Future<AuthDto> register({
@@ -176,7 +231,7 @@ class _FakeAuthRepository implements AuthRepository {
 class _FakePostRepository implements PostRepository {
   _FakePostRepository(this._store);
 
-  final _Store _store;
+  final FakeStore _store;
 
   @override
   Future<({List<Post> posts, String? nextCursor})> feed({
@@ -221,7 +276,7 @@ class _FakePostRepository implements PostRepository {
 class _FakeLikeRepository implements LikeRepository {
   _FakeLikeRepository(this._store, {this.fail = false});
 
-  final _Store _store;
+  final FakeStore _store;
 
   /// When true, every toggle throws — simulates an API failure so tests can
   /// verify the optimistic update is rolled back.
@@ -257,7 +312,7 @@ class _FakeLikeRepository implements LikeRepository {
 class _FakeCommentRepository implements CommentRepository {
   _FakeCommentRepository(this._store);
 
-  final _Store _store;
+  final FakeStore _store;
 
   @override
   Future<List<Comment>> list(String postId) async {
@@ -290,17 +345,24 @@ class _FakeCommentRepository implements CommentRepository {
 class _FakeUserRepository implements UserRepository {
   _FakeUserRepository(this._store);
 
-  final _Store _store;
+  final FakeStore _store;
 
   @override
-  Future<({MatrixUser user, List<Post> posts})> profile(String username) async {
+  Future<({MatrixUser user, List<Post> posts, Friendship? friendship})> profile(
+    String username,
+  ) async {
     final user = _store.users.values.firstWhere(
       (u) => u.username == username,
       orElse: () => _store.currentUser,
     );
     final userPosts =
         _store.posts.where((p) => p.authorUsername == username).toList();
-    return (user: user, posts: userPosts);
+    final isCurrent = user.id == _store.currentUserId;
+    return (
+      user: user,
+      posts: userPosts,
+      friendship: isCurrent ? null : _store.friendshipState(user.id),
+    );
   }
 
   @override
@@ -342,3 +404,97 @@ class _FakeUploadRepository implements UploadRepository {
   @override
   Future<String> upload(File file) async => 'https://fake.matrix.app/u/test.png';
 }
+
+class _FakeFriendRepository implements FriendRepository {
+  _FakeFriendRepository(this._store);
+
+  final FakeStore _store;
+
+  @override
+  Future<FriendRequest> send(String userId) async {
+    final sender = _store.currentUser;
+    final key = 'fr_${sender.id}_$userId';
+    final existing = _store.friendRequests[key];
+    if (existing != null) {
+      throw const ApiException(
+        statusCode: 409,
+        message: 'Solicitação já enviada.',
+      );
+    }
+    final request = FriendRequest(
+      id: key,
+      status: 'PENDING',
+      createdAt: DateTime.now(),
+      sender: sender,
+      receiverId: userId,
+    );
+    _store.friendRequests[key] = request;
+    return request;
+  }
+
+  @override
+  Future<List<FriendRequest>> pending() async {
+    final me = _store.currentUserId;
+    return _store.friendRequests.values
+        .where((r) => r.status == 'PENDING' && r.receiverId == me)
+        .toList();
+  }
+
+  @override
+  Future<void> accept(String requestId) async {
+    final request = _store.friendRequests[requestId];
+    if (request == null) return;
+    _store.friendRequests[requestId] = FriendRequest(
+      id: request.id,
+      status: 'ACCEPTED',
+      createdAt: request.createdAt,
+      sender: request.sender,
+      receiverId: request.receiverId,
+    );
+    final ids = [request.sender.id, request.receiverId]..sort();
+    _store.friendships.add('${ids[0]}|${ids[1]}');
+  }
+
+  @override
+  Future<void> reject(String requestId) async {
+    _store.friendRequests.remove(requestId);
+  }
+
+  @override
+  Future<Friendship> state(String userId) async =>
+      _store.friendshipState(userId);
+}
+
+class _FakeNotificationRepository implements NotificationRepository {
+  _FakeNotificationRepository(this._store);
+
+  final FakeStore _store;
+
+  @override
+  Future<({List<MatrixNotification> notifications, int unreadCount})> list() async {
+    final items = List.of(_store.notifications);
+    return (
+      notifications: items,
+      unreadCount: items.where((n) => !n.read).length,
+    );
+  }
+
+  @override
+  Future<void> markRead(String id) async {
+    for (var i = 0; i < _store.notifications.length; i++) {
+      if (_store.notifications[i].id == id && !_store.notifications[i].read) {
+        _store.notifications[i] = _store.notifications[i].copyWith(read: true);
+      }
+    }
+  }
+
+  @override
+  Future<void> markAllRead() async {
+    for (var i = 0; i < _store.notifications.length; i++) {
+      if (!_store.notifications[i].read) {
+        _store.notifications[i] = _store.notifications[i].copyWith(read: true);
+      }
+    }
+  }
+}
+

@@ -19,6 +19,8 @@ class Services {
   LikeRepository get likes => repositories.likes;
   CommentRepository get comments => repositories.comments;
   UserRepository get users => repositories.users;
+  FriendRepository get friends => repositories.friends;
+  NotificationRepository get notifications => repositories.notifications;
   UploadRepository get uploads => repositories.uploads;
 
   /// Initializes the data layer. Call once before runApp.
@@ -30,6 +32,8 @@ class Services {
     final likes = LikeRepository(apiClient);
     final comments = CommentRepository(apiClient);
     final users = UserRepository(apiClient);
+    final friends = FriendRepository(apiClient);
+    final notifications = NotificationRepository(apiClient);
     final uploads = UploadRepository(apiClient);
     final services = Services._(
       apiClient: apiClient,
@@ -39,6 +43,8 @@ class Services {
         likes: likes,
         comments: comments,
         users: users,
+        friends: friends,
+        notifications: notifications,
         uploads: uploads,
       ),
     );

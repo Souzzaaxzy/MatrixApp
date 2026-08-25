@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 
 import '../../models/comment.dart';
+import '../../models/friend_request.dart';
+import '../../models/matrix_notification.dart';
 import '../../models/matrix_user.dart';
 import '../../models/post.dart';
 import '../api_client.dart';
@@ -173,13 +175,18 @@ class UserRepository {
 
   final ApiClient _api;
 
-  /// Fetches a public profile by username, including that user's posts.
-  Future<({MatrixUser user, List<Post> posts})> profile(String username) async {
+  /// Fetches a public profile by username: user, posts and (for an
+  /// authenticated viewer) the friendship state Seguir/Solicitado/Amigos.
+  Future<({MatrixUser user, List<Post> posts, Friendship? friendship})> profile(
+    String username,
+  ) async {
     final json = await _api.get<Map<String, dynamic>>('/api/users/$username');
     final user = PublicUserDto.fromJson(json['user'] as Map<String, dynamic>).toModel();
     final list = (json['posts'] as List).cast<Map<String, dynamic>>();
     final posts = list.map(FeedPostDto.fromJson).map((d) => d.toModel()).toList();
-    return (user: user, posts: posts);
+    final raw = json['friendship'];
+    final friendship = raw is String ? Friendship.fromApi(raw) : null;
+    return (user: user, posts: posts, friendship: friendship);
   }
 
   Future<MatrixUser> updateProfile({
@@ -210,6 +217,66 @@ class UserRepository {
   }
 }
 
+/// Friends repository — friend request lifecycle (send / list / accept /
+/// reject). All authorization is enforced by the server.
+class FriendRepository {
+  FriendRepository(this._api);
+
+  final ApiClient _api;
+
+  Future<FriendRequest> send(String userId) async {
+    final json = await _api.post<Map<String, dynamic>>('/api/friend-requests/$userId');
+    return FriendRequestDto.fromJson(json).toModel();
+  }
+
+  Future<List<FriendRequest>> pending() async {
+    final json = await _api.get<Map<String, dynamic>>('/api/friend-requests');
+    final list = (json['requests'] as List).cast<Map<String, dynamic>>();
+    return list.map(FriendRequestDto.fromJson).map((d) => d.toModel()).toList();
+  }
+
+  Future<void> accept(String requestId) async {
+    await _api.post('/api/friend-requests/$requestId/accept');
+  }
+
+  Future<void> reject(String requestId) async {
+    await _api.post('/api/friend-requests/$requestId/reject');
+  }
+
+  /// Current friendship state with another user, per the server.
+  Future<Friendship> state(String userId) async {
+    final json = await _api.get<Map<String, dynamic>>('/api/users/$userId/friendship');
+    return Friendship.fromApi(json['state'] as String?);
+  }
+}
+
+/// Notifications repository — persistent server-side notifications.
+class NotificationRepository {
+  NotificationRepository(this._api);
+
+  final ApiClient _api;
+
+  /// Fetches the notification list plus the unread counter.
+  Future<({List<MatrixNotification> notifications, int unreadCount})> list() async {
+    final json = await _api.get<Map<String, dynamic>>('/api/notifications');
+    final list = (json['notifications'] as List).cast<Map<String, dynamic>>();
+    final notifications =
+        list.map(NotificationDto.fromJson).map((d) => d.toModel()).toList();
+    return (
+      notifications: notifications,
+      unreadCount: (json['unreadCount'] as num?)?.toInt() ?? 0,
+    );
+  }
+
+  Future<void> markRead(String id) async {
+    await _api.patch('/api/notifications/$id/read');
+  }
+
+  Future<void> markAllRead() async {
+    await _api.patch('/api/notifications/read-all');
+  }
+}
+
 /// Uploads repository — image upload via multipart.
 class UploadRepository {
   UploadRepository(this._api);
@@ -236,6 +303,8 @@ class Repositories {
     required this.likes,
     required this.comments,
     required this.users,
+    required this.friends,
+    required this.notifications,
     required this.uploads,
   });
 
@@ -244,5 +313,7 @@ class Repositories {
   final LikeRepository likes;
   final CommentRepository comments;
   final UserRepository users;
+  final FriendRepository friends;
+  final NotificationRepository notifications;
   final UploadRepository uploads;
 }
