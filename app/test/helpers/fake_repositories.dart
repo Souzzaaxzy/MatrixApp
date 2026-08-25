@@ -23,8 +23,14 @@ class FakeRepositories extends Repositories {
     required super.uploads,
   });
 
-  factory FakeRepositories({bool failLikes = false}) {
+  factory FakeRepositories({
+    bool failLikes = false,
+    Map<String, List<Comment>> seedComments = const {},
+  }) {
     final store = _Store();
+    seedComments.forEach((postId, comments) {
+      store.commentsByPost[postId] = List.of(comments);
+    });
     return FakeRepositories._(
       auth: _FakeAuthRepository(store),
       posts: _FakePostRepository(store),
@@ -51,12 +57,27 @@ class _Store {
     posts = [
       Post(
         id: 'p1',
+        authorId: 'u0',
         authorName: 'Leonardo',
         authorUsername: 'leonardo',
         text: 'Test post',
         createdAt: DateTime(2024, 1, 1),
         avatarSeed: 'leonardo',
         likes: 5,
+        liked: false,
+        comments: const [],
+      ),
+      // A post by ANOTHER user — lets tests verify the author-only affordances
+      // (delete menu) are hidden for non-owners.
+      Post(
+        id: 'p2',
+        authorId: 'u2',
+        authorName: 'João',
+        authorUsername: 'joao',
+        text: 'Post de outro usuário',
+        createdAt: DateTime(2024, 1, 2),
+        avatarSeed: 'joao',
+        likes: 2,
         liked: false,
         comments: const [],
       ),
@@ -247,7 +268,10 @@ class _FakeCommentRepository implements CommentRepository {
   Future<Comment> create({required String postId, required String text}) async {
     final comment = Comment(
       id: 'c${DateTime.now().millisecondsSinceEpoch}',
+      authorId: _store.currentUser.id,
       author: _store.currentUser.name,
+      authorUsername: _store.currentUser.username,
+      authorAvatarUrl: _store.currentUser.avatarUrl,
       text: text,
       createdAt: DateTime.now(),
     );

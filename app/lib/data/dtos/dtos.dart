@@ -124,20 +124,27 @@ class CommentDto {
   final String id;
   final String text;
   final DateTime createdAt;
+  final String authorId;
   final String authorName;
   final String authorUsername;
+  final String? authorAvatarUrl;
 
   const CommentDto({
     required this.id,
     required this.text,
     required this.createdAt,
+    required this.authorId,
     required this.authorName,
     required this.authorUsername,
+    this.authorAvatarUrl,
   });
 
   Comment toModel() => Comment(
         id: id,
+        authorId: authorId,
         author: authorName,
+        authorUsername: authorUsername,
+        authorAvatarUrl: authorAvatarUrl,
         text: text,
         createdAt: createdAt,
       );
@@ -148,8 +155,10 @@ class CommentDto {
       id: json['id'] as String,
       text: json['text'] as String,
       createdAt: DateTime.parse(json['createdAt'] as String),
+      authorId: author['id'] as String,
       authorName: author['name'] as String,
       authorUsername: author['username'] as String,
+      authorAvatarUrl: author['avatarUrl'] as String?,
     );
   }
 }

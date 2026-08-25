@@ -70,4 +70,55 @@ void main() {
     expect(find.text('PUBLICAÇÃO'), findsOneWidget);
     expect(find.text('Test post'), findsWidgets);
   });
+
+  group('delete post', () {
+    testWidgets('author sees the menu and can delete after confirmation',
+        (tester) async {
+      final state = await seededAppState();
+      await pumpMatrixApp(tester, const PostDetailScreen(postId: 'p1'),
+          state: state);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byIcon(Icons.more_vert_rounded));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Excluir publicação'));
+      await tester.pumpAndSettle();
+
+      // Confirmation is required.
+      expect(find.text('Excluir publicação?'), findsOneWidget);
+      await tester.tap(find.text('Excluir'));
+      await tester.pumpAndSettle();
+
+      // Post removed from the shared state and the screen popped.
+      expect(state.posts.any((p) => p.id == 'p1'), isFalse);
+      expect(find.text('PUBLICAÇÃO'), findsNothing);
+    });
+
+    testWidgets('cancelling keeps the post', (tester) async {
+      final state = await seededAppState();
+      await pumpMatrixApp(tester, const PostDetailScreen(postId: 'p1'),
+          state: state);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byIcon(Icons.more_vert_rounded));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Excluir publicação'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Cancelar'));
+      await tester.pumpAndSettle();
+
+      expect(state.posts.any((p) => p.id == 'p1'), isTrue);
+      expect(find.text('PUBLICAÇÃO'), findsOneWidget);
+    });
+
+    testWidgets('menu is hidden for posts by other users', (tester) async {
+      final state = await seededAppState();
+      await pumpMatrixApp(tester, const PostDetailScreen(postId: 'p2'),
+          state: state);
+      await tester.pumpAndSettle();
+
+      expect(find.byIcon(Icons.more_vert_rounded), findsNothing);
+      expect(find.text('Post de outro usuário'), findsOneWidget);
+    });
+  });
 }

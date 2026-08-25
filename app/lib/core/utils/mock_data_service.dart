@@ -32,7 +32,9 @@ class MockDataService {
         comments: [
           Comment(
             id: 'c1',
+            authorId: 'mock-maria',
             author: 'Maria',
+            authorUsername: 'maria',
             text: 'Gostei muito!',
             createdAt: now.subtract(const Duration(minutes: 1)),
           ),
@@ -51,13 +53,17 @@ class MockDataService {
         comments: [
           Comment(
             id: 'c2',
+            authorId: 'mock-joao',
             author: 'João',
+            authorUsername: 'joao',
             text: 'Ficou muito bom.',
             createdAt: now.subtract(const Duration(minutes: 6)),
           ),
           Comment(
             id: 'c3',
+            authorId: 'mock-leonardo',
             author: 'Leonardo',
+            authorUsername: 'leonardo',
             text: '🔥🔥🔥',
             createdAt: now.subtract(const Duration(minutes: 5)),
           ),
@@ -84,7 +90,9 @@ class MockDataService {
         comments: [
           Comment(
             id: 'c4',
+            authorId: 'mock-leonardo',
             author: 'Leonardo',
+            authorUsername: 'leonardo',
             text: 'Sistema impecável.',
             createdAt: now.subtract(const Duration(minutes: 58)),
           ),
