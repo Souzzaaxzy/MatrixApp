@@ -187,3 +187,37 @@ analyze clean, APK builds (~54MB). CI green on main.
   pumpWidget (see `test/helpers/test_app.dart pumpMatrixApp`).
 - Status: server 120 tests pass, typecheck clean; app 123 tests pass,
   analyze clean.
+
+## Phase 7 — Live theme, like-state fix, customization infrastructure
+- **Live theme fix**: route pages are built per navigation in
+  `app/lib/app/routes.dart` (`_buildPage`) and wrapped in
+  `ThemeWatcher` (`lib/core/widgets/theme_watcher.dart`) — a StatefulWidget
+  that listens to `ThemeController.instance` and returns FRESH (non-const)
+  page instances. Root cause of "theme needs restart": identical const
+  widget instances were skipped by the element tree, and screens read
+  static `AppColors` at build time so they never repainted. `HomeScreen`
+  tab pages are also non-const for the same reason. Bottom sheets
+  (settings/comments/friends) are ThemeWatcher-wrapped too.
+- **Like-state fix**: `post.liked` (server `likedByMe`, computed from the
+  AUTHENTICATED token user — never client-supplied ids) drives the detail
+  screen heart. The profile post GRID shows only a neutral
+  `favorite_border_rounded` counter — never a filled heart.
+- **Customization infra** (assets ship next phase):
+  - Server: `Item`/`UserItem`/`EquippedItem` (SQLite), module
+    `src/modules/customization/` — `GET /api/customization/catalog`
+    (?type=), `GET /inventory`, `GET /equipped`, `POST /equip/:itemId`
+    (ownership + expiry validated server-side), `DELETE /equip/:slot`.
+    `GET /api/users/:username` embeds `user.customization`
+    (slot → {itemId, name, assetUrl, rarity}).
+  - App: `CosmeticItem` model + `CosmeticMap` (slot→item),
+    `MatrixUser.customization`, `CustomizationRepository`,
+    `AppState.myCosmetics` + load/equip/unequip. Renderers:
+    `FramedAvatar` / `StyledUsername` / `CosmeticBadgeView` in
+    `core/widgets/`; screen `features/customizations/` with
+    `ProfileCustomizationPreview`; entry in the profile settings sheet.
+- **Gotchas**: never notify listeners from `didChangeDependencies`
+  (schedule post-frame); capture `Navigator` BEFORE popping a bottom sheet
+  to pushNamed the next route; `setMode` is called WITHOUT await in widget
+  tests (platform channel never resolves under fake async).
+- Status: server 122 tests pass, typecheck clean; app 133 tests pass,
+  analyze clean; CI green (APK built).
