@@ -44,7 +44,7 @@ class _LoginScreenState extends State<LoginScreen> {
     });
     try {
       await AppStateScope.of(context).login(
-        username: _usernameController.text.trim().replaceAll('@', ''),
+        username: _usernameController.text.trim().replaceAll(RegExp(r'^@+'), ''),
         password: _passwordController.text,
       );
       if (!mounted) return;
@@ -107,13 +107,13 @@ class _LoginScreenState extends State<LoginScreen> {
                 FadeSlideTransition(
                   delay: const Duration(milliseconds: 250),
                   child: MatrixTextField(
-                    label: 'Username',
+                    label: 'Nickname do usuário',
                     hint: 'seu_usuario',
                     controller: _usernameController,
                     keyboardType: TextInputType.text,
                     textInputAction: TextInputAction.next,
                     validator: Validators.username,
-                    prefix: const Icon(Icons.alternate_email_rounded,
+                    prefix: Icon(Icons.person_outline_rounded,
                         color: AppColors.holographicBlue, size: 20),
                   ),
                 ),
@@ -132,7 +132,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     validator: (v) =>
                         Validators.required(v, label: 'Informe sua senha'),
                     onFieldSubmitted: (_) => _submit(),
-                    prefix: const Icon(Icons.lock_outline_rounded,
+                    prefix: Icon(Icons.lock_outline_rounded,
                         color: AppColors.holographicBlue, size: 20),
                     suffix: IconButton(
                       icon: Icon(

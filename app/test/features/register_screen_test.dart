@@ -18,10 +18,12 @@ void main() {
 
     expect(find.text('CRIAR CONTA'), findsWidgets);
     expect(find.text('NOME'), findsOneWidget);
-    expect(find.text('USERNAME'), findsOneWidget);
+    expect(find.text('NICKNAME'), findsOneWidget);
     expect(find.text('SENHA'), findsOneWidget);
     expect(find.text('CONFIRMAR SENHA'), findsOneWidget);
     expect(createButton(), findsOneWidget);
+    // No "@" prefix widget on the nickname field anymore.
+    expect(find.widgetWithText(TextField, '@'), findsNothing);
   });
 
   testWidgets('validates empty submission', (tester) async {

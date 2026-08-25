@@ -160,7 +160,7 @@ class _PostCardState extends State<PostCard>
   Widget _imagePlaceholder() => Container(
         color: AppColors.nightBlue,
         alignment: Alignment.center,
-        child: const Icon(Icons.broken_image_outlined,
+        child: Icon(Icons.broken_image_outlined,
             color: AppColors.deepBlue, size: 32),
       );
 }

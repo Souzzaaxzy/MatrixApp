@@ -114,7 +114,7 @@ class FakeStore {
   }
 
   late final Map<String, MatrixUser> users;
-  late String currentUserId;
+  late String? currentUserId;
   late List<Post> posts;
   late Set<String> likedPostIds;
   late Map<String, int> likeCountByPost;
@@ -137,7 +137,7 @@ class FakeStore {
   Friendship friendshipState(String otherUserId) {
     final me = currentUserId;
     if (me == otherUserId) return Friendship.none;
-    if (friendships.contains(_pairKey(me, otherUserId))) {
+    if (friendships.contains(_pairKey(me!, otherUserId))) {
       return Friendship.friends;
     }
     final pending = friendRequests.values.where((r) =>
@@ -226,6 +226,13 @@ class _FakeAuthRepository implements AuthRepository {
 
   @override
   Future<void> logout() async {}
+
+  @override
+  Future<void> deleteAccount() async {
+    final id = _store.currentUserId;
+    _store.users.remove(id);
+    _store.currentUserId = null;
+  }
 }
 
 class _FakePostRepository implements PostRepository {

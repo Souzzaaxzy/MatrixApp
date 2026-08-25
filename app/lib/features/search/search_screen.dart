@@ -95,7 +95,7 @@ class _SearchScreenState extends State<SearchScreen> {
               child: MatrixTextField(
                 hint: 'Pesquisar usuários...',
                 controller: _controller,
-                prefix: const Icon(Icons.search_rounded,
+                prefix: Icon(Icons.search_rounded,
                     color: AppColors.holographicBlue, size: 20),
                 onChanged: (v) => _search(v),
               ),

@@ -1,56 +1,65 @@
 import 'package:flutter/material.dart';
 
+import 'app_palette.dart';
+
 /// Centralized MATRIX design tokens.
 ///
-/// Cyber Blue palette. Distribution target: ~70% black/deep dark,
-/// ~20% deep blue, ~10% neon blue / white.
+/// Brand colors are theme-independent statics. Mood-dependent tokens
+/// (backgrounds, surfaces, text) resolve through the currently ACTIVE
+/// palette, swapped by [setActive] when the theme resolves (dark/light).
+/// Widgets keep reading `AppColors.x` exactly as before — the palette swap
+/// rebuilds the tree because [ThemeController] notifies the root.
 class AppColors {
   AppColors._();
 
-  // Brand blues
+  // Active palette (theme-dependent). Defaults to dark, the classic MATRIX.
+  static MatrixPalette _active = MatrixPalette.dark;
+
+  static void setActive(MatrixPalette palette) {
+    if (_active != palette) _active = palette;
+  }
+
+  /// Currently active palette (used by tests to verify theme resolution).
+  static MatrixPalette get activePalette => _active;
+
+  // Brand blues — same across themes.
   static const Color primaryBlue = Color(0xFF0066FF);
   static const Color electricBlue = Color(0xFF008CFF);
-  static const Color deepBlue = Color(0xFF003B8F);
-  static const Color nightBlue = Color(0xFF00142E);
-
-  // Surfaces
-  static const Color absoluteBlack = Color(0xFF000000);
-  static const Color bluishBlack = Color(0xFF050914);
-
-  // Text
-  static const Color techWhite = Color(0xFFEAF4FF);
-  static const Color holographicBlue = Color(0xFF6EB6FF);
-
-  // Status
   static const Color success = Color(0xFF00FF88);
   static const Color error = Color(0xFFFF304F);
 
-  // Glow presets (rgba of primary/electric blue).
-  static const Color glowSmall = Color(0x730066FF); // 0.45 alpha
-  static const Color glowMedium = Color(0x8C0066FF); // 0.55 alpha
-  static const Color glowStrong = Color(0xBF008CFF); // 0.75 alpha
+  // Theme-dependent tokens.
+  static Color get absoluteBlack => _active.scaffold;
+  static Color get bluishBlack => _active.surface;
+  static Color get nightBlue => _active.surfaceDeep;
+  static Color get deepBlue => _active.border;
+  static Color get techWhite => _active.text;
+  static Color get holographicBlue => _active.textMuted;
+  static Color get cardSurface => _active.surface;
+  static Color get scaffoldBackground => _active.scaffold;
+  static Color get navBarBackground => _active.navBar;
 
-  // Convenience surface helpers.
-  static const Color cardSurface = bluishBlack;
-  static const Color scaffoldBackground = absoluteBlack;
-  static const Color navBarBackground = Color(0xF2000512);
+  // Glow presets. Translucent brand blue; softer on the light theme.
+  static Color get glowSmall => primaryBlue.withValues(alpha: 0.45 * _active.glowAlpha);
+  static Color get glowMedium => primaryBlue.withValues(alpha: 0.55 * _active.glowAlpha);
+  static Color get glowStrong => electricBlue.withValues(alpha: 0.75 * _active.glowAlpha);
 
   // Gradients
   static const LinearGradient primaryGradient = LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
-    colors: [primaryBlue, deepBlue],
+    colors: [primaryBlue, Color(0xFF003B8F)],
   );
 
-  static const LinearGradient deepGradient = LinearGradient(
-    begin: Alignment.topCenter,
-    end: Alignment.bottomCenter,
-    colors: [nightBlue, absoluteBlack],
-  );
+  static LinearGradient get deepGradient => LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [_active.surfaceDeep, _active.scaffold],
+      );
 
   static const LinearGradient akameGradient = LinearGradient(
     begin: Alignment.topLeft,
     end: Alignment.bottomRight,
-    colors: [electricBlue, holographicBlue],
+    colors: [electricBlue, Color(0xFF6EB6FF)],
   );
 }

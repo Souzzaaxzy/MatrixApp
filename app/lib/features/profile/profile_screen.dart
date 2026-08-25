@@ -16,6 +16,7 @@ import '../../models/friend_request.dart';
 import '../../models/matrix_user.dart';
 import '../../models/post.dart';
 import 'friends_sheet.dart';
+import 'settings_sheet.dart';
 
 /// Profile screen — the server is the single source of truth.
 ///
@@ -111,7 +112,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final sessionUser = state.currentUser;
 
     if (sessionUser == null) {
-      return const Scaffold(
+      return Scaffold(
         backgroundColor: AppColors.absoluteBlack,
         body: Center(child: HudLabel(text: 'NOT AUTHENTICATED', dot: true)),
       );
@@ -141,6 +142,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
               automaticallyImplyLeading: false,
               backgroundColor: AppColors.absoluteBlack,
               surfaceTintColor: Colors.transparent,
+              // The ☰ settings menu exists ONLY on the own profile — on
+              // another user's profile there is no logout/delete entry.
+              leading: isOwn
+                  ? IconButton(
+                      tooltip: 'Configurações',
+                      icon: Icon(Icons.menu_rounded,
+                          color: AppColors.holographicBlue),
+                      onPressed: () => SettingsSheet.open(context),
+                    )
+                  : null,
               title:
                   Text('PERFIL', style: AppTextStyles.title.copyWith(fontSize: 18)),
             ),
@@ -178,7 +189,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   onFriendsTap: () => FriendsSheet.open(context, user),
                 ),
               ),
-              const SliverToBoxAdapter(
+              SliverToBoxAdapter(
                 child: Divider(color: AppColors.deepBlue, height: 1),
               ),
               const SliverToBoxAdapter(
@@ -462,7 +473,7 @@ class CreatePostFab extends StatelessWidget {
       child: InkWell(
         onTap: () => Navigator.of(context).pushNamed(AppRoutes.createPost),
         borderRadius: BorderRadius.circular(999),
-        child: const Padding(
+        child: Padding(
           padding: EdgeInsets.all(AppDimensions.spaceLg),
           child: Icon(Icons.add_rounded, size: 28, color: AppColors.techWhite),
         ),
@@ -520,7 +531,7 @@ class _ProfilePostTile extends StatelessWidget {
                       const SizedBox(width: AppDimensions.spaceXs),
                       Text('${post.likes}', style: AppTextStyles.caption),
                       const SizedBox(width: AppDimensions.spaceMd),
-                      const Icon(Icons.chat_bubble_outline_rounded,
+                      Icon(Icons.chat_bubble_outline_rounded,
                           color: AppColors.holographicBlue, size: 13),
                       const SizedBox(width: AppDimensions.spaceXs),
                       Text('${post.commentCount}', style: AppTextStyles.caption),

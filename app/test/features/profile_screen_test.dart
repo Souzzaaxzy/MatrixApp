@@ -174,7 +174,7 @@ void main() {
       await tester.pump();
 
       expect(find.text('Informe seu nome'), findsOneWidget);
-      expect(find.text('Username obrigatório'), findsOneWidget);
+      expect(find.text('Nickname obrigatório'), findsOneWidget);
     });
 
     testWidgets('saves updated profile remotely', (tester) async {

@@ -138,3 +138,52 @@ analyze clean, APK builds (~54MB). CI green on main.
   `didChangeDependencies` (bug hit in FriendsSheet).
 - Status: server 114 tests pass; app 105 tests pass, analyze clean,
   APK builds (~24MB).
+
+## Phase 6 — Back navigation, usernames, themes, account management
+- **Back button fix**: `HomeScreen` is wrapped in `PopScope(canPop: false)`
+  with `onPopInvokedWithResult` → `_handleBackPress()`: non-feed tab → feed
+  tab first; feed tab → 1st press shows "Pressione voltar novamente para
+  sair" SnackBar, 2nd press within 2s calls `SystemNavigator.pop()`. The
+  pending state auto-resets via a `Timer` (2s) — do NOT use DateTime diffs
+  (fake clock mismatch in tests). Pushed routes (post detail, profiles,
+  create post) pop normally because they sit above home on the root
+  navigator. `createPostScreen` now `pop()`s after publish (was
+  `pushReplacementNamed(home)` — broke the back stack). No more
+  "Rota não encontrada" on back.
+- **Usernames never carry '@'**: stored lowercase w/o '@' everywhere.
+  Server `normalizeUsername()` strips leading `@+`; migration
+  `20260825123937_strip_username_at_prefix` strips stored '@' (collisions
+  get `_legacy` suffix, never merged). App strips in login/register/recover/
+  edit-profile inputs; UI adds '@' visually only at display sites
+  (`'@$username'`). The login field has NO '@' prefix widget.
+- **FCM removed everywhere**: server's external-provider slot
+  (`registerExternalProvider`) deleted — push = WebSocket `/api/ws` +
+  local Android notifications only. No Firebase deps/configs in either repo.
+- **ThemeController** (`lib/core/services/theme_controller.dart`): singleton
+  ChangeNotifier + WidgetsBindingObserver; modes dark/light/system;
+  persisted via `ThemeStore` (flutter_secure_storage 'matrix_theme_mode');
+  `load()` called from `Services.init()`. `MatrixApp` rebuilds on it and
+  sets `AppColors.setActive(effectivePalette(mode, platformBrightness))`
+  before building ThemeData. Palette: `lib/app/theme/app_palette.dart`
+  (dark + light); `AppColors` statics now delegate to the active palette
+  — they are NOT compile-time const anymore, so never use `const` with
+  them (colorOf light theme is a full redesign, not an inversion).
+- **Settings sheet**: `ProfileScreen` shows ☰ (menu_rounded) leading ONLY
+  on the own profile (`_isOwn` compares widget.username vs currentUser —
+  case-insensitive). Sheet: theme trio (Escuro/Claro/Sistema),
+  Sair da conta (AlertDialog confirm → AppState.logout → pushNamedAndRemove
+  login), Excluir conta (2-step confirm: dialog + nickname re-entry match
+  → AppState.deleteAccount → login). `isScrollControlled: true` +
+  SingleChildScrollView or it clips on small/test surfaces.
+- **Server**: `DELETE /api/auth/account` (bearer-auth, id from token;
+  Prisma cascade removes posts/comments/likes/friendships/notifications/
+  devices/sessions). App `AuthRepository.deleteAccount()` +
+  `AppState.deleteAccount()` clears session caches like logout.
+- **Test gotchas**: bottom sheets/dialogs need an extra `pump(500ms)` after
+  the 300ms pump for the slide-in animation to land; SnackBar dismissal
+  needs ~3s fake time stepped in 500ms chunks (its display timer is
+  created only after the enter animation completes); widget tests must
+  `await state.restoreSession()` + `await state.loadFeed()` before
+  pumpWidget (see `test/helpers/test_app.dart pumpMatrixApp`).
+- Status: server 120 tests pass, typecheck clean; app 123 tests pass,
+  analyze clean.

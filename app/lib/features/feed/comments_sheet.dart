@@ -122,7 +122,7 @@ class _CommentsSheetState extends State<CommentsSheet> {
             ),
           ),
           const HudLabel(text: 'COMMENTS'),
-          const Divider(color: AppColors.deepBlue, height: AppDimensions.spaceXl),
+          Divider(color: AppColors.deepBlue, height: AppDimensions.spaceXl),
           Expanded(
             child: _loading
                 ? const Center(
@@ -155,7 +155,7 @@ class _CommentsSheetState extends State<CommentsSheet> {
                             ),
                             itemCount: comments.length,
                     separatorBuilder: (_, __) =>
-                        const Divider(color: AppColors.deepBlue, height: 1),
+                        Divider(color: AppColors.deepBlue, height: 1),
                     itemBuilder: (context, i) {
                       final c = comments[i];
                       return Padding(
@@ -216,7 +216,7 @@ class _CommentsSheetState extends State<CommentsSheet> {
               horizontal: AppDimensions.spaceLg,
               vertical: AppDimensions.spaceSm,
             ),
-            decoration: const BoxDecoration(
+            decoration: BoxDecoration(
               color: AppColors.bluishBlack,
               border: Border(
                 top: BorderSide(color: AppColors.deepBlue, width: 1),

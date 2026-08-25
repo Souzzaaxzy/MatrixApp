@@ -51,7 +51,7 @@ class _RecoverScreenState extends State<RecoverScreen> {
     });
     try {
       await AppStateScope.of(context).recover(
-        identifier: _identifierController.text.trim().replaceAll('@', ''),
+        identifier: _identifierController.text.trim().replaceAll(RegExp(r'^@+'), ''),
         recoveryCode: _codeController.text.trim(),
         newPassword: _passwordController.text,
       );
@@ -75,7 +75,7 @@ class _RecoverScreenState extends State<RecoverScreen> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_rounded, color: AppColors.techWhite),
+          icon: Icon(Icons.arrow_back_rounded, color: AppColors.techWhite),
           onPressed: () => Navigator.of(context).maybePop(),
         ),
       ),
@@ -122,7 +122,7 @@ class _RecoverScreenState extends State<RecoverScreen> {
               controller: _identifierController,
               textInputAction: TextInputAction.next,
               validator: (v) => Validators.required(v, label: 'Informe seu username'),
-              prefix: const Icon(Icons.alternate_email_rounded,
+              prefix: Icon(Icons.person_outline_rounded,
                   color: AppColors.holographicBlue, size: 20),
             ),
           ),
@@ -135,7 +135,7 @@ class _RecoverScreenState extends State<RecoverScreen> {
               controller: _codeController,
               textInputAction: TextInputAction.next,
               validator: (v) => Validators.required(v, label: 'Informe o código'),
-              prefix: const Icon(Icons.password_rounded,
+              prefix: Icon(Icons.password_rounded,
                   color: AppColors.holographicBlue, size: 20),
             ),
           ),
@@ -149,7 +149,7 @@ class _RecoverScreenState extends State<RecoverScreen> {
               obscureText: _obscure,
               textInputAction: TextInputAction.next,
               validator: Validators.password,
-              prefix: const Icon(Icons.lock_outline_rounded,
+              prefix: Icon(Icons.lock_outline_rounded,
                   color: AppColors.holographicBlue, size: 20),
               suffix: IconButton(
                 icon: Icon(
@@ -175,7 +175,7 @@ class _RecoverScreenState extends State<RecoverScreen> {
               validator: (v) =>
                   Validators.confirmPassword(v, _passwordController.text),
               onFieldSubmitted: (_) => _submit(),
-              prefix: const Icon(Icons.lock_outline_rounded,
+              prefix: Icon(Icons.lock_outline_rounded,
                   color: AppColors.holographicBlue, size: 20),
               suffix: IconButton(
                 icon: Icon(

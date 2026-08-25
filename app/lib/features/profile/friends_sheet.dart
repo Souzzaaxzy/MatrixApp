@@ -122,7 +122,7 @@ class _FriendsSheetState extends State<FriendsSheet> {
         constraints: BoxConstraints(
           maxHeight: MediaQuery.of(context).size.height * 0.7,
         ),
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           color: AppColors.bluishBlack,
           borderRadius: BorderRadius.vertical(
             top: Radius.circular(AppDimensions.radiusLg),
@@ -174,7 +174,7 @@ class _FriendsSheetState extends State<FriendsSheet> {
                 ),
               ),
               const SizedBox(height: AppDimensions.spaceSm),
-              const Divider(color: AppColors.deepBlue, height: 1),
+              Divider(color: AppColors.deepBlue, height: 1),
               Flexible(child: _buildList()),
               ],
             ),
@@ -220,7 +220,7 @@ class _FriendsSheetState extends State<FriendsSheet> {
       shrinkWrap: true,
       itemCount: _friends.length + (_hasMore || _loading ? 1 : 0),
       separatorBuilder: (_, __) =>
-          const Divider(color: AppColors.deepBlue, height: 1, indent: 72),
+          Divider(color: AppColors.deepBlue, height: 1, indent: 72),
       itemBuilder: (context, index) {
         if (index >= _friends.length) {
           return const Padding(
@@ -259,7 +259,7 @@ class _FriendsSheetState extends State<FriendsSheet> {
           subtitle: friend.name.isNotEmpty
               ? Text(friend.name, style: AppTextStyles.bodyMuted)
               : null,
-          trailing: const Icon(
+          trailing: Icon(
             Icons.chevron_right_rounded,
             color: AppColors.holographicBlue,
           ),

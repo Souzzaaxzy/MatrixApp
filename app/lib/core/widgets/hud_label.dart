@@ -10,18 +10,19 @@ class HudLabel extends StatelessWidget {
   const HudLabel({
     super.key,
     required this.text,
-    this.color = AppColors.holographicBlue,
+    this.color,
     this.dot = false,
     this.glow = false,
   });
 
   final String text;
-  final Color color;
+  final Color? color;
   final bool dot;
   final bool glow;
 
   @override
   Widget build(BuildContext context) {
+    final color = this.color ?? AppColors.holographicBlue;
     final style = AppTextStyles.hud.copyWith(color: color);
     final label = Row(
       mainAxisSize: MainAxisSize.min,

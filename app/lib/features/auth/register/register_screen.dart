@@ -49,7 +49,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     try {
       final recoveryCode = await AppStateScope.of(context).register(
         name: _nameController.text.trim(),
-        username: _usernameController.text.trim().replaceAll('@', ''),
+        username: _usernameController.text.trim().replaceAll(RegExp(r'^@+'), ''),
         password: _passwordController.text,
       );
       if (!mounted) return;
@@ -115,7 +115,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_rounded, color: AppColors.techWhite),
+          icon: Icon(Icons.arrow_back_rounded, color: AppColors.techWhite),
           onPressed: () => Navigator.of(context).maybePop(),
         ),
       ),
@@ -156,7 +156,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     textCapitalization: TextCapitalization.words,
                     textInputAction: TextInputAction.next,
                     validator: Validators.name,
-                    prefix: const Icon(Icons.person_outline_rounded,
+                    prefix: Icon(Icons.person_outline_rounded,
                         color: AppColors.holographicBlue, size: 20),
                   ),
                 ),
@@ -164,13 +164,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 FadeSlideTransition(
                   delay: const Duration(milliseconds: 160),
                   child: MatrixTextField(
-                    label: 'Username',
+                    label: 'Nickname',
                     hint: 'seu_usuario',
                     controller: _usernameController,
                     textInputAction: TextInputAction.next,
                     validator: Validators.username,
-                    prefix: const Text('@',
-                        style: TextStyle(color: AppColors.holographicBlue)),
+                    prefix: Icon(Icons.person_outline_rounded,
+                        color: AppColors.holographicBlue, size: 20),
                   ),
                 ),
                 const SizedBox(height: AppDimensions.spaceLg),
@@ -183,7 +183,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     obscureText: _obscure,
                     textInputAction: TextInputAction.next,
                     validator: Validators.password,
-                    prefix: const Icon(Icons.lock_outline_rounded,
+                    prefix: Icon(Icons.lock_outline_rounded,
                         color: AppColors.holographicBlue, size: 20),
                     suffix: IconButton(
                       icon: Icon(
@@ -209,7 +209,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     validator: (v) =>
                         Validators.confirmPassword(v, _passwordController.text),
                     onFieldSubmitted: (_) => _submit(),
-                    prefix: const Icon(Icons.lock_outline_rounded,
+                    prefix: Icon(Icons.lock_outline_rounded,
                         color: AppColors.holographicBlue, size: 20),
                     suffix: IconButton(
                       icon: Icon(

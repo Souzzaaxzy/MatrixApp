@@ -158,12 +158,28 @@ class AppState extends ChangeNotifier {
   Future<void> logout() async {
     _stopPush();
     await _auth.logout();
+    _clearSessionCaches();
+    notifyListeners();
+  }
+
+  /// Permanently deletes the account on the server, then clears every
+  /// local trace (session + caches) like a logout. The server-side delete
+  /// cascades posts/comments/likes/friendships/notifications/devices.
+  Future<void> deleteAccount() async {
+    _stopPush();
+    await _auth.deleteAccount();
+    _clearSessionCaches();
+    notifyListeners();
+  }
+
+  void _clearSessionCaches() {
     _currentUser = null;
     _posts.clear();
     _profiles.clear();
     _notifications.clear();
+    _postCache.clear();
     _feedCursor = null;
-    notifyListeners();
+    _akameMessages = MockDataService.initialAkameMessages();
   }
 
   /// Loads the first page of the feed (replaces existing posts).

@@ -111,7 +111,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                 if (state.unreadNotifications > 0)
                   IconButton(
                     tooltip: 'Marcar todas como lidas',
-                    icon: const Icon(Icons.checklist_rounded,
+                    icon: Icon(Icons.checklist_rounded,
                         color: AppColors.holographicBlue),
                     onPressed: state.markAllNotificationsRead,
                   ),
@@ -228,7 +228,7 @@ class _NotificationTile extends StatelessWidget {
             Container(
               width: 8,
               height: 8,
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 color: AppColors.electricBlue,
                 shape: BoxShape.circle,
                 boxShadow: [

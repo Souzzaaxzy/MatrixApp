@@ -127,7 +127,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     try {
       await AppStateScope.of(context).updateProfile(
         name: _nameController.text.trim(),
-        username: _usernameController.text.trim(),
+        username: _usernameController.text.trim().replaceAll(RegExp(r'^@+'), ''),
         bio: _bioController.text.trim(),
       );
       if (!mounted) return;
@@ -151,7 +151,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_rounded, color: AppColors.techWhite),
+          icon: Icon(Icons.arrow_back_rounded, color: AppColors.techWhite),
           onPressed: () => Navigator.of(context).pop(),
         ),
         title: Text('EDITAR PERFIL', style: AppTextStyles.title.copyWith(fontSize: 18)),
@@ -208,7 +208,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                                 shape: BoxShape.circle,
                               ),
                               padding: const EdgeInsets.all(AppDimensions.spaceSm),
-                              child: const Icon(Icons.camera_alt_rounded,
+                              child: Icon(Icons.camera_alt_rounded,
                                   color: AppColors.techWhite, size: 16),
                             ),
                           ),
@@ -232,12 +232,12 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                 ),
                 const SizedBox(height: AppDimensions.spaceLg),
                 MatrixTextField(
-                  label: 'Username',
+                  label: 'Nickname',
                   controller: _usernameController,
-                  prefix: const Text('@',
-                      style: TextStyle(color: AppColors.holographicBlue)),
+                  prefix: Icon(Icons.person_outline_rounded,
+                      color: AppColors.holographicBlue, size: 20),
                   textInputAction: TextInputAction.next,
-                  validator: (v) => Validators.required(v, label: 'Username obrigatório'),
+                  validator: (v) => Validators.required(v, label: 'Nickname obrigatório'),
                 ),
                 const SizedBox(height: AppDimensions.spaceLg),
                 MatrixTextField(

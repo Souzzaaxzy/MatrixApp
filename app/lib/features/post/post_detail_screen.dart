@@ -83,7 +83,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
         backgroundColor: AppColors.bluishBlack,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppDimensions.radiusLg),
-          side: const BorderSide(color: AppColors.deepBlue),
+          side: BorderSide(color: AppColors.deepBlue),
         ),
         title: Text('Excluir publicação?', style: AppTextStyles.h3),
         content: Text(
@@ -154,14 +154,14 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_rounded, color: AppColors.techWhite),
+          icon: Icon(Icons.arrow_back_rounded, color: AppColors.techWhite),
           onPressed: () => Navigator.of(context).pop(),
         ),
         title: Text('PUBLICAÇÃO', style: AppTextStyles.title.copyWith(fontSize: 18)),
         actions: [
           if (_isAuthor)
             PopupMenuButton<String>(
-              icon: const Icon(Icons.more_vert_rounded,
+              icon: Icon(Icons.more_vert_rounded,
                   color: AppColors.techWhite),
               color: AppColors.bluishBlack,
               enabled: !_deleting,
@@ -292,7 +292,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
         height: 220,
         color: AppColors.nightBlue,
         alignment: Alignment.center,
-        child: const Icon(Icons.broken_image_outlined,
+        child: Icon(Icons.broken_image_outlined,
             color: AppColors.deepBlue, size: 32),
       );
 }

@@ -86,6 +86,17 @@ class AuthRepository {
       await _api.tokenStore.clear();
     }
   }
+
+  /// Hard-delete of the authenticated account (server cascade) followed by
+  /// a full local token cleanup. Identity is never sent — the server takes
+  /// it from the bearer token.
+  Future<void> deleteAccount() async {
+    try {
+      await _api.delete('/api/auth/account');
+    } finally {
+      await _api.tokenStore.clear();
+    }
+  }
 }
 
 /// Posts repository — feed (cursor pagination), create, delete.

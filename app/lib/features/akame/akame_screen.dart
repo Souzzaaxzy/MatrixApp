@@ -142,7 +142,7 @@ class _AkameHeader extends StatelessWidget {
           horizontal: AppDimensions.spaceLg,
           vertical: AppDimensions.spaceMd,
         ),
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           color: AppColors.bluishBlack,
           border: Border(
             bottom: BorderSide(color: AppColors.deepBlue, width: 1),
@@ -193,7 +193,7 @@ class _AkameInputBar extends StatelessWidget {
           horizontal: AppDimensions.spaceLg,
           vertical: AppDimensions.spaceSm,
         ),
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           color: AppColors.bluishBlack,
           border: Border(top: BorderSide(color: AppColors.deepBlue, width: 1)),
         ),

@@ -14,6 +14,17 @@ void main() {
     expect(find.text('ENTRAR'), findsOneWidget);
   });
 
+  testWidgets('nickname field has NO "@" prefix and no "@" decoration',
+      (tester) async {
+    await pumpMatrixApp(tester, const LoginScreen());
+
+    // Label shows the plain nickname (uppercased by MatrixTextField).
+    expect(find.text('NICKNAME DO USUÁRIO'), findsOneWidget);
+    // No "@" text widget anywhere (no separate @ prefix/decoration).
+    expect(find.text('@'), findsNothing);
+    expect(find.byIcon(Icons.alternate_email_rounded), findsNothing);
+  });
+
   testWidgets('validates empty fields and blocks submission', (tester) async {
     await pumpMatrixApp(tester, const LoginScreen());
 

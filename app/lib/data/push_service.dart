@@ -13,8 +13,7 @@ import 'token_store.dart';
 
 /// MATRIX push service — native Android notifications driven by the
 /// ServidorMtx realtime channel (WebSocket) plus a device-token registry
-/// on the server (slot ready for an external provider such as FCM; no
-/// third-party credential ships inside the APK).
+/// on the server. No Google/Firebase services involved.
 ///
 /// Lifecycle:
 ///   login/register/restore → [sync]  (register token + open socket)

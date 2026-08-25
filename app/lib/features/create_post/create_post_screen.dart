@@ -3,7 +3,6 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
-import '../../app/routes.dart';
 import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_dimensions.dart';
 import '../../app/theme/app_text_styles.dart';
@@ -64,9 +63,9 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
         imageUrl: imageUrl,
       );
       if (!mounted) return;
-      navigator
-        ..pop()
-        ..pushReplacementNamed(AppRoutes.home);
+      // Return to the caller (own profile or feed) — replacing the route
+      // would orphan the back stack.
+      navigator.pop();
     } on ApiException catch (e) {
       if (!mounted) return;
       messenger.showSnackBar(SnackBar(content: Text(e.message)));
@@ -85,7 +84,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         leading: IconButton(
-          icon: const Icon(Icons.close_rounded, color: AppColors.techWhite),
+          icon: Icon(Icons.close_rounded, color: AppColors.techWhite),
           onPressed: () => Navigator.of(context).pop(),
         ),
         title: Text('NOVA PUBLICAÇÃO', style: AppTextStyles.title.copyWith(fontSize: 18)),
@@ -140,7 +139,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
                     onPressed: _pickImage,
                   ),
                 const SizedBox(height: AppDimensions.spaceXxl),
-                const Row(
+                Row(
                   children: [
                     Expanded(child: Divider(color: AppColors.deepBlue)),
                     Padding(

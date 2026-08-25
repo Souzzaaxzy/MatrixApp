@@ -40,7 +40,7 @@ class MatrixBottomBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: AppColors.navBarBackground,
         border: Border(
           top: BorderSide(
@@ -164,7 +164,7 @@ class _Badge extends StatelessWidget {
         horizontal: AppDimensions.spaceXs,
         vertical: 2,
       ),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: AppColors.primaryBlue,
         shape: BoxShape.circle,
         boxShadow: [
@@ -173,7 +173,7 @@ class _Badge extends StatelessWidget {
       ),
       child: Text(
         count > 99 ? '99+' : '$count',
-        style: const TextStyle(
+        style: TextStyle(
           color: AppColors.techWhite,
           fontSize: 10,
           fontWeight: FontWeight.w800,
