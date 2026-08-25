@@ -66,6 +66,69 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     }
   }
 
+  bool _deleting = false;
+
+  /// Only the author sees the delete option — and the server enforces it
+  /// again with a 403 for non-owners, so hiding the menu is just UX.
+  bool get _isAuthor {
+    final me = AppStateScope.of(context).currentUser;
+    final post = _post;
+    return me != null && post != null && post.authorId == me.id;
+  }
+
+  Future<void> _confirmDelete() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: AppColors.bluishBlack,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppDimensions.radiusLg),
+          side: const BorderSide(color: AppColors.deepBlue),
+        ),
+        title: Text('Excluir publicação?', style: AppTextStyles.h3),
+        content: Text(
+          'Essa ação não pode ser desfeita.',
+          style: AppTextStyles.bodyMuted,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: Text('Cancelar',
+                style: AppTextStyles.label
+                    .copyWith(color: AppColors.holographicBlue)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: Text('Excluir',
+                style: AppTextStyles.label.copyWith(color: AppColors.error)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) await _delete();
+  }
+
+  Future<void> _delete() async {
+    final post = _post;
+    if (post == null || _deleting) return;
+    setState(() => _deleting = true);
+    final ok = await AppStateScope.of(context).deletePost(post.id);
+    if (!mounted) return;
+    if (ok) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Publicação excluída.')),
+      );
+      Navigator.of(context).pop(true);
+    } else {
+      setState(() => _deleting = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Não foi possível excluir a publicação.'),
+        ),
+      );
+    }
+  }
+
   Future<void> _toggleLike() async {
     final post = _post;
     if (post == null) return;
@@ -95,6 +158,36 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
           onPressed: () => Navigator.of(context).pop(),
         ),
         title: Text('PUBLICAÇÃO', style: AppTextStyles.title.copyWith(fontSize: 18)),
+        actions: [
+          if (_isAuthor)
+            PopupMenuButton<String>(
+              icon: const Icon(Icons.more_vert_rounded,
+                  color: AppColors.techWhite),
+              color: AppColors.bluishBlack,
+              enabled: !_deleting,
+              onSelected: (value) {
+                if (value == 'delete') _confirmDelete();
+              },
+              itemBuilder: (context) => [
+                PopupMenuItem<String>(
+                  value: 'delete',
+                  child: Row(
+                    children: [
+                      const Icon(Icons.delete_outline_rounded,
+                          color: AppColors.error, size: 20),
+                      const SizedBox(width: AppDimensions.spaceSm),
+                      Flexible(
+                        child: Text('Excluir publicação',
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTextStyles.body
+                                .copyWith(color: AppColors.error)),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+        ],
       ),
       body: SafeArea(child: _buildBody()),
     );

@@ -231,6 +231,22 @@ class AppState extends ChangeNotifier {
     return post.id;
   }
 
+  /// Deletes a post owned by the current user. The server enforces
+  /// ownership (403 otherwise); on success the post is removed from every
+  /// local cache so the feed/profile update without a restart.
+  Future<bool> deletePost(String postId) async {
+    try {
+      await _postsRepo.delete(postId);
+      _posts.removeWhere((p) => p.id == postId);
+      _profilePosts.removeWhere((p) => p.id == postId);
+      _postCache.remove(postId);
+      notifyListeners();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// Fetches a single post by id straight from the server (post detail).
   /// The returned post is cached by id so likes/comments keep working even
   /// when the post is not part of the feed/profile caches.

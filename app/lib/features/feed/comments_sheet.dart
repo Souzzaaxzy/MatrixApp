@@ -165,7 +165,13 @@ class _CommentsSheetState extends State<CommentsSheet> {
                         child: Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            UserAvatar(name: c.author, size: 32),
+                            UserAvatar(
+                              name: c.authorUsername.isNotEmpty
+                                  ? c.authorUsername
+                                  : c.author,
+                              imageUrl: c.authorAvatarUrl,
+                              size: 32,
+                            ),
                             const SizedBox(width: AppDimensions.spaceMd),
                             Expanded(
                               child: Column(
@@ -173,7 +179,20 @@ class _CommentsSheetState extends State<CommentsSheet> {
                                 children: [
                                   Row(
                                     children: [
-                                      Text(c.author, style: AppTextStyles.label),
+                                      Flexible(
+                                        child: Text(
+                                          '@${c.authorUsername}',
+                                          style: AppTextStyles.label,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                      if (c.authorId.isNotEmpty &&
+                                          c.authorId ==
+                                              widget.post.authorId) ...[
+                                        const SizedBox(
+                                            width: AppDimensions.spaceXs),
+                                        const _AuthorBadge(),
+                                      ],
                                       const SizedBox(width: AppDimensions.spaceSm),
                                       Text(
                                         relativeTimeString(c.createdAt),
@@ -228,6 +247,32 @@ class _CommentsSheetState extends State<CommentsSheet> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Small "Autor" badge shown next to the username when the commenter is
+/// the author of the post (compared by user id, never by username).
+class _AuthorBadge extends StatelessWidget {
+  const _AuthorBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: AppColors.electricBlue.withValues(alpha: 0.15),
+        border: Border.all(color: AppColors.electricBlue, width: 1),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Text(
+        'AUTOR',
+        style: AppTextStyles.hud.copyWith(
+          fontSize: 9,
+          color: AppColors.electricBlue,
+          letterSpacing: 1.2,
+        ),
       ),
     );
   }

@@ -36,8 +36,12 @@ class ApiClient {
     dio
       ..options.baseUrl = ApiConfig.baseUrl
       ..options.connectTimeout = ApiConfig.connectTimeout
-      ..options.receiveTimeout = ApiConfig.receiveTimeout
-      ..options.contentType = Headers.jsonContentType;
+      ..options.receiveTimeout = ApiConfig.receiveTimeout;
+    // NOTE: do NOT set a global contentType here. Dio already sends
+    // application/json automatically when a request carries a Map body, and
+    // a global value would also be attached to BODILESS posts (e.g. the like
+    // toggle) — Fastify rejects 'Content-Type: application/json' with an
+    // empty body, which is exactly what broke likes.
   }
 
   Future<T> get<T>(
