@@ -6,6 +6,7 @@ import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_dimensions.dart';
 import '../../app/theme/app_text_styles.dart';
 import '../../core/utils/date_utils.dart';
+import '../../core/utils/name_colors.dart';
 import '../../data/api_config.dart';
 import '../../models/post.dart';
 import '../../core/widgets/app_state_scope.dart';
@@ -95,7 +96,15 @@ class _PostCardState extends State<PostCard>
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(post.authorName, style: AppTextStyles.h3),
+                      Text(
+                        post.authorName,
+                        style: AppTextStyles.h3.copyWith(
+                          color: resolveNameColor(
+                            post.authorNameColor,
+                            AppColors.cardSurface,
+                          ),
+                        ),
+                      ),
                       Text(
                         '@${post.authorUsername} • ${relativeTime(post.createdAt)}',
                         style: AppTextStyles.caption,

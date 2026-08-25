@@ -56,6 +56,11 @@ class AppState extends ChangeNotifier {
   CosmeticMap _myCosmetics = const {};
   bool _loadingCosmetics = false;
 
+  /// Server-owned NAME_COLOR catalog (the official palette). Loaded once
+  /// per session — the app never hardcodes which colors exist.
+  List<CosmeticItem> _nameColorCatalog = const [];
+  bool _loadingNameColorCatalog = false;
+
   /// Posts fetched individually (detail screen) that may not be present in
   /// the feed/profile caches. Lets likes/comments work uniformly by id.
   final Map<String, Post> _postCache = {};
@@ -80,6 +85,10 @@ class AppState extends ChangeNotifier {
   /// "all defaults" — the spec's "Nenhuma" state.
   CosmeticMap get myCosmetics => Map.unmodifiable(_myCosmetics);
   bool get isLoadingCosmetics => _loadingCosmetics;
+
+  /// The official nickname color palette (server catalog), empty until
+  /// [loadNameColorCatalog] completes.
+  List<CosmeticItem> get nameColorCatalog => List.unmodifiable(_nameColorCatalog);
   List<AkameMessage> get akameMessages => List.unmodifiable(_akameMessages);
   MatrixUser? get currentUser => _currentUser;
   bool get isLoadingFeed => _loadingFeed;
@@ -193,6 +202,8 @@ class AppState extends ChangeNotifier {
     _notifications.clear();
     _postCache.clear();
     _feedCursor = null;
+    _myCosmetics = const {};
+    _nameColorCatalog = const [];
     _akameMessages = MockDataService.initialAkameMessages();
   }
 
@@ -399,6 +410,8 @@ class AppState extends ChangeNotifier {
           name: result.user.name,
           bio: result.user.bio,
           avatarUrl: result.user.avatarUrl,
+          customization: result.user.customization,
+          nameColor: () => result.user.nameColor,
         );
       }
     } finally {
@@ -462,10 +475,28 @@ class AppState extends ChangeNotifier {
     notifyListeners();
     try {
       _myCosmetics = await _customizationRepo.equipped();
+      _syncMyNameColor();
     } catch (_) {
       // Non-blocking: the preview simply shows defaults until a retry.
     } finally {
       _loadingCosmetics = false;
+      notifyListeners();
+    }
+  }
+
+  /// Loads the server-owned nickname color palette once per session. The
+  /// catalog is cached: rendering a colored nickname NEVER hits the
+  /// network — only opening the picker does (and only the first time).
+  Future<void> loadNameColorCatalog() async {
+    if (_loadingNameColorCatalog || _nameColorCatalog.isNotEmpty) return;
+    _loadingNameColorCatalog = true;
+    try {
+      _nameColorCatalog =
+          await _customizationRepo.catalog(type: CosmeticItem.nameColor);
+    } catch (_) {
+      // Non-blocking: the picker retries on the next open.
+    } finally {
+      _loadingNameColorCatalog = false;
       notifyListeners();
     }
   }
@@ -475,6 +506,7 @@ class AppState extends ChangeNotifier {
   Future<void> equipCosmetic(String itemId) async {
     final item = await _customizationRepo.equip(itemId);
     _myCosmetics = {..._myCosmetics, item.slot: item};
+    if (item.slot == CosmeticItem.nameColor) _syncMyNameColor();
     notifyListeners();
   }
 
@@ -482,7 +514,26 @@ class AppState extends ChangeNotifier {
   Future<void> unequipCosmetic(String slot) async {
     await _customizationRepo.unequip(slot);
     _myCosmetics = {..._myCosmetics}..remove(slot);
+    if (slot == CosmeticItem.nameColor) _syncMyNameColor();
     notifyListeners();
+  }
+
+  /// Propagates the session user's equipped name color into the global
+  /// state (currentUser + the own-profile cache) so EVERY component that
+  /// renders the user's nickname reflects a color change immediately —
+  /// no restart, no re-login, no screen refresh.
+  void _syncMyNameColor() {
+    final hex = _myCosmetics[CosmeticItem.nameColor]?.hexColor;
+    final me = _currentUser;
+    if (me == null) return;
+    _currentUser = me.copyWith(nameColor: () => hex);
+    final key = me.username.toLowerCase();
+    final profile = _profiles[key];
+    if (profile != null) {
+      _profiles[key] = profile.copyWith(
+        user: profile.user.copyWith(nameColor: () => hex),
+      );
+    }
   }
 
   /// Sends a friend request to another user. On success the friendship

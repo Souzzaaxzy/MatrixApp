@@ -27,12 +27,18 @@ class ProfileCustomizationPreview extends StatelessWidget {
     super.key,
     required this.user,
     this.cosmetics = const {},
+    this.nameColorOverride,
   });
 
   final MatrixUser user;
 
   /// Equipped cosmetics keyed by slot (empty = all defaults).
   final CosmeticMap cosmetics;
+
+  /// Preview-only nickname color (hex) for a selection that was not saved
+  /// yet. When null, the equipped NAME_COLOR (or the user's own color) is
+  /// used. Pass an empty string to preview the DEFAULT color explicitly.
+  final String? nameColorOverride;
 
   @override
   Widget build(BuildContext context) {
@@ -69,6 +75,10 @@ class ProfileCustomizationPreview extends StatelessWidget {
           StyledUsername(
             user.name,
             effect: cosmetics[CosmeticItem.profileEffect],
+            nameColor: nameColorOverride != null
+                ? (nameColorOverride!.isEmpty ? null : nameColorOverride)
+                : (cosmetics[CosmeticItem.nameColor]?.hexColor ??
+                    user.nameColor),
           ),
           const SizedBox(height: AppDimensions.spaceXs),
           Text('@${user.username}', style: AppTextStyles.caption),

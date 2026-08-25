@@ -8,6 +8,7 @@ import '../../core/services/app_state.dart';
 import '../../core/widgets/app_state_scope.dart';
 import '../../core/widgets/hud_label.dart';
 import '../../core/widgets/theme_watcher.dart';
+import '../../core/utils/name_colors.dart';
 import '../../core/widgets/user_avatar.dart';
 import '../../data/api_config.dart';
 import '../../models/matrix_user.dart';
@@ -257,10 +258,21 @@ class _FriendsSheetState extends State<FriendsSheet> {
           ),
           title: Text(
             '@${friend.username}',
-            style: AppTextStyles.body.copyWith(color: AppColors.techWhite),
+            style: AppTextStyles.body.copyWith(
+              color: resolveNameColor(friend.nameColor, AppColors.nightBlue) ??
+                  AppColors.techWhite,
+            ),
           ),
           subtitle: friend.name.isNotEmpty
-              ? Text(friend.name, style: AppTextStyles.bodyMuted)
+              ? Text(
+                  friend.name,
+                  style: AppTextStyles.bodyMuted.copyWith(
+                    color: resolveNameColor(
+                      friend.nameColor,
+                      AppColors.nightBlue,
+                    ),
+                  ),
+                )
               : null,
           trailing: Icon(
             Icons.chevron_right_rounded,

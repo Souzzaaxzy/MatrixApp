@@ -72,6 +72,7 @@ class FeedPostDto {
   final String authorName;
   final String authorUsername;
   final String? authorAvatarUrl;
+  final String? authorNameColor;
   final int likeCount;
   final bool liked;
   final int commentCount;
@@ -85,6 +86,7 @@ class FeedPostDto {
     required this.authorName,
     required this.authorUsername,
     this.authorAvatarUrl,
+    this.authorNameColor,
     required this.likeCount,
     required this.liked,
     required this.commentCount,
@@ -99,6 +101,7 @@ class FeedPostDto {
         createdAt: createdAt,
         avatarSeed: authorUsername,
         authorAvatarUrl: authorAvatarUrl,
+        authorNameColor: authorNameColor,
         imageUrl: imageUrl,
         likes: likeCount,
         liked: liked,
@@ -116,6 +119,7 @@ class FeedPostDto {
       authorName: author['name'] as String,
       authorUsername: author['username'] as String,
       authorAvatarUrl: author['avatarUrl'] as String?,
+      authorNameColor: author['nameColor'] as String?,
       likeCount: (json['likeCount'] as num?)?.toInt() ?? 0,
       liked: (json['liked'] as bool?) ?? false,
       commentCount: (json['commentCount'] as num?)?.toInt() ?? 0,
@@ -131,6 +135,7 @@ class CommentDto {
   final String authorName;
   final String authorUsername;
   final String? authorAvatarUrl;
+  final String? authorNameColor;
 
   const CommentDto({
     required this.id,
@@ -140,6 +145,7 @@ class CommentDto {
     required this.authorName,
     required this.authorUsername,
     this.authorAvatarUrl,
+    this.authorNameColor,
   });
 
   Comment toModel() => Comment(
@@ -148,6 +154,7 @@ class CommentDto {
         author: authorName,
         authorUsername: authorUsername,
         authorAvatarUrl: authorAvatarUrl,
+        authorNameColor: authorNameColor,
         text: text,
         createdAt: createdAt,
       );
@@ -162,6 +169,7 @@ class CommentDto {
       authorName: author['name'] as String,
       authorUsername: author['username'] as String,
       authorAvatarUrl: author['avatarUrl'] as String?,
+      authorNameColor: author['nameColor'] as String?,
     );
   }
 }
@@ -175,6 +183,7 @@ class PublicUserDto {
   final int friendsCount;
   final int postsCount;
   final CosmeticMap customization;
+  final String? nameColor;
 
   const PublicUserDto({
     required this.id,
@@ -185,6 +194,7 @@ class PublicUserDto {
     this.friendsCount = 0,
     this.postsCount = 0,
     this.customization = const {},
+    this.nameColor,
   });
 
   MatrixUser toModel() => MatrixUser(
@@ -196,6 +206,7 @@ class PublicUserDto {
         friendsCount: friendsCount,
         postsCount: postsCount,
         customization: customization,
+        nameColor: nameColor,
       );
 
   factory PublicUserDto.fromJson(Map<String, dynamic> json) => PublicUserDto(
@@ -207,6 +218,7 @@ class PublicUserDto {
         friendsCount: (json['friendsCount'] as num?)?.toInt() ?? 0,
         postsCount: (json['postsCount'] as num?)?.toInt() ?? 0,
         customization: parseCustomization(json['customization']),
+        nameColor: json['nameColor'] as String?,
       );
 }
 
@@ -241,6 +253,8 @@ class CosmeticItemDto {
   final String name;
   final String assetUrl;
   final String rarity;
+  final String? category;
+  final int sortOrder;
 
   const CosmeticItemDto({
     required this.id,
@@ -248,6 +262,8 @@ class CosmeticItemDto {
     required this.name,
     this.assetUrl = '',
     this.rarity = 'COMMON',
+    this.category,
+    this.sortOrder = 0,
   });
 
   CosmeticItem toModel() => CosmeticItem(
@@ -256,6 +272,8 @@ class CosmeticItemDto {
         name: name,
         assetUrl: assetUrl,
         rarity: rarity,
+        category: category,
+        sortOrder: sortOrder,
       );
 
   /// Catalog/inventory entries carry `id` + `type`; equipped entries carry
@@ -267,6 +285,8 @@ class CosmeticItemDto {
         name: json['name'] as String,
         assetUrl: (json['assetUrl'] as String?) ?? '',
         rarity: (json['rarity'] as String?) ?? 'COMMON',
+        category: json['category'] as String?,
+        sortOrder: (json['sortOrder'] as num?)?.toInt() ?? 0,
       );
 }
 
@@ -326,6 +346,8 @@ class NotificationDto {
     this.friendRequestStatus,
   });
 
+  // The actor's own nickname color rides inside `actor` (PublicUserDto).
+
   MatrixNotification toModel() => MatrixNotification(
         id: id,
         type: type,
@@ -335,6 +357,7 @@ class NotificationDto {
         actorName: actor.name,
         actorUsername: actor.username,
         actorAvatarUrl: actor.avatarUrl,
+        actorNameColor: actor.nameColor,
         postId: postId,
         commentId: commentId,
         friendRequestId: friendRequestId,

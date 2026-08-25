@@ -8,6 +8,7 @@ class Comment {
     required this.author,
     required this.authorUsername,
     this.authorAvatarUrl,
+    this.authorNameColor,
     required this.text,
     required this.createdAt,
   });
@@ -21,6 +22,7 @@ class Comment {
         author = '',
         authorUsername = '',
         authorAvatarUrl = null,
+        authorNameColor = null,
         text = '',
         createdAt = null;
 
@@ -40,6 +42,10 @@ class Comment {
   /// Profile photo URL (absolute or server-relative /static path), same
   /// avatar used everywhere else in the app. Null → default avatar.
   final String? authorAvatarUrl;
+
+  /// The comment AUTHOR's own nickname color (hex), embedded by the
+  /// server. Null → default color.
+  final String? authorNameColor;
 
   final String text;
   final DateTime? createdAt;

@@ -12,6 +12,7 @@ class MatrixUser {
     this.friendsCount = 0,
     this.postsCount = 0,
     this.customization = const {},
+    this.nameColor,
   });
 
   final String id;
@@ -38,6 +39,12 @@ class MatrixUser {
   /// or when the endpoint did not include it (search results, friends).
   final CosmeticMap customization;
 
+  /// Resolved nickname color (hex, e.g. "#0066FF") of THIS user, embedded
+  /// by the server in every payload that renders a user. Null → the
+  /// default MATRIX nickname color. The color belongs to the user, never
+  /// to the viewer: profiles/posts/comments carry the OWNER's value.
+  final String? nameColor;
+
   /// The equipped cosmetic for [slot], or null (default rendering).
   CosmeticItem? cosmetic(String slot) => customization[slot];
 
@@ -50,6 +57,7 @@ class MatrixUser {
     int? friendsCount,
     int? postsCount,
     CosmeticMap? customization,
+    String? Function()? nameColor,
   }) =>
       MatrixUser(
         id: id,
@@ -61,5 +69,8 @@ class MatrixUser {
         friendsCount: friendsCount ?? this.friendsCount,
         postsCount: postsCount ?? this.postsCount,
         customization: customization ?? this.customization,
+        // Nullable resolver so a copy can explicitly CLEAR the color
+        // (back to default) — `nameColor: () => null`.
+        nameColor: nameColor != null ? nameColor() : this.nameColor,
       );
 }

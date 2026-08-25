@@ -35,6 +35,7 @@ class FakeRepositories extends Repositories {
     Map<String, List<Comment>> seedComments = const {},
     List<MatrixNotification> seedNotifications = const [],
     Map<String, CosmeticItem> seedEquippedCosmetics = const {},
+    List<CosmeticItem> seedCatalog = const [],
   }) {
     final store = FakeStore();
     seedComments.forEach((postId, comments) {
@@ -42,6 +43,7 @@ class FakeRepositories extends Repositories {
     });
     store.notifications.addAll(seedNotifications);
     store.equippedCosmetics.addAll(seedEquippedCosmetics);
+    store.catalog.addAll(seedCatalog);
     return FakeRepositories._(
       store: store,
       auth: _FakeAuthRepository(store),
@@ -62,6 +64,9 @@ class FakeRepositories extends Repositories {
 }
 
 class FakeStore {
+  /// Server-owned cosmetic catalog (palette of colors, frames, ...).
+  final List<CosmeticItem> catalog = [];
+
   FakeStore() {
     users = {
       'u0': MatrixUser(
@@ -436,7 +441,8 @@ class _FakeCustomizationRepository implements CustomizationRepository {
   final FakeStore _store;
 
   @override
-  Future<List<CosmeticItem>> catalog({String? type}) async => const [];
+  Future<List<CosmeticItem>> catalog({String? type}) async =>
+      _store.catalog.where((i) => type == null || i.slot == type).toList();
 
   @override
   Future<List<CosmeticItem>> inventory() async =>
@@ -448,7 +454,14 @@ class _FakeCustomizationRepository implements CustomizationRepository {
 
   @override
   Future<CosmeticItem> equip(String itemId) async {
-    final item = CosmeticItem(id: itemId, slot: CosmeticItem.avatarFrame, name: itemId);
+    // Mirror the server: the slot comes from the CATALOG item's own type;
+    // unknown ids are rejected. NAME_COLOR entries equip freely.
+    final item = _store.catalog
+        .where((i) => i.id == itemId)
+        .firstOrNull;
+    if (item == null) {
+      throw const ApiException(statusCode: 404, message: 'Item não encontrado.');
+    }
     _store.equippedCosmetics[item.slot] = item;
     return item;
   }

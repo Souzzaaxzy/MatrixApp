@@ -11,6 +11,7 @@ class Post {
     this.authorId,
     this.avatarSeed,
     this.authorAvatarUrl,
+    this.authorNameColor,
     this.imageUrl,
     this.likes = 0,
     this.liked = false,
@@ -32,6 +33,10 @@ class Post {
 
   /// Remote URL of the author's profile photo (null → initials fallback).
   final String? authorAvatarUrl;
+
+  /// The AUTHOR's own nickname color (hex), embedded by the server. Null →
+  /// default color. Never the viewer's color.
+  final String? authorNameColor;
   final String? imageUrl;
 
   int likes;
@@ -59,6 +64,7 @@ class Post {
         createdAt: createdAt,
         avatarSeed: avatarSeed,
         authorAvatarUrl: authorAvatarUrl,
+        authorNameColor: authorNameColor,
         imageUrl: imageUrl ?? this.imageUrl,
         likes: likes ?? this.likes,
         liked: liked ?? this.liked,

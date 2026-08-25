@@ -5,6 +5,7 @@ import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_dimensions.dart';
 import '../../app/theme/app_text_styles.dart';
 import '../../core/utils/date_utils.dart' as matrix;
+import '../../core/utils/name_colors.dart';
 import '../../core/widgets/app_state_scope.dart';
 import '../../core/widgets/empty_state.dart';
 import '../../core/widgets/hud_label.dart';
@@ -256,16 +257,26 @@ class _NotificationTile extends StatelessWidget {
                             const TextSpan(text: 'Agora você e '),
                             TextSpan(
                               text: '@${n.actorUsername}',
-                              style:
-                                  AppTextStyles.h3.copyWith(fontSize: 14),
+                              style: AppTextStyles.h3.copyWith(
+                                fontSize: 14,
+                                color: resolveNameColor(
+                                  n.actorNameColor,
+                                  AppColors.cardSurface,
+                                ),
+                              ),
                             ),
                             const TextSpan(text: ' são amigos.'),
                           ]
                         : [
                             TextSpan(
                               text: '@${n.actorUsername}',
-                              style:
-                                  AppTextStyles.h3.copyWith(fontSize: 14),
+                              style: AppTextStyles.h3.copyWith(
+                                fontSize: 14,
+                                color: resolveNameColor(
+                                  n.actorNameColor,
+                                  AppColors.cardSurface,
+                                ),
+                              ),
                             ),
                             TextSpan(text: ' ${description(n)}'),
                           ],
@@ -337,7 +348,13 @@ class _FriendRequestCard extends StatelessWidget {
                 ),
                 TextSpan(
                   text: n.actorUsername,
-                  style: AppTextStyles.h2.copyWith(fontSize: 16),
+                  style: AppTextStyles.h2.copyWith(
+                    fontSize: 16,
+                    color: resolveNameColor(
+                      n.actorNameColor,
+                      AppColors.cardSurface,
+                    ),
+                  ),
                 ),
               ],
             ),

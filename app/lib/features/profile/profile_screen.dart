@@ -5,6 +5,7 @@ import '../../app/routes.dart';
 import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_dimensions.dart';
 import '../../app/theme/app_text_styles.dart';
+import '../../core/utils/name_colors.dart';
 import '../../core/widgets/app_state_scope.dart';
 import '../../core/widgets/empty_state.dart';
 import '../../core/widgets/glow_container.dart';
@@ -305,14 +306,28 @@ class _ProfileHeader extends StatelessWidget {
                 ),
                 TextSpan(
                   text: user.username,
-                  style: AppTextStyles.h2.copyWith(fontSize: 20),
+                  style: AppTextStyles.h2.copyWith(
+                    fontSize: 20,
+                    color: resolveNameColor(
+                      user.nameColor,
+                      AppColors.absoluteBlack,
+                    ),
+                  ),
                 ),
               ],
             ),
           ),
           const SizedBox(height: AppDimensions.spaceMd),
           if (user.name.isNotEmpty)
-            Text(user.name, style: AppTextStyles.bodyMuted),
+            Text(
+              user.name,
+              style: AppTextStyles.bodyMuted.copyWith(
+                color: resolveNameColor(
+                  user.nameColor,
+                  AppColors.absoluteBlack,
+                ),
+              ),
+            ),
           const SizedBox(height: AppDimensions.spaceLg),
           // Real counters (server): Amigos opens the friends bottom sheet.
           _ProfileStats(user: user, onFriendsTap: onFriendsTap),

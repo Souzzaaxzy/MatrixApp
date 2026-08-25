@@ -11,6 +11,8 @@ class CosmeticItem {
     required this.name,
     this.assetUrl = '',
     this.rarity = 'COMMON',
+    this.category,
+    this.sortOrder = 0,
   });
 
   /// Server id of the item in the catalog.
@@ -28,6 +30,19 @@ class CosmeticItem {
   /// COMMON / UNCOMMON / RARE / EPIC / LEGENDARY (extensible).
   final String rarity;
 
+  /// Server-owned grouping key for the picker UI (e.g. "reds", "special").
+  /// Null for items without a group.
+  final String? category;
+
+  /// Curated ordering inside a category (catalogs are curated server-side,
+  /// not alphabetical).
+  final int sortOrder;
+
+  /// For NAME_COLOR items the assetUrl IS the hex value ("#0066FF") — the
+  /// server owns the palette, so the app never invents color values.
+  String? get hexColor =>
+      slot == nameColor && assetUrl.startsWith('#') ? assetUrl : null;
+
   /// Slot keys — mirror the server enum; kept as strings so new slots are
   /// forward-compatible.
   static const String avatarFrame = 'AVATAR_FRAME';
@@ -35,6 +50,7 @@ class CosmeticItem {
   static const String badge = 'BADGE';
   static const String profileEffect = 'PROFILE_EFFECT';
   static const String themeAccent = 'THEME_ACCCENT';
+  static const String nameColor = 'NAME_COLOR';
 }
 
 /// Equipped cosmetics keyed by slot. An empty map means "all defaults"

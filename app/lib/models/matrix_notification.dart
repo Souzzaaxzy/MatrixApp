@@ -13,6 +13,7 @@ class MatrixNotification {
     required this.actorName,
     required this.actorUsername,
     this.actorAvatarUrl,
+    this.actorNameColor,
     this.postId,
     this.commentId,
     this.friendRequestId,
@@ -32,6 +33,10 @@ class MatrixNotification {
   final String actorUsername;
   final String? actorAvatarUrl;
 
+  /// The ACTOR's own nickname color (hex), embedded by the server. Null →
+  /// default color.
+  final String? actorNameColor;
+
   final String? postId;
   final String? commentId;
   final String? friendRequestId;
@@ -49,6 +54,7 @@ class MatrixNotification {
         actorName: actorName,
         actorUsername: actorUsername,
         actorAvatarUrl: actorAvatarUrl,
+        actorNameColor: actorNameColor,
         postId: postId,
         commentId: commentId,
         friendRequestId: friendRequestId,

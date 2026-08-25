@@ -4,6 +4,7 @@ import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_dimensions.dart';
 import '../../app/theme/app_text_styles.dart';
 import '../../core/utils/date_utils.dart';
+import '../../core/utils/name_colors.dart';
 import '../../core/widgets/app_state_scope.dart';
 import '../../core/widgets/hud_label.dart';
 import '../../core/widgets/theme_watcher.dart';
@@ -187,7 +188,12 @@ class _CommentsSheetState extends State<CommentsSheet> {
                                       Flexible(
                                         child: Text(
                                           '@${c.authorUsername}',
-                                          style: AppTextStyles.label,
+                                          style: AppTextStyles.label.copyWith(
+                                            color: resolveNameColor(
+                                              c.authorNameColor,
+                                              AppColors.nightBlue,
+                                            ),
+                                          ),
                                           overflow: TextOverflow.ellipsis,
                                         ),
                                       ),
