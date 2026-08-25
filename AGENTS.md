@@ -85,3 +85,21 @@ upload APK artifact.
 ## Phase 3 status
 Complete. Server: 64 tests pass, typecheck clean. Flutter: 70 tests pass,
 analyze clean, APK builds (~54MB). CI green on main.
+
+## Phase 4 — Social (friendships + notifications)
+- Server: `friend_requests`, `friendships`, `notifications` Prisma models
+  (SQLite). Modules `src/modules/friends/` and `src/modules/notifications/`.
+  Endpoints: `POST /api/friend-requests/:userId`, `GET /api/friend-requests`,
+  `POST /api/friend-requests/:id/accept|reject`, `GET /api/users/:id/friendship`,
+  `GET /api/notifications`, `PATCH /api/notifications/:id/read`, `PATCH /api/notifications/read-all`.
+  Notification types: LIKE / COMMENT / FRIEND_REQUEST / FRIEND_ACCEPTED.
+  Friendship states: NONE / OUTGOING_PENDING / INCOMING_PENDING / FRIENDS.
+  No self-notifications; unlike deletes the pending LIKE notification.
+  Server: 96 tests pass.
+- App: profile redesigned (big avatar, glowing @username, friendship button,
+  floating `+` on own profile only). Bottom bar: "Criar" tab replaced by
+  "Notificações" with unread badge. Search results open the user profile.
+  NotificationsScreen has actionable FRIEND_REQUEST cards (ACEITAR/RECUSAR).
+  Flutter: 97 tests pass, analyze clean.
+- Gotcha: widget tests that navigate to PostDetailScreen/ProfileScreen need
+  TWO `tester.pump()` after the tap (route transition + async data load).
