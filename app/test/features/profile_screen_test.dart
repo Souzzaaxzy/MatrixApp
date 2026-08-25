@@ -107,8 +107,8 @@ void main() {
 
       // Going back must restore the own profile — never the friend data.
       tester.state<NavigatorState>(find.byType(Navigator).first).pop();
-      await tester.pump(const Duration(milliseconds: 400));
-      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump(const Duration(seconds: 1));
       expect(
         find.textContaining('leonardo', findRichText: true),
         findsOneWidget,
@@ -138,7 +138,7 @@ void main() {
 
       // Back to the shell, then open the own profile tab.
       tester.state<NavigatorState>(find.byType(Navigator).first).pop();
-      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pump(const Duration(seconds: 1));
       await tester.tap(find.text('Perfil'));
       await tester.pump(const Duration(milliseconds: 400));
       await tester.pump(const Duration(milliseconds: 400));

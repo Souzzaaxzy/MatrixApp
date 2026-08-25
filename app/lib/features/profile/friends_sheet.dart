@@ -131,11 +131,16 @@ class _FriendsSheetState extends State<FriendsSheet> {
             top: BorderSide(color: AppColors.deepBlue, width: 1.5),
           ),
         ),
-        child: SafeArea(
-          top: false,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
+        // The Material keeps ListTile ink effects legal: the decoration
+        // above is a DecoratedBox, and ListTile needs a Material ancestor
+        // between it and that box.
+        child: Material(
+          type: MaterialType.transparency,
+          child: SafeArea(
+            top: false,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
               const SizedBox(height: AppDimensions.spaceSm),
               // Drag indicator.
               Container(
@@ -171,7 +176,8 @@ class _FriendsSheetState extends State<FriendsSheet> {
               const SizedBox(height: AppDimensions.spaceSm),
               const Divider(color: AppColors.deepBlue, height: 1),
               Flexible(child: _buildList()),
-            ],
+              ],
+            ),
           ),
         ),
       ),
