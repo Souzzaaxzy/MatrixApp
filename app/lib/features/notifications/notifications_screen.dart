@@ -5,7 +5,7 @@ import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_dimensions.dart';
 import '../../app/theme/app_text_styles.dart';
 import '../../core/utils/date_utils.dart' as matrix;
-import '../../core/utils/name_colors.dart';
+import '../../core/widgets/nickname_renderer.dart';
 import '../../core/widgets/app_state_scope.dart';
 import '../../core/widgets/empty_state.dart';
 import '../../core/widgets/hud_label.dart';
@@ -249,37 +249,34 @@ class _NotificationTile extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // The actor's nickname keeps its OWN cosmetics (color +
+                // effect) via the shared NicknameRenderer — never the
+                // viewer's configuration.
                 RichText(
                   text: TextSpan(
                     style: AppTextStyles.bodyMuted,
-                    children: n.type == 'FRIEND_ACCEPTED'
-                        ? [
-                            const TextSpan(text: 'Agora você e '),
-                            TextSpan(
-                              text: '@${n.actorUsername}',
-                              style: AppTextStyles.h3.copyWith(
-                                fontSize: 14,
-                                color: resolveNameColor(
-                                  n.actorNameColor,
-                                  AppColors.cardSurface,
-                                ),
-                              ),
-                            ),
-                            const TextSpan(text: ' são amigos.'),
-                          ]
-                        : [
-                            TextSpan(
-                              text: '@${n.actorUsername}',
-                              style: AppTextStyles.h3.copyWith(
-                                fontSize: 14,
-                                color: resolveNameColor(
-                                  n.actorNameColor,
-                                  AppColors.cardSurface,
-                                ),
-                              ),
-                            ),
-                            TextSpan(text: ' ${description(n)}'),
-                          ],
+                    children: [
+                      if (n.type == 'FRIEND_ACCEPTED')
+                        const TextSpan(text: 'Agora você e '),
+                      WidgetSpan(
+                        alignment: PlaceholderAlignment.baseline,
+                        baseline: TextBaseline.alphabetic,
+                        child: NicknameRenderer(
+                          '@${n.actorUsername}',
+                          baseStyle:
+                              AppTextStyles.h3.copyWith(fontSize: 14),
+                          background: AppColors.cardSurface,
+                          nameColor: n.actorNameColor,
+                          effect: n.actorNameEffect,
+                          lightweight: true,
+                        ),
+                      ),
+                      TextSpan(
+                        text: n.type == 'FRIEND_ACCEPTED'
+                            ? ' são amigos.'
+                            : ' ${description(n)}',
+                      ),
+                    ],
                   ),
                 ),
                 const SizedBox(height: AppDimensions.spaceXs),
@@ -333,31 +330,12 @@ class _FriendRequestCard extends StatelessWidget {
             ring: true,
           ),
           const SizedBox(height: AppDimensions.spaceMd),
-          RichText(
-            text: TextSpan(
-              children: [
-                TextSpan(
-                  text: '@',
-                  style: TextStyle(
-                    color: AppColors.holographicBlue,
-                    fontSize: 16,
-                    shadows: const [
-                      Shadow(color: AppColors.electricBlue, blurRadius: 8),
-                    ],
-                  ),
-                ),
-                TextSpan(
-                  text: n.actorUsername,
-                  style: AppTextStyles.h2.copyWith(
-                    fontSize: 16,
-                    color: resolveNameColor(
-                      n.actorNameColor,
-                      AppColors.cardSurface,
-                    ),
-                  ),
-                ),
-              ],
-            ),
+          NicknameRenderer(
+            '@${n.actorUsername}',
+            baseStyle: AppTextStyles.h2.copyWith(fontSize: 16),
+            background: AppColors.cardSurface,
+            nameColor: n.actorNameColor,
+            effect: n.actorNameEffect,
           ),
           const SizedBox(height: AppDimensions.spaceXs),
           Text(

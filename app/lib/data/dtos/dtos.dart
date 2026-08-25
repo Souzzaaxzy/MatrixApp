@@ -3,12 +3,22 @@ import '../../models/cosmetic_item.dart';
 import '../../models/friend_request.dart';
 import '../../models/matrix_notification.dart';
 import '../../models/matrix_user.dart';
+import '../../models/name_effect.dart';
 import '../../models/post.dart';
 
 /// Mappers that convert backend JSON responses into the app's domain models.
 ///
 /// Keeping these in one place means the UI never touches raw maps and the
 /// API response shape can evolve without rippling through every screen.
+
+/// Parses the embedded nickname effect (`nameEffect: {id, name, config}`)
+/// the server includes in every nickname payload. Null → "Nenhum".
+NameEffect? parseNameEffect(Object? raw) {
+  if (raw is! Map<String, dynamic>) return null;
+  final id = raw['id'] as String?;
+  if (id == null) return null;
+  return NameEffect.fromJson(raw);
+}
 
 class AuthDto {
   final String accessToken;
@@ -73,6 +83,7 @@ class FeedPostDto {
   final String authorUsername;
   final String? authorAvatarUrl;
   final String? authorNameColor;
+  final NameEffect? authorNameEffect;
   final int likeCount;
   final bool liked;
   final int commentCount;
@@ -87,6 +98,7 @@ class FeedPostDto {
     required this.authorUsername,
     this.authorAvatarUrl,
     this.authorNameColor,
+    this.authorNameEffect,
     required this.likeCount,
     required this.liked,
     required this.commentCount,
@@ -102,6 +114,7 @@ class FeedPostDto {
         avatarSeed: authorUsername,
         authorAvatarUrl: authorAvatarUrl,
         authorNameColor: authorNameColor,
+        authorNameEffect: authorNameEffect,
         imageUrl: imageUrl,
         likes: likeCount,
         liked: liked,
@@ -120,6 +133,7 @@ class FeedPostDto {
       authorUsername: author['username'] as String,
       authorAvatarUrl: author['avatarUrl'] as String?,
       authorNameColor: author['nameColor'] as String?,
+      authorNameEffect: parseNameEffect(author['nameEffect']),
       likeCount: (json['likeCount'] as num?)?.toInt() ?? 0,
       liked: (json['liked'] as bool?) ?? false,
       commentCount: (json['commentCount'] as num?)?.toInt() ?? 0,
@@ -136,6 +150,7 @@ class CommentDto {
   final String authorUsername;
   final String? authorAvatarUrl;
   final String? authorNameColor;
+  final NameEffect? authorNameEffect;
 
   const CommentDto({
     required this.id,
@@ -146,6 +161,7 @@ class CommentDto {
     required this.authorUsername,
     this.authorAvatarUrl,
     this.authorNameColor,
+    this.authorNameEffect,
   });
 
   Comment toModel() => Comment(
@@ -155,6 +171,7 @@ class CommentDto {
         authorUsername: authorUsername,
         authorAvatarUrl: authorAvatarUrl,
         authorNameColor: authorNameColor,
+        authorNameEffect: authorNameEffect,
         text: text,
         createdAt: createdAt,
       );
@@ -170,6 +187,7 @@ class CommentDto {
       authorUsername: author['username'] as String,
       authorAvatarUrl: author['avatarUrl'] as String?,
       authorNameColor: author['nameColor'] as String?,
+      authorNameEffect: parseNameEffect(author['nameEffect']),
     );
   }
 }
@@ -184,6 +202,7 @@ class PublicUserDto {
   final int postsCount;
   final CosmeticMap customization;
   final String? nameColor;
+  final NameEffect? nameEffect;
 
   const PublicUserDto({
     required this.id,
@@ -195,6 +214,7 @@ class PublicUserDto {
     this.postsCount = 0,
     this.customization = const {},
     this.nameColor,
+    this.nameEffect,
   });
 
   MatrixUser toModel() => MatrixUser(
@@ -207,6 +227,7 @@ class PublicUserDto {
         postsCount: postsCount,
         customization: customization,
         nameColor: nameColor,
+        nameEffect: nameEffect,
       );
 
   factory PublicUserDto.fromJson(Map<String, dynamic> json) => PublicUserDto(
@@ -219,6 +240,7 @@ class PublicUserDto {
         postsCount: (json['postsCount'] as num?)?.toInt() ?? 0,
         customization: parseCustomization(json['customization']),
         nameColor: json['nameColor'] as String?,
+        nameEffect: parseNameEffect(json['nameEffect']),
       );
 }
 
@@ -238,6 +260,7 @@ CosmeticMap parseCustomization(Object? raw) {
           name: name,
           assetUrl: (value['assetUrl'] as String?) ?? '',
           rarity: (value['rarity'] as String?) ?? 'COMMON',
+          config: (value['config'] as Map?)?.cast<String, dynamic>() ?? const {},
         );
       }
     }
@@ -255,6 +278,7 @@ class CosmeticItemDto {
   final String rarity;
   final String? category;
   final int sortOrder;
+  final Map<String, dynamic> config;
 
   const CosmeticItemDto({
     required this.id,
@@ -264,6 +288,7 @@ class CosmeticItemDto {
     this.rarity = 'COMMON',
     this.category,
     this.sortOrder = 0,
+    this.config = const {},
   });
 
   CosmeticItem toModel() => CosmeticItem(
@@ -274,6 +299,7 @@ class CosmeticItemDto {
         rarity: rarity,
         category: category,
         sortOrder: sortOrder,
+        config: config,
       );
 
   /// Catalog/inventory entries carry `id` + `type`; equipped entries carry
@@ -287,6 +313,7 @@ class CosmeticItemDto {
         rarity: (json['rarity'] as String?) ?? 'COMMON',
         category: json['category'] as String?,
         sortOrder: (json['sortOrder'] as num?)?.toInt() ?? 0,
+        config: (json['config'] as Map?)?.cast<String, dynamic>() ?? const {},
       );
 }
 
@@ -346,7 +373,7 @@ class NotificationDto {
     this.friendRequestStatus,
   });
 
-  // The actor's own nickname color rides inside `actor` (PublicUserDto).
+  // The actor's own nickname cosmetics ride inside `actor` (PublicUserDto).
 
   MatrixNotification toModel() => MatrixNotification(
         id: id,
@@ -358,6 +385,7 @@ class NotificationDto {
         actorUsername: actor.username,
         actorAvatarUrl: actor.avatarUrl,
         actorNameColor: actor.nameColor,
+        actorNameEffect: actor.nameEffect,
         postId: postId,
         commentId: commentId,
         friendRequestId: friendRequestId,

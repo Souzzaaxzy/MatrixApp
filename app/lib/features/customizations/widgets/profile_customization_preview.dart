@@ -5,20 +5,21 @@ import '../../../app/theme/app_dimensions.dart';
 import '../../../app/theme/app_text_styles.dart';
 import '../../../core/widgets/cosmetic_badge.dart';
 import '../../../core/widgets/framed_avatar.dart';
-import '../../../core/widgets/styled_username.dart';
+import '../../../core/widgets/nickname_renderer.dart';
 import '../../../core/widgets/user_avatar.dart';
 import '../../../models/cosmetic_item.dart';
 import '../../../models/matrix_user.dart';
+import '../../../models/name_effect.dart';
 
 /// Live profile preview used by the customizations screen.
 ///
-/// Renders the user exactly the way the (future) real cosmetics pipeline
-/// will: every cosmetic slot maps to an isolated renderer component —
+/// Renders the user exactly the way the real cosmetics pipeline does: every
+/// cosmetic slot maps to an isolated renderer component —
 ///
 ///   ProfileCustomizationPreview
 ///    ├── FramedAvatar        (AVATAR_FRAME slot → frame overlay)
 ///    │    └── UserAvatar
-///    ├── StyledUsername      (PROFILE_EFFECT slot → name style/effect)
+///    ├── NicknameRenderer    (NAME_COLOR + NAME_EFFECT slots → nickname)
 ///    └── CosmeticBadgeView   (BADGE slot)
 ///
 /// With no cosmetics equipped the preview shows the default profile look.
@@ -28,6 +29,7 @@ class ProfileCustomizationPreview extends StatelessWidget {
     required this.user,
     this.cosmetics = const {},
     this.nameColorOverride,
+    this.nameEffectOverride,
   });
 
   final MatrixUser user;
@@ -39,6 +41,11 @@ class ProfileCustomizationPreview extends StatelessWidget {
   /// yet. When null, the equipped NAME_COLOR (or the user's own color) is
   /// used. Pass an empty string to preview the DEFAULT color explicitly.
   final String? nameColorOverride;
+
+  /// Preview-only nickname effect for a selection that was not saved yet.
+  /// When null, the equipped NAME_EFFECT (or the user's own) is used. Pass
+  /// `const NameEffect(id: '')` to preview "Nenhum" explicitly.
+  final NameEffect? nameEffectOverride;
 
   @override
   Widget build(BuildContext context) {
@@ -72,13 +79,24 @@ class ProfileCustomizationPreview extends StatelessWidget {
             ),
           ),
           const SizedBox(height: AppDimensions.spaceMd),
-          StyledUsername(
+          NicknameRenderer(
             user.name,
-            effect: cosmetics[CosmeticItem.profileEffect],
+            baseStyle: AppTextStyles.h2,
+            textAlign: TextAlign.center,
+            background: AppColors.cardSurface,
             nameColor: nameColorOverride != null
                 ? (nameColorOverride!.isEmpty ? null : nameColorOverride)
                 : (cosmetics[CosmeticItem.nameColor]?.hexColor ??
                     user.nameColor),
+            effect: nameEffectOverride != null
+                ? (nameEffectOverride!.id.isEmpty ? null : nameEffectOverride)
+                : (cosmetics[CosmeticItem.nameEffect] == null
+                    ? user.nameEffect
+                    : NameEffect(
+                        id: cosmetics[CosmeticItem.nameEffect]!.id,
+                        name: cosmetics[CosmeticItem.nameEffect]!.name,
+                        config: cosmetics[CosmeticItem.nameEffect]!.config,
+                      )),
           ),
           const SizedBox(height: AppDimensions.spaceXs),
           Text('@${user.username}', style: AppTextStyles.caption),

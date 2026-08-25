@@ -470,6 +470,38 @@ class _FakeCustomizationRepository implements CustomizationRepository {
   Future<void> unequip(String slot) async {
     _store.equippedCosmetics.remove(slot);
   }
+
+  /// Mirrors the server: both ids are validated against the catalog (null
+  /// removes the slot) and applied atomically; the confirmed map is echoed
+  /// back exactly like GET /customization/equipped would return it.
+  @override
+  Future<Map<String, CosmeticItem>> saveCosmetics({
+    String? nameColorId,
+    String? nameEffectId,
+  }) async {
+    void apply(String slot, String? id) {
+      if (id == null) {
+        _store.equippedCosmetics.remove(slot);
+        return;
+      }
+      final item =
+          _store.catalog.where((i) => i.id == id && i.slot == slot).firstOrNull;
+      if (item == null) {
+        throw const ApiException(statusCode: 400, message: 'Item inválido.');
+      }
+      _store.equippedCosmetics[slot] = item;
+    }
+
+    apply(CosmeticItem.nameColor, nameColorId);
+    apply(CosmeticItem.nameEffect, nameEffectId);
+    // The server echoes only the two consolidated slots (null → absent).
+    final result = <String, CosmeticItem>{};
+    for (final slot in [CosmeticItem.nameColor, CosmeticItem.nameEffect]) {
+      final item = _store.equippedCosmetics[slot];
+      if (item != null) result[slot] = item;
+    }
+    return result;
+  }
 }
 
 class _FakeFriendRepository implements FriendRepository {

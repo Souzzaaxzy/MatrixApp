@@ -6,11 +6,11 @@ import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_dimensions.dart';
 import '../../app/theme/app_text_styles.dart';
 import '../../core/utils/date_utils.dart';
-import '../../core/utils/name_colors.dart';
 import '../../data/api_config.dart';
 import '../../models/post.dart';
 import '../../core/widgets/app_state_scope.dart';
 import '../../core/widgets/matrix_card.dart';
+import '../../core/widgets/nickname_renderer.dart';
 import '../../core/widgets/user_avatar.dart';
 
 /// Reusable post card for the feed.
@@ -96,14 +96,13 @@ class _PostCardState extends State<PostCard>
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
+                      NicknameRenderer(
                         post.authorName,
-                        style: AppTextStyles.h3.copyWith(
-                          color: resolveNameColor(
-                            post.authorNameColor,
-                            AppColors.cardSurface,
-                          ),
-                        ),
+                        baseStyle: AppTextStyles.h3,
+                        background: AppColors.cardSurface,
+                        nameColor: post.authorNameColor,
+                        effect: post.authorNameEffect,
+                        lightweight: true,
                       ),
                       Text(
                         '@${post.authorUsername} • ${relativeTime(post.createdAt)}',

@@ -9,7 +9,7 @@ import '../../core/widgets/empty_state.dart';
 import '../../core/widgets/hud_label.dart';
 import '../../core/widgets/matrix_card.dart';
 import '../../core/widgets/matrix_text_field.dart';
-import '../../core/utils/name_colors.dart';
+import '../../core/widgets/nickname_renderer.dart';
 import '../../core/widgets/user_avatar.dart';
 import '../../models/matrix_user.dart';
 
@@ -142,14 +142,13 @@ class _SearchScreenState extends State<SearchScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
+                              NicknameRenderer(
                                 user.name,
-                                style: AppTextStyles.h3.copyWith(
-                                  color: resolveNameColor(
-                                    user.nameColor,
-                                    AppColors.cardSurface,
-                                  ),
-                                ),
+                                baseStyle: AppTextStyles.h3,
+                                background: AppColors.cardSurface,
+                                nameColor: user.nameColor,
+                                effect: user.nameEffect,
+                                lightweight: true,
                               ),
                               Text('@${user.username}', style: AppTextStyles.caption),
                             ],

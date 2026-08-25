@@ -367,6 +367,24 @@ class CustomizationRepository {
   Future<void> unequip(String slot) async {
     await _api.delete('/api/customization/equip/$slot');
   }
+
+  /// Consolidated save: sends the WHOLE pending customization in ONE
+  /// operation — `{nameColorId, nameEffectId}` (a string equips the catalog
+  /// entry, null removes the slot). The server validates every id against
+  /// the active catalog and persists both slots in a single transaction.
+  /// Returns the server-confirmed equipped map (source of truth).
+  Future<CosmeticMap> saveCosmetics({
+    String? nameColorId,
+    String? nameEffectId,
+  }) async {
+    final json = await _api.put<Map<String, dynamic>>(
+      '/api/customization/cosmetics',
+      data: {'nameColorId': nameColorId, 'nameEffectId': nameEffectId},
+    );
+    final equipped =
+        (json['equipped'] as Map?)?.cast<String, dynamic>() ?? const {};
+    return parseCustomization(equipped);
+  }
 }
 
 /// Uploads repository — image upload via multipart.

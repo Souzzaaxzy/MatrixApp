@@ -1,4 +1,5 @@
 import 'cosmetic_item.dart';
+import 'name_effect.dart';
 
 /// A MATRIX network user.
 class MatrixUser {
@@ -13,6 +14,7 @@ class MatrixUser {
     this.postsCount = 0,
     this.customization = const {},
     this.nameColor,
+    this.nameEffect,
   });
 
   final String id;
@@ -45,6 +47,11 @@ class MatrixUser {
   /// to the viewer: profiles/posts/comments carry the OWNER's value.
   final String? nameColor;
 
+  /// Equipped nickname effect of THIS user (server catalog entry + render
+  /// config). Null → "Nenhum" (plain colored nickname). Fully independent
+  /// from [nameColor]: any color combines with any effect.
+  final NameEffect? nameEffect;
+
   /// The equipped cosmetic for [slot], or null (default rendering).
   CosmeticItem? cosmetic(String slot) => customization[slot];
 
@@ -58,6 +65,7 @@ class MatrixUser {
     int? postsCount,
     CosmeticMap? customization,
     String? Function()? nameColor,
+    NameEffect? Function()? nameEffect,
   }) =>
       MatrixUser(
         id: id,
@@ -72,5 +80,6 @@ class MatrixUser {
         // Nullable resolver so a copy can explicitly CLEAR the color
         // (back to default) — `nameColor: () => null`.
         nameColor: nameColor != null ? nameColor() : this.nameColor,
+        nameEffect: nameEffect != null ? nameEffect() : this.nameEffect,
       );
 }

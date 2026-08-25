@@ -5,7 +5,7 @@ import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_dimensions.dart';
 import '../../app/theme/app_text_styles.dart';
 import '../../core/utils/date_utils.dart';
-import '../../core/utils/name_colors.dart';
+import '../../core/widgets/nickname_renderer.dart';
 import '../../core/widgets/app_state_scope.dart';
 import '../../core/widgets/empty_state.dart';
 import '../../core/widgets/hud_label.dart';
@@ -243,14 +243,12 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
+                    NicknameRenderer(
                       post.authorName,
-                      style: AppTextStyles.h3.copyWith(
-                        color: resolveNameColor(
-                          post.authorNameColor,
-                          AppColors.cardSurface,
-                        ),
-                      ),
+                      baseStyle: AppTextStyles.h3,
+                      background: AppColors.cardSurface,
+                      nameColor: post.authorNameColor,
+                      effect: post.authorNameEffect,
                     ),
                     Text(
                       '@${post.authorUsername} • ${relativeTime(post.createdAt)}',

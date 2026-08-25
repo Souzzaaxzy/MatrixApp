@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:matrix_app/core/widgets/nickname_renderer.dart';
 import 'package:matrix_app/features/notifications/notifications_screen.dart';
 import 'package:matrix_app/models/friend_request.dart';
 import 'package:matrix_app/models/matrix_notification.dart';
@@ -59,12 +60,16 @@ void main() {
     await pumpMatrixApp(tester, const NotificationsScreen(), state: state);
     await tester.pump(const Duration(milliseconds: 400));
 
-    final message = find.textContaining(
-      'Agora você e @joao são amigos.',
-      findRichText: true,
+    // The actor's nickname renders through the shared NicknameRenderer
+    // (color + effect of the ACTOR), so the message spans are split.
+    expect(find.textContaining('Agora você e', findRichText: true), findsOneWidget);
+    expect(find.textContaining('são amigos.', findRichText: true), findsOneWidget);
+    final actor = find.byWidgetPredicate(
+      (w) => w is NicknameRenderer && w.text == '@joao',
     );
-    expect(message, findsOneWidget);
+    expect(actor, findsOneWidget);
 
+    final message = find.textContaining('Agora você e', findRichText: true);
     await tester.tap(message);
     await tester.pump(const Duration(milliseconds: 800));
     await tester.pump(const Duration(milliseconds: 800));

@@ -8,7 +8,7 @@ import '../../core/services/app_state.dart';
 import '../../core/widgets/app_state_scope.dart';
 import '../../core/widgets/hud_label.dart';
 import '../../core/widgets/theme_watcher.dart';
-import '../../core/utils/name_colors.dart';
+import '../../core/widgets/nickname_renderer.dart';
 import '../../core/widgets/user_avatar.dart';
 import '../../data/api_config.dart';
 import '../../models/matrix_user.dart';
@@ -256,22 +256,22 @@ class _FriendsSheetState extends State<FriendsSheet> {
                 : ApiConfig.resolveUrl(friend.avatarUrl!),
             size: 44,
           ),
-          title: Text(
+          title: NicknameRenderer(
             '@${friend.username}',
-            style: AppTextStyles.body.copyWith(
-              color: resolveNameColor(friend.nameColor, AppColors.nightBlue) ??
-                  AppColors.techWhite,
-            ),
+            baseStyle: AppTextStyles.body,
+            background: AppColors.nightBlue,
+            nameColor: friend.nameColor,
+            effect: friend.nameEffect,
+            lightweight: true,
           ),
           subtitle: friend.name.isNotEmpty
-              ? Text(
+              ? NicknameRenderer(
                   friend.name,
-                  style: AppTextStyles.bodyMuted.copyWith(
-                    color: resolveNameColor(
-                      friend.nameColor,
-                      AppColors.nightBlue,
-                    ),
-                  ),
+                  baseStyle: AppTextStyles.bodyMuted,
+                  background: AppColors.nightBlue,
+                  nameColor: friend.nameColor,
+                  effect: friend.nameEffect,
+                  lightweight: true,
                 )
               : null,
           trailing: Icon(

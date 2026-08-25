@@ -5,7 +5,7 @@ import '../../app/routes.dart';
 import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_dimensions.dart';
 import '../../app/theme/app_text_styles.dart';
-import '../../core/utils/name_colors.dart';
+import '../../core/widgets/nickname_renderer.dart';
 import '../../core/widgets/app_state_scope.dart';
 import '../../core/widgets/empty_state.dart';
 import '../../core/widgets/glow_container.dart';
@@ -304,14 +304,15 @@ class _ProfileHeader extends StatelessWidget {
                     ],
                   ),
                 ),
-                TextSpan(
-                  text: user.username,
-                  style: AppTextStyles.h2.copyWith(
-                    fontSize: 20,
-                    color: resolveNameColor(
-                      user.nameColor,
-                      AppColors.absoluteBlack,
-                    ),
+                WidgetSpan(
+                  alignment: PlaceholderAlignment.baseline,
+                  baseline: TextBaseline.alphabetic,
+                  child: NicknameRenderer(
+                    user.username,
+                    baseStyle: AppTextStyles.h2.copyWith(fontSize: 20),
+                    background: AppColors.absoluteBlack,
+                    nameColor: user.nameColor,
+                    effect: user.nameEffect,
                   ),
                 ),
               ],
@@ -319,14 +320,13 @@ class _ProfileHeader extends StatelessWidget {
           ),
           const SizedBox(height: AppDimensions.spaceMd),
           if (user.name.isNotEmpty)
-            Text(
+            NicknameRenderer(
               user.name,
-              style: AppTextStyles.bodyMuted.copyWith(
-                color: resolveNameColor(
-                  user.nameColor,
-                  AppColors.absoluteBlack,
-                ),
-              ),
+              baseStyle: AppTextStyles.bodyMuted,
+              background: AppColors.absoluteBlack,
+              nameColor: user.nameColor,
+              effect: user.nameEffect,
+              textAlign: TextAlign.center,
             ),
           const SizedBox(height: AppDimensions.spaceLg),
           // Real counters (server): Amigos opens the friends bottom sheet.

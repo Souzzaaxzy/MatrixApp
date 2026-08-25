@@ -6,16 +6,22 @@ import '../../app/theme/app_text_styles.dart';
 import '../../core/utils/name_colors.dart';
 import '../../core/widgets/app_state_scope.dart';
 import '../../core/widgets/matrix_button.dart';
+import '../../core/widgets/nickname_renderer.dart';
 import '../../models/cosmetic_item.dart';
+import '../../models/name_effect.dart';
 import 'widgets/profile_customization_preview.dart';
 
 /// Profile customizations screen (Personalizações).
 ///
-/// The first live category is 🎨 COR DO NICKNAME: a solid text color from
-/// the SERVER-OWNED palette (the app never hardcodes which colors exist).
-/// Selecting a swatch updates the preview immediately; saving sends only
-/// the color ID to the server, which validates id/active/type — a client
-/// can never equip an arbitrary hex. "Padrão" unequips the slot (null).
+/// Two INDEPENDENT categories, both from the server-owned catalog:
+///  🎨 Cor do nickname   (NAME_COLOR — solid text color)
+///  ✨ Efeito do nickname (NAME_EFFECT — visual effect + render config)
+///
+/// Selections update the PREVIEW immediately but are NOT persisted until
+/// the user taps "SALVAR ALTERAÇÕES", which sends the whole pending
+/// configuration in ONE consolidated operation ({nameColorId, nameEffectId}).
+/// Leaving without saving discards the pending selection (the server state
+/// is restored on the next open). "Padrão"/"Nenhum" clear their slot (null).
 class CustomizationsScreen extends StatefulWidget {
   const CustomizationsScreen({super.key});
 
@@ -26,9 +32,11 @@ class CustomizationsScreen extends StatefulWidget {
 class _CustomizationsScreenState extends State<CustomizationsScreen> {
   bool _requested = false;
 
-  /// Local selection: the catalog item id, or null for "Padrão". Initialized
-  /// from the equipped state on first build; [_dirty] tracks changes.
+  /// Local pending selections: catalog item ids, or null for "Padrão"/
+  /// "Nenhum". Initialized from the equipped state on first build; [_dirty]
+  /// tracks unsaved changes.
   String? _selectedColorId;
+  String? _selectedEffectId;
   bool _selectionReady = false;
   bool _dirty = false;
   bool _saving = false;
@@ -45,6 +53,7 @@ class _CustomizationsScreenState extends State<CustomizationsScreen> {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         state.loadMyCosmetics();
         state.loadNameColorCatalog();
+        state.loadNameEffectCatalog();
       });
     }
   }
@@ -53,11 +62,19 @@ class _CustomizationsScreenState extends State<CustomizationsScreen> {
     if (_selectionReady) return;
     _selectionReady = true;
     _selectedColorId = equipped[CosmeticItem.nameColor]?.id;
+    _selectedEffectId = equipped[CosmeticItem.nameEffect]?.id;
   }
 
-  void _select(String? colorId) {
+  void _selectColor(String? colorId) {
     setState(() {
       _selectedColorId = colorId;
+      _dirty = true;
+    });
+  }
+
+  void _selectEffect(String? effectId) {
+    setState(() {
+      _selectedEffectId = effectId;
       _dirty = true;
     });
   }
@@ -68,26 +85,25 @@ class _CustomizationsScreenState extends State<CustomizationsScreen> {
     final state = AppStateScope.of(context);
     final messenger = ScaffoldMessenger.of(context);
     try {
-      final selected = _selectedColorId;
-      if (selected == null) {
-        await state.unequipCosmetic(CosmeticItem.nameColor);
-      } else {
-        await state.equipCosmetic(selected);
-      }
+      // ONE consolidated operation: color + effect together.
+      await state.saveCosmetics(
+        nameColorId: _selectedColorId,
+        nameEffectId: _selectedEffectId,
+      );
       if (!mounted) return;
       setState(() {
         _dirty = false;
         _saving = false;
       });
       messenger.showSnackBar(
-        const SnackBar(content: Text('Cor do nickname atualizada.')),
+        const SnackBar(content: Text('Personalizações salvas.')),
       );
     } catch (_) {
       if (!mounted) return;
       setState(() => _saving = false);
       messenger.showSnackBar(
         const SnackBar(
-          content: Text('Não foi possível salvar a cor. Tente novamente.'),
+          content: Text('Não foi possível salvar. Tente novamente.'),
         ),
       );
     }
@@ -102,20 +118,36 @@ class _CustomizationsScreenState extends State<CustomizationsScreen> {
     }
     _initSelection(state.myCosmetics);
 
-    // Preview reflects the LOCAL selection immediately (before saving):
-    // the selected hex, or an empty string for the explicit default.
-    final selectedItem = _selectedColorId == null
+    // Preview reflects the LOCAL pending selection immediately — color and
+    // effect resolve independently (any color + any effect).
+    final selectedColor = _selectedColorId == null
         ? null
         : state.nameColorCatalog
             .where((c) => c.id == _selectedColorId)
             .firstOrNull;
-    final previewOverride = !_selectionReady
+    final previewColor = !_selectionReady
         ? null
         : (_selectedColorId == null
             ? ''
-            : (selectedItem?.hexColor ??
+            : (selectedColor?.hexColor ??
                 state.myCosmetics[CosmeticItem.nameColor]?.hexColor ??
                 user.nameColor));
+    final selectedEffect = _selectedEffectId == null
+        ? null
+        : state.nameEffectCatalog
+            .where((e) => e.id == _selectedEffectId)
+            .firstOrNull;
+    final previewEffect = !_selectionReady
+        ? null
+        : (_selectedEffectId == null
+            ? const NameEffect(id: '') // sentinel: explicit "Nenhum"
+            : (selectedEffect == null
+                ? null
+                : NameEffect(
+                    id: selectedEffect.id,
+                    name: selectedEffect.name,
+                    config: selectedEffect.config,
+                  )));
 
     return Scaffold(
       backgroundColor: AppColors.absoluteBlack,
@@ -138,18 +170,28 @@ class _CustomizationsScreenState extends State<CustomizationsScreen> {
             ProfileCustomizationPreview(
               user: user,
               cosmetics: state.myCosmetics,
-              nameColorOverride: previewOverride,
+              nameColorOverride: previewColor,
+              nameEffectOverride: previewEffect,
             ),
             const SizedBox(height: AppDimensions.spaceLg),
             _NameColorSection(
               catalog: state.nameColorCatalog,
               selectedId: _selectedColorId,
-              onSelect: _select,
+              onSelect: _selectColor,
+            ),
+            const SizedBox(height: AppDimensions.spaceMd),
+            _NameEffectSection(
+              catalog: state.nameEffectCatalog,
+              selectedId: _selectedEffectId,
+              colorHex: previewColor == null || previewColor.isEmpty
+                  ? null
+                  : previewColor,
+              onSelect: _selectEffect,
             ),
             if (_dirty) ...[
               const SizedBox(height: AppDimensions.spaceMd),
               MatrixButton(
-                label: 'Salvar',
+                label: 'Salvar alterações',
                 icon: Icons.check_rounded,
                 expanded: true,
                 isLoading: _saving,
@@ -162,14 +204,216 @@ class _CustomizationsScreenState extends State<CustomizationsScreen> {
               title: 'Moldura',
             ),
             const _CosmeticSection(
-              icon: Icons.auto_awesome_rounded,
-              title: 'Efeito de nome',
-            ),
-            const _CosmeticSection(
               icon: Icons.verified_user_outlined,
               title: 'Badge',
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// ✨ Efeito do nickname — the server-owned effect catalog grouped by
+/// category, plus the "Nenhum" option (nameEffectId = null). Each tile
+/// renders a live mini-preview of the effect through the SAME renderer used
+/// everywhere else (NicknameRenderer), so what you see is what you get.
+class _NameEffectSection extends StatelessWidget {
+  const _NameEffectSection({
+    required this.catalog,
+    required this.selectedId,
+    required this.colorHex,
+    required this.onSelect,
+  });
+
+  final List<CosmeticItem> catalog;
+  final String? selectedId;
+
+  /// The pending/equipped color, so tiles preview color + effect combined.
+  final String? colorHex;
+  final ValueChanged<String?> onSelect;
+
+  static const Map<String, String> _categoryLabels = {
+    'glow': '✨ EFEITOS DE BRILHO',
+    'animated': '⚡ EFEITOS ANIMADOS',
+    'glitch': '👾 EFEITOS GLITCH',
+    'color': '🌈 EFEITOS DE COR',
+    'elemental': '🔥 EFEITOS ELEMENTAIS',
+    'premium': '💎 EFEITOS PREMIUM',
+    'cyberpunk': '🧬 EFEITOS CYBERPUNK',
+    'dark': '🌑 EFEITOS DARK',
+    'visual': '🎭 EFEITOS VISUAIS',
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final groups = <String?, List<CosmeticItem>>{};
+    for (final item in catalog) {
+      groups.putIfAbsent(item.category, () => []).add(item);
+    }
+    final orderedKeys = groups.keys.toList()
+      ..sort((a, b) {
+        if (a == null) return -1;
+        if (b == null) return 1;
+        return groups[a]!.first.sortOrder
+            .compareTo(groups[b]!.first.sortOrder);
+      });
+
+    return Container(
+      padding: const EdgeInsets.all(AppDimensions.spaceLg),
+      decoration: BoxDecoration(
+        color: AppColors.cardSurface,
+        borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
+        border: Border.all(color: AppColors.deepBlue),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.auto_awesome_rounded,
+                  color: AppColors.electricBlue, size: 22),
+              const SizedBox(width: AppDimensions.spaceMd),
+              Expanded(
+                child: Text('Efeito do nickname', style: AppTextStyles.h3),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppDimensions.spaceMd),
+          if (catalog.isEmpty)
+            Padding(
+              padding:
+                  const EdgeInsets.symmetric(vertical: AppDimensions.spaceLg),
+              child: Center(
+                child:
+                    Text('Carregando efeitos…', style: AppTextStyles.caption),
+              ),
+            )
+          else ...[
+            // 🚫 Nenhum — nameEffectId = null; the color keeps working.
+            _NoneEffectTile(
+              selected: selectedId == null,
+              onTap: () => onSelect(null),
+            ),
+            for (final key in orderedKeys) ...[
+              const SizedBox(height: AppDimensions.spaceMd),
+              Text(
+                _categoryLabels[key] ?? (key ?? '').toUpperCase(),
+                style: AppTextStyles.hud.copyWith(fontSize: 11),
+              ),
+              const SizedBox(height: AppDimensions.spaceSm),
+              Wrap(
+                spacing: AppDimensions.spaceSm,
+                runSpacing: AppDimensions.spaceSm,
+                children: [
+                  for (final item in groups[key]!)
+                    _EffectChip(
+                      item: item,
+                      selected: item.id == selectedId,
+                      colorHex: colorHex,
+                      onTap: () => onSelect(item.id),
+                    ),
+                ],
+              ),
+            ],
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// The "🚫 Nenhum" tile — clears the effect (nameEffectId = null).
+class _NoneEffectTile extends StatelessWidget {
+  const _NoneEffectTile({required this.selected, required this.onTap});
+
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppDimensions.spaceMd,
+          vertical: AppDimensions.spaceSm,
+        ),
+        decoration: BoxDecoration(
+          color: AppColors.nightBlue,
+          borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
+          border: Border.all(
+            color: selected ? AppColors.electricBlue : AppColors.deepBlue,
+            width: selected ? 2 : 1,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.block_rounded,
+                color: AppColors.holographicBlue, size: 18),
+            const SizedBox(width: AppDimensions.spaceSm),
+            Text('Nenhum', style: AppTextStyles.body),
+            if (selected) ...[
+              const SizedBox(width: AppDimensions.spaceSm),
+              Icon(Icons.check_circle_rounded,
+                  color: AppColors.electricBlue, size: 16),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// A single effect tile with a LIVE mini-preview: the effect's own name
+/// rendered through NicknameRenderer (lightweight mode — dozens of tiles
+/// animate without hurting scroll).
+class _EffectChip extends StatelessWidget {
+  const _EffectChip({
+    required this.item,
+    required this.selected,
+    required this.colorHex,
+    required this.onTap,
+  });
+
+  final CosmeticItem item;
+  final bool selected;
+  final String? colorHex;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: item.name,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppDimensions.spaceMd,
+            vertical: AppDimensions.spaceSm,
+          ),
+          decoration: BoxDecoration(
+            color: AppColors.nightBlue,
+            borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
+            border: Border.all(
+              color: selected ? AppColors.electricBlue : AppColors.deepBlue,
+              width: selected ? 2 : 1,
+            ),
+          ),
+          child: NicknameRenderer(
+            item.name,
+            nameColor: colorHex,
+            effect: NameEffect(
+              id: item.id,
+              name: item.name,
+              config: item.config,
+            ),
+            background: AppColors.nightBlue,
+            baseStyle: AppTextStyles.body,
+            lightweight: true,
+          ),
         ),
       ),
     );

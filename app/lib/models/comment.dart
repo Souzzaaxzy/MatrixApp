@@ -1,3 +1,5 @@
+import 'name_effect.dart';
+
 /// Comment model — real comments come from the server with the author's
 /// identity (id, username, avatar). Placeholders exist only for legacy
 /// count-only contexts.
@@ -9,6 +11,7 @@ class Comment {
     required this.authorUsername,
     this.authorAvatarUrl,
     this.authorNameColor,
+    this.authorNameEffect,
     required this.text,
     required this.createdAt,
   });
@@ -23,6 +26,7 @@ class Comment {
         authorUsername = '',
         authorAvatarUrl = null,
         authorNameColor = null,
+        authorNameEffect = null,
         text = '',
         createdAt = null;
 
@@ -46,6 +50,9 @@ class Comment {
   /// The comment AUTHOR's own nickname color (hex), embedded by the
   /// server. Null → default color.
   final String? authorNameColor;
+
+  /// The comment AUTHOR's own nickname effect (null → "Nenhum").
+  final NameEffect? authorNameEffect;
 
   final String text;
   final DateTime? createdAt;

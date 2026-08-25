@@ -69,6 +69,13 @@ class ApiClient {
   }) =>
       _request<T>(() => _dio.patch<T>(path, data: data, options: options));
 
+  Future<T> put<T>(
+    String path, {
+    Object? data,
+    Options? options,
+  }) =>
+      _request<T>(() => _dio.put<T>(path, data: data, options: options));
+
   Future<T> delete<T>(String path, {Options? options}) =>
       _request<T>(() => _dio.delete<T>(path, options: options));
 

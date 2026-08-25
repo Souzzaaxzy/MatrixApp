@@ -13,6 +13,7 @@ class CosmeticItem {
     this.rarity = 'COMMON',
     this.category,
     this.sortOrder = 0,
+    this.config = const {},
   });
 
   /// Server id of the item in the catalog.
@@ -38,6 +39,11 @@ class CosmeticItem {
   /// not alphabetical).
   final int sortOrder;
 
+  /// Server-owned render config (NAME_EFFECT items): animation, intensity,
+  /// speed, particles, optional colors. The app renders what this says — it
+  /// never hardcodes per-effect settings.
+  final Map<String, dynamic> config;
+
   /// For NAME_COLOR items the assetUrl IS the hex value ("#0066FF") — the
   /// server owns the palette, so the app never invents color values.
   String? get hexColor =>
@@ -51,6 +57,10 @@ class CosmeticItem {
   static const String profileEffect = 'PROFILE_EFFECT';
   static const String themeAccent = 'THEME_ACCCENT';
   static const String nameColor = 'NAME_COLOR';
+
+  /// Nickname visual effect slot — fully independent from [nameColor]:
+  /// any color combines with any effect.
+  static const String nameEffect = 'NAME_EFFECT';
 }
 
 /// Equipped cosmetics keyed by slot. An empty map means "all defaults"
