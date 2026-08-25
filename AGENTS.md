@@ -103,3 +103,38 @@ analyze clean, APK builds (~54MB). CI green on main.
   Flutter: 97 tests pass, analyze clean.
 - Gotcha: widget tests that navigate to PostDetailScreen/ProfileScreen need
   TWO `tester.pump()` after the tap (route transition + async data load).
+
+## Phase 5 — Activities, profile stats, friends sheet, push
+- **Profile bug fix**: `AppState` now caches profiles per username
+  (`_profiles[username]` + `profileFor(username)`); `currentUser` (session)
+  and the viewed profile are fully separate slots. Viewing a profile NEVER
+  overwrites the session user. Tests: `app_state_test.dart`
+  "profile isolation" group + `profile_screen_test.dart` regression group.
+- **Profile stats**: server `GET /api/users/:username/profile` returns
+  `postsCount` (own posts only) + `friendsCount` (accepted friendships only)
+  in the user DTO; app renders the "Amigos / Posts" counter row
+  (`_ProfileStats` in profile_screen.dart) for the VIEWED user.
+- **Friends list**: `GET /api/friends/:userId?page=&pageSize=` (paginated).
+  App: `FriendsSheet` (modal bottom sheet, drag handle, infinite scroll) from
+  tapping the Amigos counter. Tapping a friend pops the sheet and pushes
+  `/profile/:username`.
+- **FRIEND_ACCEPTED**: server notifies BOTH sender and acceptor (each entry
+  carries the other user as actor). Accept removes the actionable
+  FRIEND_REQUEST notification. App area renamed to "Atividades" (labels only;
+  endpoints/models unchanged).
+- **Push (no FCM, self-contained)**: server holds a `Device` table
+  (`platform`, unique `token`, `lastSeenAt`) + `POST/DELETE /api/devices`
+  + WebSocket `/api/ws` (token auth via `Sec-WebSocket-Protocol`) broadcasting
+  notification payloads. App `PushService` (web_socket_channel +
+  flutter_local_notifications) registers an RFC4122 device id (stored via
+  TokenStore), shows heads-up notifications and routes taps:
+  postId → post detail, else actor profile. Android 13+ permission
+  (POST_NOTIFICATIONS) requested once. Logout unregisters the device.
+- **Android gotcha**: flutter_local_notifications requires core library
+  desugaring — `android/app/build.gradle` enables it
+  (`coreLibraryDesugaringEnabled = true` + `desugar_jdk_libs:2.1.4`).
+- **Flutter gotcha**: never call `AppStateScope.of()` (or any
+  dependOnInheritedWidgetOfExactType) inside `initState` — capture it in
+  `didChangeDependencies` (bug hit in FriendsSheet).
+- Status: server 114 tests pass; app 105 tests pass, analyze clean,
+  APK builds (~24MB).

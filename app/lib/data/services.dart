@@ -1,4 +1,5 @@
 import 'api_client.dart';
+import 'push_service.dart';
 import 'repositories/repositories.dart';
 import 'token_store.dart';
 
@@ -7,12 +8,21 @@ import 'token_store.dart';
 /// Created once at app startup and exposed via [Services.instance]. The UI
 /// reads repositories from here instead of constructing Dio directly.
 class Services {
-  Services._({required this.apiClient, required this.repositories});
+  Services._({
+    required this.apiClient,
+    required this.repositories,
+    required this.push,
+  });
 
   static late final Services instance;
 
+  /// False until [init] completed — guards test contexts that never
+  /// initialize the real data layer.
+  static bool isInitialized = false;
+
   final ApiClient apiClient;
   final Repositories repositories;
+  final PushService push;
 
   AuthRepository get auth => repositories.auth;
   PostRepository get posts => repositories.posts;
@@ -35,6 +45,7 @@ class Services {
     final friends = FriendRepository(apiClient);
     final notifications = NotificationRepository(apiClient);
     final uploads = UploadRepository(apiClient);
+    final push = PushService(api: apiClient, tokenStore: tokenStore);
     final services = Services._(
       apiClient: apiClient,
       repositories: Repositories(
@@ -47,8 +58,10 @@ class Services {
         notifications: notifications,
         uploads: uploads,
       ),
+      push: push,
     );
     instance = services;
+    isInitialized = true;
     return services;
   }
 }

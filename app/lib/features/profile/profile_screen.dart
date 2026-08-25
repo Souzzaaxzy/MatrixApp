@@ -15,6 +15,7 @@ import '../../data/api_config.dart';
 import '../../models/friend_request.dart';
 import '../../models/matrix_user.dart';
 import '../../models/post.dart';
+import 'friends_sheet.dart';
 
 /// Profile screen — the server is the single source of truth.
 ///
@@ -116,11 +117,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
       );
     }
 
-    // The server profile wins over the session snapshot when available.
-    final user = state.profileUser ?? (isOwn ? sessionUser : null);
-    final posts = state.profilePosts;
-    final friendship = state.profileFriendship;
-    final loading = state.isLoadingProfile && state.profileUser == null;
+    // The viewed profile is read from ITS OWN keyed slot — never from a
+    // shared variable. Visiting B and coming back shows A immediately,
+    // because A's slot was never overwritten by B.
+    final profile = state.profileFor(widget.username);
+    final user = profile?.user ?? (isOwn ? sessionUser : null);
+    final posts = profile?.posts ?? const <Post>[];
+    final friendship = profile?.friendship;
+    final loading = state.isLoadingProfile && profile == null;
 
     return Scaffold(
       backgroundColor: AppColors.absoluteBlack,
@@ -147,7 +151,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   child: HudLabel(text: 'LOADING PROFILE...', dot: true),
                 ),
               )
-            else if (_error != null && state.profileUser == null)
+            else if (_error != null && profile == null)
               SliverFillRemaining(
                 hasScrollBody: false,
                 child: EmptyState(
@@ -171,6 +175,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   sending: _sending,
                   onEdit: _openEditProfile,
                   onSend: () => _sendFriendRequest(user.id),
+                  onFriendsTap: () => FriendsSheet.open(context, user),
                 ),
               ),
               const SliverToBoxAdapter(
@@ -240,6 +245,7 @@ class _ProfileHeader extends StatelessWidget {
     required this.sending,
     required this.onEdit,
     required this.onSend,
+    required this.onFriendsTap,
   });
 
   final MatrixUser user;
@@ -248,6 +254,7 @@ class _ProfileHeader extends StatelessWidget {
   final bool sending;
   final VoidCallback onEdit;
   final VoidCallback onSend;
+  final VoidCallback onFriendsTap;
 
   @override
   Widget build(BuildContext context) {
@@ -295,8 +302,9 @@ class _ProfileHeader extends StatelessWidget {
           const SizedBox(height: AppDimensions.spaceMd),
           if (user.name.isNotEmpty)
             Text(user.name, style: AppTextStyles.bodyMuted),
-          const SizedBox(height: AppDimensions.spaceXs),
-          const HudLabel(text: 'USER CONNECTED', dot: true),
+          const SizedBox(height: AppDimensions.spaceLg),
+          // Real counters (server): Amigos opens the friends bottom sheet.
+          _ProfileStats(user: user, onFriendsTap: onFriendsTap),
           if (user.bio.isNotEmpty) ...[
             const SizedBox(height: AppDimensions.spaceMd),
             Text(
@@ -326,8 +334,74 @@ class _ProfileHeader extends StatelessWidget {
   }
 }
 
+/// Real counters row — Amigos (tappable → friends bottom sheet) and Posts.
+/// The numbers come from the server profile payload, so a viewed profile
+/// always shows THAT user's counts, never the session user's.
+class _ProfileStats extends StatelessWidget {
+  const _ProfileStats({required this.user, required this.onFriendsTap});
+
+  final MatrixUser user;
+  final VoidCallback onFriendsTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        _StatColumn(
+          count: user.friendsCount,
+          label: 'Amigos',
+          onTap: onFriendsTap,
+        ),
+        const SizedBox(width: AppDimensions.spaceXxl),
+        _StatColumn(count: user.postsCount, label: 'Posts'),
+      ],
+    );
+  }
+}
+
+class _StatColumn extends StatelessWidget {
+  const _StatColumn({required this.count, required this.label, this.onTap});
+
+  final int count;
+  final String label;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppDimensions.spaceMd,
+          vertical: AppDimensions.spaceXs,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              '$count',
+              style: AppTextStyles.h3.copyWith(
+                fontSize: 20,
+                color: AppColors.electricBlue,
+                shadows: const [
+                  Shadow(color: AppColors.electricBlue, blurRadius: 12),
+                ],
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(label, style: AppTextStyles.hud.copyWith(fontSize: 11)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+
 /// The big friendship button with the three server-managed states:
-/// Seguir (sends a request) / Solicitado (disabled) / Amigos (disabled).
+/// Adicionar (sends a request) / Solicitado (disabled) / Amigos (disabled).
 class FriendshipButton extends StatelessWidget {
   const FriendshipButton({
     super.key,
@@ -363,7 +437,7 @@ class FriendshipButton extends StatelessWidget {
         );
       case Friendship.none:
         return MatrixButton(
-          label: 'Seguir',
+          label: 'Adicionar',
           icon: Icons.person_add_rounded,
           expanded: true,
           isLoading: sending,

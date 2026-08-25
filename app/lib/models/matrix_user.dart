@@ -7,6 +7,8 @@ class MatrixUser {
     this.bio = '',
     this.avatarSeed,
     this.avatarUrl,
+    this.friendsCount = 0,
+    this.postsCount = 0,
   });
 
   final String id;
@@ -21,12 +23,21 @@ class MatrixUser {
   /// fallback initials avatar is shown.
   final String? avatarUrl;
 
+  /// Real server-side counters (profile endpoint only): accepted
+  /// friendships and posts owned by this user. Zero when the endpoint did
+  /// not return them (e.g. search results) — the profile screen only
+  /// renders counters after a profile load.
+  final int friendsCount;
+  final int postsCount;
+
   MatrixUser copyWith({
     String? name,
     String? username,
     String? bio,
     String? avatarSeed,
     String? avatarUrl,
+    int? friendsCount,
+    int? postsCount,
   }) =>
       MatrixUser(
         id: id,
@@ -35,5 +46,7 @@ class MatrixUser {
         bio: bio ?? this.bio,
         avatarSeed: avatarSeed ?? this.avatarSeed,
         avatarUrl: avatarUrl ?? this.avatarUrl,
+        friendsCount: friendsCount ?? this.friendsCount,
+        postsCount: postsCount ?? this.postsCount,
       );
 }

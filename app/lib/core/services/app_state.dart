@@ -37,15 +37,13 @@ class AppState extends ChangeNotifier {
 
   final List<Post> _posts = [];
 
-  /// Posts of the profile currently being viewed (server source of truth —
-  /// loaded via GET /api/users/:username, never derived from the feed cache).
-  final List<Post> _profilePosts = [];
-  MatrixUser? _profileUser;
+  /// Viewed profiles, keyed by lowercase username. This is the core
+  /// currentUser/viewedUser separation: the authenticated user lives ONLY
+  /// in [_currentUser]; every viewed profile (including our own, once
+  /// loaded) is a standalone entry in this map that never overwrites
+  /// [_currentUser]. Opening A → B → C never corrupts A.
+  final Map<String, ProfileData> _profiles = {};
   bool _loadingProfile = false;
-
-  /// Friendship state between the session user and [_profileUser], per the
-  /// server. Null when viewing our own profile (button never renders).
-  Friendship? _profileFriendship;
 
   /// Notifications of the session user (persistent server-side list).
   final List<MatrixNotification> _notifications = [];
@@ -56,10 +54,17 @@ class AppState extends ChangeNotifier {
   final Map<String, Post> _postCache = {};
 
   List<Post> get posts => List.unmodifiable(_posts);
-  List<Post> get profilePosts => List.unmodifiable(_profilePosts);
-  MatrixUser? get profileUser => _profileUser;
-  Friendship? get profileFriendship => _profileFriendship;
   bool get isLoadingProfile => _loadingProfile;
+
+  /// The viewed-profile snapshot for [username] (null/empty → the session
+  /// user's own). Returns null until the first server load completes.
+  ProfileData? profileFor(String? username) {
+    final key = (username == null || username.isEmpty)
+        ? _currentUser?.username
+        : username;
+    if (key == null) return null;
+    return _profiles[key.toLowerCase()];
+  }
   List<MatrixNotification> get notifications => List.unmodifiable(_notifications);
   int get unreadNotifications => _notifications.where((n) => !n.read).length;
   bool get isLoadingNotifications => _loadingNotifications;
@@ -84,6 +89,7 @@ class AppState extends ChangeNotifier {
     try {
       _currentUser = (await _auth.me()).toModel();
       notifyListeners();
+      _syncPush();
       return true;
     } on ApiException catch (e) {
       if (e.isUnauthorized) {
@@ -100,6 +106,7 @@ class AppState extends ChangeNotifier {
     final dto = await _auth.login(username: username, password: password);
     _currentUser = dto.user.toModel();
     notifyListeners();
+    _syncPush();
   }
 
   /// Registers a new account and logs in. Returns the one-time recovery
@@ -116,7 +123,21 @@ class AppState extends ChangeNotifier {
     );
     _currentUser = dto.user.toModel();
     notifyListeners();
+    _syncPush();
     return dto.recoveryCode ?? '';
+  }
+
+  /// Binds the push pipeline to the session (device token + realtime
+  /// socket). No-op in tests: they inject repositories and never touch the
+  /// real Services singleton.
+  void _syncPush() {
+    if (_repos != null || !Services.isInitialized) return;
+    Services.instance.push.sync();
+  }
+
+  void _stopPush() {
+    if (_repos != null || !Services.isInitialized) return;
+    Services.instance.push.stop();
   }
 
   /// Recovers an account via recovery code + new password. The user must
@@ -135,12 +156,11 @@ class AppState extends ChangeNotifier {
 
   /// Logs out and clears local state.
   Future<void> logout() async {
+    _stopPush();
     await _auth.logout();
     _currentUser = null;
     _posts.clear();
-    _profilePosts.clear();
-    _profileUser = null;
-    _profileFriendship = null;
+    _profiles.clear();
     _notifications.clear();
     _feedCursor = null;
     notifyListeners();
@@ -178,14 +198,16 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  /// Finds a post by id in the feed cache, the profile cache, or the
-  /// individual-post cache.
+  /// Finds a post by id in the feed cache, any viewed-profile cache, or
+  /// the individual-post cache.
   Post? _findPost(String postId) {
     for (final p in _posts) {
       if (p.id == postId) return p;
     }
-    for (final p in _profilePosts) {
-      if (p.id == postId) return p;
+    for (final profile in _profiles.values) {
+      for (final p in profile.posts) {
+        if (p.id == postId) return p;
+      }
     }
     return _postCache[postId];
   }
@@ -243,8 +265,16 @@ class AppState extends ChangeNotifier {
   Future<String> createPost({required String text, String? imageUrl}) async {
     final post = await _postsRepo.create(text: text.trim(), imageUrl: imageUrl);
     _posts.insert(0, post);
-    if (_profileUser?.username == post.authorUsername) {
-      _profilePosts.insert(0, post);
+    // Reflect on the author's viewed profile, if loaded: posts list grows
+    // and the server-side counter bumps by one (matches Part 2.3).
+    final key = post.authorUsername.toLowerCase();
+    final profile = _profiles[key];
+    if (profile != null) {
+      _profiles[key] = profile.copyWith(
+        user: profile.user
+            .copyWith(postsCount: profile.user.postsCount + 1),
+        posts: [post, ...profile.posts],
+      );
     }
     notifyListeners();
     return post.id;
@@ -257,7 +287,17 @@ class AppState extends ChangeNotifier {
     try {
       await _postsRepo.delete(postId);
       _posts.removeWhere((p) => p.id == postId);
-      _profilePosts.removeWhere((p) => p.id == postId);
+      // Remove from every viewed-profile cache and keep the author's
+      // counter in sync with the server (Posts: 9 → 8).
+      _profiles.updateAll((key, profile) {
+        if (!profile.posts.any((p) => p.id == postId)) return profile;
+        return profile.copyWith(
+          user: profile.user.copyWith(
+            postsCount: (profile.user.postsCount - 1).clamp(0, 1 << 31),
+          ),
+          posts: profile.posts.where((p) => p.id != postId).toList(),
+        );
+      });
       _postCache.remove(postId);
       notifyListeners();
       return true;
@@ -280,8 +320,15 @@ class AppState extends ChangeNotifier {
   /// [updated] into every cached copy of the same post, so a like made on
   /// the detail screen is reflected in the feed and the profile grid.
   void syncPost(Post updated) {
-    for (final list in [_posts, _profilePosts]) {
-      for (final p in list) {
+    for (final p in _posts) {
+      if (p.id == updated.id && !identical(p, updated)) {
+        p.liked = updated.liked;
+        p.likes = updated.likes;
+        p.commentCount = updated.commentCount;
+      }
+    }
+    for (final profile in _profiles.values) {
+      for (final p in profile.posts) {
         if (p.id == updated.id && !identical(p, updated)) {
           p.liked = updated.liked;
           p.likes = updated.likes;
@@ -299,21 +346,25 @@ class AppState extends ChangeNotifier {
   }
 
   /// Loads a profile (user + their posts + friendship state) from the
-  /// server. This is the ONLY source for the profile screen — never the
-  /// local feed cache.
+  /// server into its OWN keyed slot. This is the ONLY source for the
+  /// profile screen — never the local feed cache, and never the data of
+  /// another profile: a concurrent visit to B never rewrites A's slot.
   Future<void> loadProfile(String username) async {
     if (_loadingProfile) return;
     _loadingProfile = true;
     notifyListeners();
     try {
       final result = await _users.profile(username);
-      _profileUser = result.user;
-      _profileFriendship = result.friendship;
-      _profilePosts
-        ..clear()
-        ..addAll(result.posts);
-      // Keep the session user fresh when viewing our own profile.
-      if (_currentUser?.username == result.user.username) {
+      final key = result.user.username.toLowerCase();
+      _profiles[key] = ProfileData(
+        user: result.user,
+        posts: result.posts,
+        friendship: result.friendship,
+      );
+      // Keep the session user fresh when viewing our own profile — a copy
+      // of name/bio/avatar only, identity fields (id/username) are NEVER
+      // overwritten by a viewed profile.
+      if (_currentUser?.username.toLowerCase() == key) {
         _currentUser = _currentUser!.copyWith(
           name: result.user.name,
           bio: result.user.bio,
@@ -372,24 +423,50 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Sends a friend request to another user. On success the profile
-  /// friendship state moves to Solicitado (OUTGOING_PENDING).
+  /// Sends a friend request to another user. On success the friendship
+  /// state of that user's viewed profile moves to Solicitado
+  /// (OUTGOING_PENDING) — only that profile's slot is touched.
   Future<void> sendFriendRequest(String userId) async {
     await _friends.send(userId);
-    _profileFriendship = Friendship.outgoingPending;
+    _profiles.updateAll((key, profile) => profile.user.id == userId
+        ? profile.copyWith(friendship: Friendship.outgoingPending)
+        : profile);
     notifyListeners();
   }
 
   /// Accepts a pending friend request received by the current user. The
-  /// actionable notification card disappears and the relation becomes
-  /// Amigos on both sides (server-managed).
+  /// actionable notification card disappears, the relation becomes Amigos
+  /// on both sides (server-managed) and the Amigos counters of the two
+  /// affected profiles (mine + the sender's, when cached) bump by one.
   Future<void> acceptFriendRequest(String requestId) async {
+    // Resolve the sender BEFORE the actionable card disappears so the
+    // counters of the two affected profiles can be updated.
+    final senderId = _notifications
+        .where((n) => n.friendRequestId == requestId)
+        .map((n) => n.actorId)
+        .firstOrNull;
     await _friends.accept(requestId);
     _removeNotificationWhere((n) => n.friendRequestId == requestId);
-    // If the accepted request belongs to the profile being viewed, refresh
-    // the friendship state to Amigos.
-    _profileFriendship = Friendship.friends;
+    final me = _currentUser?.id;
+    _profiles.updateAll((key, profile) {
+      final uid = profile.user.id;
+      final isMine = uid == me;
+      final isSender = uid == senderId;
+      if (!isMine && !isSender) return profile;
+      return profile.copyWith(
+        user: profile.user
+            .copyWith(friendsCount: profile.user.friendsCount + 1),
+        friendship: isSender ? Friendship.friends : profile.friendship,
+      );
+    });
     notifyListeners();
+  }
+
+  /// Loads one page of the friends list of [userId] (own or another
+  /// user's profile — the server returns accepted friendships only).
+  Future<({List<MatrixUser> friends, int total, int page, int pageSize})>
+      loadFriends(String userId, {int page = 1, int pageSize = 20}) {
+    return _friends.list(userId, page: page, pageSize: pageSize);
   }
 
   /// Rejects a pending friend request. The card disappears and the sender
@@ -483,4 +560,32 @@ class AppState extends ChangeNotifier {
     _disposed = true;
     super.dispose();
   }
+}
+
+/// Immutable snapshot of a viewed profile: the viewed user, their posts
+/// and the friendship state between the session user and [user]. Stored in
+/// [AppState] keyed by lowercase username so the session user
+/// (currentUser) and every viewed profile (viewedUser) stay isolated —
+/// navigating A → B → C → A never corrupts A.
+class ProfileData {
+  const ProfileData({
+    required this.user,
+    required this.posts,
+    this.friendship,
+  });
+
+  final MatrixUser user;
+  final List<Post> posts;
+  final Friendship? friendship;
+
+  ProfileData copyWith({
+    MatrixUser? user,
+    List<Post>? posts,
+    Friendship? friendship,
+  }) =>
+      ProfileData(
+        user: user ?? this.user,
+        posts: posts ?? this.posts,
+        friendship: friendship ?? this.friendship,
+      );
 }

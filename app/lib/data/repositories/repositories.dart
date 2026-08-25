@@ -248,6 +248,27 @@ class FriendRepository {
     final json = await _api.get<Map<String, dynamic>>('/api/users/$userId/friendship');
     return Friendship.fromApi(json['state'] as String?);
   }
+
+  /// Paginated friends list of a user (accepted friendships only). Used by
+  /// the profile "Amigos" bottom sheet; [total] matches the profile
+  /// counter because both come from the same server query.
+  Future<({List<MatrixUser> friends, int total, int page, int pageSize})> list(
+    String userId, {
+    int page = 1,
+    int pageSize = 20,
+  }) async {
+    final json = await _api.get<Map<String, dynamic>>(
+      '/api/users/$userId/friends',
+      queryParameters: {'page': page, 'pageSize': pageSize},
+    );
+    final list = (json['friends'] as List).cast<Map<String, dynamic>>();
+    return (
+      friends: list.map(PublicUserDto.fromJson).map((d) => d.toModel()).toList(),
+      total: (json['total'] as num?)?.toInt() ?? 0,
+      page: (json['page'] as num?)?.toInt() ?? page,
+      pageSize: (json['pageSize'] as num?)?.toInt() ?? pageSize,
+    );
+  }
 }
 
 /// Notifications repository — persistent server-side notifications.

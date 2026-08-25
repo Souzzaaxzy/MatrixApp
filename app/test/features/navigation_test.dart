@@ -10,7 +10,7 @@ void main() {
     expect(find.text('Início'), findsOneWidget);
     expect(find.text('Buscar'), findsOneWidget);
     expect(find.text('Akame'), findsOneWidget);
-    expect(find.text('Notificações'), findsOneWidget);
+    expect(find.text('Atividades'), findsOneWidget);
     expect(find.text('Perfil'), findsOneWidget);
   });
 
@@ -30,10 +30,10 @@ void main() {
   testWidgets('switches to notifications tab on tap', (tester) async {
     await pumpMatrixApp(tester, const HomeScreen());
 
-    await tester.tap(find.text('Notificações'));
+    await tester.tap(find.text('Atividades'));
     await tester.pump(const Duration(milliseconds: 400));
 
-    expect(find.text('NOTIFICAÇÕES'), findsOneWidget);
+    expect(find.text('ATIVIDADES'), findsOneWidget);
   });
 
   testWidgets('switches to profile tab on tap', (tester) async {

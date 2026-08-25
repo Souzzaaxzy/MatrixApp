@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:matrix_app/core/services/app_state.dart';
+import 'package:matrix_app/models/friend_request.dart';
 
 import '../helpers/fake_repositories.dart';
 
@@ -78,11 +79,12 @@ void main() {
   group('loadProfile', () {
     test('loads the user and their posts from the server', () async {
       await state.loadProfile('leonardo');
-      expect(state.profileUser, isNotNull);
-      expect(state.profileUser!.username, 'leonardo');
-      expect(state.profilePosts, isNotEmpty);
+      final profile = state.profileFor('leonardo');
+      expect(profile, isNotNull);
+      expect(profile!.user.username, 'leonardo');
+      expect(profile.posts, isNotEmpty);
       expect(
-        state.profilePosts.every((p) => p.authorUsername == 'leonardo'),
+        profile.posts.every((p) => p.authorUsername == 'leonardo'),
         isTrue,
       );
     });
@@ -92,6 +94,36 @@ void main() {
       await state.updateProfile(name: 'Neo');
       await state.loadProfile('leonardo');
       expect(state.currentUser!.name, 'Neo');
+    });
+  });
+
+  // Regression suite for the profile bug: the session user and the viewed
+  // user live in separate slots — viewing a profile must NEVER overwrite
+  // currentUser, and profiles must not bleed into each other.
+  group('profile isolation (currentUser vs viewedUser)', () {
+    test('viewing another profile never overwrites the session user',
+        () async {
+      await state.loadProfile('joao');
+      expect(state.currentUser!.username, 'leonardo');
+      expect(state.profileFor('joao')!.user.username, 'joao');
+    });
+
+    test('slots stay independent across A → B → A navigation', () async {
+      await state.loadProfile('joao');
+      await state.loadProfile('leonardo');
+      expect(state.profileFor('joao')!.user.username, 'joao');
+      expect(state.profileFor('leonardo')!.user.username, 'leonardo');
+      expect(state.currentUser!.username, 'leonardo');
+    });
+
+    test('sendFriendRequest only touches that profile slot', () async {
+      await state.loadProfile('joao');
+      await state.sendFriendRequest('u2');
+      expect(
+        state.profileFor('joao')!.friendship,
+        Friendship.outgoingPending,
+      );
+      expect(state.currentUser!.username, 'leonardo');
     });
   });
 

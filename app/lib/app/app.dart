@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../core/services/app_state.dart';
 import '../core/widgets/app_state_scope.dart';
+import '../data/services.dart';
 import '../features/auth/login/login_screen.dart';
 import '../features/auth/recover/recover_screen.dart';
 import '../features/auth/register/register_screen.dart';
@@ -15,8 +16,46 @@ import 'routes.dart';
 import 'theme/app_theme.dart';
 
 /// Root widget for the MATRIX app.
-class MatrixApp extends StatelessWidget {
+class MatrixApp extends StatefulWidget {
   const MatrixApp({super.key});
+
+  @override
+  State<MatrixApp> createState() => _MatrixAppState();
+}
+
+class _MatrixAppState extends State<MatrixApp> {
+  final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
+
+  @override
+  void initState() {
+    super.initState();
+    // Tapping a native notification deep-links into the matching screen:
+    // LIKE/COMMENT → the post; FRIEND_REQUEST → Atividades;
+    // FRIEND_ACCEPTED → the friend's profile.
+    if (Services.isInitialized) {
+      Services.instance.push.onNavigate = _onPushNavigate;
+    }
+  }
+
+  void _onPushNavigate(Map<String, dynamic> data) {
+    final navigator = _navigatorKey.currentState;
+    if (navigator == null) return;
+    switch (data['type']) {
+      case 'LIKE':
+      case 'COMMENT':
+        final postId = data['postId'] as String?;
+        if (postId != null && postId.isNotEmpty) {
+          navigator.pushNamed(AppRoutes.postDetail, arguments: postId);
+        }
+      case 'FRIEND_REQUEST':
+        navigator.pushNamed(AppRoutes.home, arguments: 3);
+      case 'FRIEND_ACCEPTED':
+        final username = data['actorUsername'] as String?;
+        if (username != null && username.isNotEmpty) {
+          navigator.pushNamed(AppRoutes.profile, arguments: username);
+        }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -26,6 +65,7 @@ class MatrixApp extends StatelessWidget {
         title: 'MATRIX',
         debugShowCheckedModeBanner: false,
         theme: AppTheme.dark,
+        navigatorKey: _navigatorKey,
         initialRoute: AppRoutes.splash,
         onGenerateRoute: (settings) {
           switch (settings.name) {

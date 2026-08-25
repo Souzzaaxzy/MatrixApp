@@ -105,7 +105,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
               automaticallyImplyLeading: false,
               backgroundColor: AppColors.absoluteBlack,
               surfaceTintColor: Colors.transparent,
-              title: Text('NOTIFICAÇÕES',
+              title: Text('ATIVIDADES',
                   style: AppTextStyles.title.copyWith(fontSize: 18)),
               actions: [
                 if (state.unreadNotifications > 0)
@@ -200,7 +200,9 @@ class _NotificationTile extends StatelessWidget {
       case 'FRIEND_REQUEST':
         return 'enviou uma solicitação de amizade.';
       case 'FRIEND_ACCEPTED':
-        return 'aceitou sua solicitação de amizade.';
+        // Rendered by the dedicated spans in [build]: "Agora você e @x
+        // são amigos."
+        return 'são amigos.';
       default:
         return 'interagiu com você.';
     }
@@ -249,13 +251,24 @@ class _NotificationTile extends StatelessWidget {
                 RichText(
                   text: TextSpan(
                     style: AppTextStyles.bodyMuted,
-                    children: [
-                      TextSpan(
-                        text: '@${n.actorUsername}',
-                        style: AppTextStyles.h3.copyWith(fontSize: 14),
-                      ),
-                      TextSpan(text: ' ${description(n)}'),
-                    ],
+                    children: n.type == 'FRIEND_ACCEPTED'
+                        ? [
+                            const TextSpan(text: 'Agora você e '),
+                            TextSpan(
+                              text: '@${n.actorUsername}',
+                              style:
+                                  AppTextStyles.h3.copyWith(fontSize: 14),
+                            ),
+                            const TextSpan(text: ' são amigos.'),
+                          ]
+                        : [
+                            TextSpan(
+                              text: '@${n.actorUsername}',
+                              style:
+                                  AppTextStyles.h3.copyWith(fontSize: 14),
+                            ),
+                            TextSpan(text: ' ${description(n)}'),
+                          ],
                   ),
                 ),
                 const SizedBox(height: AppDimensions.spaceXs),

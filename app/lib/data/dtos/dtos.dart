@@ -171,6 +171,8 @@ class PublicUserDto {
   final String username;
   final String? avatarUrl;
   final String bio;
+  final int friendsCount;
+  final int postsCount;
 
   const PublicUserDto({
     required this.id,
@@ -178,6 +180,8 @@ class PublicUserDto {
     required this.username,
     this.avatarUrl,
     required this.bio,
+    this.friendsCount = 0,
+    this.postsCount = 0,
   });
 
   MatrixUser toModel() => MatrixUser(
@@ -186,6 +190,8 @@ class PublicUserDto {
         username: username,
         bio: bio,
         avatarUrl: avatarUrl,
+        friendsCount: friendsCount,
+        postsCount: postsCount,
       );
 
   factory PublicUserDto.fromJson(Map<String, dynamic> json) => PublicUserDto(
@@ -194,6 +200,8 @@ class PublicUserDto {
         username: json['username'] as String,
         avatarUrl: json['avatarUrl'] as String?,
         bio: (json['bio'] as String?) ?? '',
+        friendsCount: (json['friendsCount'] as num?)?.toInt() ?? 0,
+        postsCount: (json['postsCount'] as num?)?.toInt() ?? 0,
       );
 }
 

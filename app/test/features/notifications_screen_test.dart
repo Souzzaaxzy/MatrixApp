@@ -46,8 +46,32 @@ void main() {
     await pumpMatrixApp(tester, const NotificationsScreen());
     await tester.pump(const Duration(milliseconds: 400));
 
-    expect(find.text('NOTIFICAÇÕES'), findsOneWidget);
+    expect(find.text('ATIVIDADES'), findsOneWidget);
     expect(find.text('ALL CLEAR'), findsOneWidget);
+  });
+
+  testWidgets(
+      'friend accepted shows "Agora você e @x são amigos." and opens the '
+      'friend profile on tap', (tester) async {
+    final state = await seededAppStateWithSocial(notifications: [
+      _notification(id: 'n9', type: 'FRIEND_ACCEPTED', read: false),
+    ]);
+    await pumpMatrixApp(tester, const NotificationsScreen(), state: state);
+    await tester.pump(const Duration(milliseconds: 400));
+
+    final message = find.textContaining(
+      'Agora você e @joao são amigos.',
+      findRichText: true,
+    );
+    expect(message, findsOneWidget);
+
+    await tester.tap(message);
+    await tester.pump(const Duration(milliseconds: 800));
+    await tester.pump(const Duration(milliseconds: 800));
+
+    // Opens the friend's profile (respecting currentUser ≠ viewedUser).
+    expect(find.text('ADICIONAR'), findsOneWidget);
+    expect(find.textContaining('joao', findRichText: true), findsWidgets);
   });
 
   testWidgets('renders like notification with actor, description and unread state', (tester) async {

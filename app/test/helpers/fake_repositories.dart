@@ -358,8 +358,16 @@ class _FakeUserRepository implements UserRepository {
     final userPosts =
         _store.posts.where((p) => p.authorUsername == username).toList();
     final isCurrent = user.id == _store.currentUserId;
+    // Real counters, like the server computes them: posts of THIS user and
+    // accepted friendships only.
+    final friendsCount = _store.friendships
+        .where((pair) => pair.split('|').contains(user.id))
+        .length;
     return (
-      user: user,
+      user: user.copyWith(
+        postsCount: userPosts.length,
+        friendsCount: friendsCount,
+      ),
       posts: userPosts,
       friendship: isCurrent ? null : _store.friendshipState(user.id),
     );
@@ -463,6 +471,27 @@ class _FakeFriendRepository implements FriendRepository {
   @override
   Future<Friendship> state(String userId) async =>
       _store.friendshipState(userId);
+
+  @override
+  Future<({List<MatrixUser> friends, int total, int page, int pageSize})> list(
+    String userId, {
+    int page = 1,
+    int pageSize = 20,
+  }) async {
+    final ids = <String>[];
+    for (final pair in _store.friendships) {
+      final parts = pair.split('|');
+      if (parts.contains(userId)) {
+        ids.add(parts.firstWhere((id) => id != userId));
+      }
+    }
+    final all = ids.map((id) => _store.users[id]).whereType<MatrixUser>().toList();
+    final start = (page - 1) * pageSize;
+    final slice = start >= all.length
+        ? <MatrixUser>[]
+        : all.sublist(start, (start + pageSize).clamp(0, all.length));
+    return (friends: slice, total: all.length, page: page, pageSize: pageSize);
+  }
 }
 
 class _FakeNotificationRepository implements NotificationRepository {

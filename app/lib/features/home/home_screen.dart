@@ -11,7 +11,7 @@ import '../search/search_screen.dart';
 
 /// Main navigation shell with a persistent bottom bar.
 ///
-/// Tabs: Início, Buscar, Akame, Notificações, Perfil. The post creation
+/// Tabs: Início, Buscar, Akame, Atividades, Perfil. The post creation
 /// flow is reached from the floating "+" button on the own profile —
 /// there is no creation entry in the bottom bar anymore.
 class HomeScreen extends StatefulWidget {
@@ -72,7 +72,7 @@ class _HomeScreenState extends State<HomeScreen> {
       MatrixNavDestination(
         icon: Icons.notifications_outlined,
         activeIcon: Icons.notifications_rounded,
-        label: 'Notificações',
+        label: 'Atividades',
         badgeCount: state.unreadNotifications,
       ),
       const MatrixNavDestination(

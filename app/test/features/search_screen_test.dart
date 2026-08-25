@@ -35,9 +35,9 @@ void main() {
     await tester.pump(const Duration(milliseconds: 800));
     await tester.pump(const Duration(milliseconds: 800));
 
-    // The profile screen loads with the searched user and the Seguir button.
+    // The profile screen loads with the searched user and the Adicionar button.
     expect(find.text('PERFIL'), findsOneWidget);
-    expect(find.text('SEGUIR'), findsOneWidget);
+    expect(find.text('ADICIONAR'), findsOneWidget);
   });
 
   testWidgets('shows empty state when no user matches', (tester) async {
