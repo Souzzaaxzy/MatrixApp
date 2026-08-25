@@ -4,6 +4,7 @@ import 'package:matrix_app/data/api_config.dart';
 import 'package:matrix_app/data/dtos/dtos.dart';
 import 'package:matrix_app/data/repositories/repositories.dart';
 import 'package:matrix_app/models/comment.dart';
+import 'package:matrix_app/models/cosmetic_item.dart';
 import 'package:matrix_app/models/friend_request.dart';
 import 'package:matrix_app/models/matrix_notification.dart';
 import 'package:matrix_app/models/matrix_user.dart';
@@ -26,18 +27,21 @@ class FakeRepositories extends Repositories {
     required super.friends,
     required super.notifications,
     required super.uploads,
+    required super.customization,
   }) : _store = store;
 
   factory FakeRepositories({
     bool failLikes = false,
     Map<String, List<Comment>> seedComments = const {},
     List<MatrixNotification> seedNotifications = const [],
+    Map<String, CosmeticItem> seedEquippedCosmetics = const {},
   }) {
     final store = FakeStore();
     seedComments.forEach((postId, comments) {
       store.commentsByPost[postId] = List.of(comments);
     });
     store.notifications.addAll(seedNotifications);
+    store.equippedCosmetics.addAll(seedEquippedCosmetics);
     return FakeRepositories._(
       store: store,
       auth: _FakeAuthRepository(store),
@@ -48,6 +52,7 @@ class FakeRepositories extends Repositories {
       friends: _FakeFriendRepository(store),
       notifications: _FakeNotificationRepository(store),
       uploads: const _FakeUploadRepository(),
+      customization: _FakeCustomizationRepository(store),
     );
   }
 
@@ -129,6 +134,9 @@ class FakeStore {
   /// Friendship pairs stored as `a|b` with ids sorted — one row per
   /// friendship, no duplicates, just like the SQLite schema.
   late final Set<String> friendships;
+
+  /// Cosmetics equipped by the session user, keyed by slot.
+  final Map<String, CosmeticItem> equippedCosmetics = {};
 
   MatrixUser get currentUser => users[currentUserId]!;
 
@@ -418,6 +426,37 @@ class _FakeUploadRepository implements UploadRepository {
 
   @override
   Future<String> upload(File file) async => 'https://fake.matrix.app/u/test.png';
+}
+
+/// In-memory cosmetics: the session user "owns" everything they equip —
+/// ownership validation is a server concern tested in ServidorMtx.
+class _FakeCustomizationRepository implements CustomizationRepository {
+  _FakeCustomizationRepository(this._store);
+
+  final FakeStore _store;
+
+  @override
+  Future<List<CosmeticItem>> catalog({String? type}) async => const [];
+
+  @override
+  Future<List<CosmeticItem>> inventory() async =>
+      _store.equippedCosmetics.values.toList();
+
+  @override
+  Future<Map<String, CosmeticItem>> equipped() async =>
+      Map.of(_store.equippedCosmetics);
+
+  @override
+  Future<CosmeticItem> equip(String itemId) async {
+    final item = CosmeticItem(id: itemId, slot: CosmeticItem.avatarFrame, name: itemId);
+    _store.equippedCosmetics[item.slot] = item;
+    return item;
+  }
+
+  @override
+  Future<void> unequip(String slot) async {
+    _store.equippedCosmetics.remove(slot);
+  }
 }
 
 class _FakeFriendRepository implements FriendRepository {

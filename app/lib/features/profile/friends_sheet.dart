@@ -7,6 +7,7 @@ import '../../app/theme/app_text_styles.dart';
 import '../../core/services/app_state.dart';
 import '../../core/widgets/app_state_scope.dart';
 import '../../core/widgets/hud_label.dart';
+import '../../core/widgets/theme_watcher.dart';
 import '../../core/widgets/user_avatar.dart';
 import '../../data/api_config.dart';
 import '../../models/matrix_user.dart';
@@ -27,7 +28,9 @@ class FriendsSheet extends StatefulWidget {
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      builder: (_) => FriendsSheet(user: user),
+      // ThemeWatcher keeps the sheet on the active palette when the theme
+      // flips while it is open.
+      builder: (_) => ThemeWatcher(builder: (_) => FriendsSheet(user: user)),
     );
   }
 

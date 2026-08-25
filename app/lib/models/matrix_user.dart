@@ -1,3 +1,5 @@
+import 'cosmetic_item.dart';
+
 /// A MATRIX network user.
 class MatrixUser {
   const MatrixUser({
@@ -9,6 +11,7 @@ class MatrixUser {
     this.avatarUrl,
     this.friendsCount = 0,
     this.postsCount = 0,
+    this.customization = const {},
   });
 
   final String id;
@@ -30,6 +33,14 @@ class MatrixUser {
   final int friendsCount;
   final int postsCount;
 
+  /// Equipped cosmetics of THIS user, keyed by slot (AVATAR_FRAME, BADGE,
+  /// ...). Comes from the profile endpoint; empty when nothing is equipped
+  /// or when the endpoint did not include it (search results, friends).
+  final CosmeticMap customization;
+
+  /// The equipped cosmetic for [slot], or null (default rendering).
+  CosmeticItem? cosmetic(String slot) => customization[slot];
+
   MatrixUser copyWith({
     String? name,
     String? username,
@@ -38,6 +49,7 @@ class MatrixUser {
     String? avatarUrl,
     int? friendsCount,
     int? postsCount,
+    CosmeticMap? customization,
   }) =>
       MatrixUser(
         id: id,
@@ -48,5 +60,6 @@ class MatrixUser {
         avatarUrl: avatarUrl ?? this.avatarUrl,
         friendsCount: friendsCount ?? this.friendsCount,
         postsCount: postsCount ?? this.postsCount,
+        customization: customization ?? this.customization,
       );
 }

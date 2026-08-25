@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 
+import '../core/widgets/theme_watcher.dart';
 import '../features/auth/login/login_screen.dart';
 import '../features/auth/recover/recover_screen.dart';
 import '../features/auth/register/register_screen.dart';
 import '../features/create_post/create_post_screen.dart';
+import '../features/customizations/customizations_screen.dart';
 import '../features/home/home_screen.dart';
 import '../features/post/post_detail_screen.dart';
 import '../features/profile/edit_profile_screen.dart';
@@ -22,6 +24,9 @@ class AppRoutes {
   static const String createPost = '/home/create-post';
   static const String editProfile = '/home/edit-profile';
 
+  /// Profile customizations (cosmetics) — session user only.
+  static const String customizations = '/home/customizations';
+
   /// Post detail. Argument: the post's server id (String).
   static const String postDetail = '/home/post';
 
@@ -35,23 +40,19 @@ class AppRoutes {
 /// (HomeScreen) instead of a "Rota não encontrada" dead-end. The route
 /// settings are always preserved so `popUntil((r) => r.settings.name == x)`
 /// works on any pushed route.
+///
+/// Every page is built inside a [ThemeWatcher] with a FRESH (non-const)
+/// instance: widgets read colors from the static `AppColors` palette at
+/// build time, which registers no inherited dependency — and the route
+/// layer caches pageBuilder results — so without it a theme switch rebuilt
+/// the MaterialApp but every screen kept the OLD palette until a restart.
+/// The watcher re-runs the builder on theme changes, repainting every
+/// route in the same frame.
 PageRoute buildAppRoute(RouteSettings settings) {
-  final Widget page = switch (settings.name) {
-    AppRoutes.splash => const SplashScreen(),
-    AppRoutes.login => const LoginScreen(),
-    AppRoutes.register => const RegisterScreen(),
-    AppRoutes.recover => const RecoverScreen(),
-    AppRoutes.home =>
-      HomeScreen(initialIndex: (settings.arguments as int?) ?? 0),
-    AppRoutes.createPost => const CreatePostScreen(),
-    AppRoutes.editProfile => const EditProfileScreen(),
-    AppRoutes.postDetail => _postDetail(settings.arguments as String?),
-    AppRoutes.profile => ProfileScreen(username: _usernameArg(settings.arguments)),
-    _ => const HomeScreen(), // defensive fallback — never a 404 page
-  };
   return PageRouteBuilder(
     settings: settings,
-    pageBuilder: (_, __, ___) => page,
+    pageBuilder: (_, __, ___) =>
+        ThemeWatcher(builder: (_) => _buildPage(settings)),
     transitionsBuilder: (_, animation, __, child) {
       return FadeTransition(
         opacity: CurvedAnimation(parent: animation, curve: Curves.easeOut),
@@ -62,9 +63,29 @@ PageRoute buildAppRoute(RouteSettings settings) {
   );
 }
 
+/// Constructs the page for [settings]. Always returns a NEW instance —
+/// identical (const) widget instances are skipped by the element tree on
+/// rebuild and would freeze the previous theme's colors.
+Widget _buildPage(RouteSettings settings) {
+  return switch (settings.name) {
+    AppRoutes.splash => SplashScreen(),
+    AppRoutes.login => LoginScreen(),
+    AppRoutes.register => RegisterScreen(),
+    AppRoutes.recover => RecoverScreen(),
+    AppRoutes.home =>
+      HomeScreen(initialIndex: (settings.arguments as int?) ?? 0),
+    AppRoutes.createPost => CreatePostScreen(),
+    AppRoutes.editProfile => EditProfileScreen(),
+    AppRoutes.customizations => CustomizationsScreen(),
+    AppRoutes.postDetail => _postDetail(settings.arguments as String?),
+    AppRoutes.profile => ProfileScreen(username: _usernameArg(settings.arguments)),
+    _ => HomeScreen(), // defensive fallback — never a 404 page
+  };
+}
+
 Widget _postDetail(String? postId) {
   if (postId != null && postId.isNotEmpty) return PostDetailScreen(postId: postId);
-  return const HomeScreen();
+  return HomeScreen();
 }
 
 String? _usernameArg(Object? arg) {

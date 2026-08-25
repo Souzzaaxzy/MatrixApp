@@ -1,4 +1,5 @@
 import '../../models/comment.dart';
+import '../../models/cosmetic_item.dart';
 import '../../models/friend_request.dart';
 import '../../models/matrix_notification.dart';
 import '../../models/matrix_user.dart';
@@ -173,6 +174,7 @@ class PublicUserDto {
   final String bio;
   final int friendsCount;
   final int postsCount;
+  final CosmeticMap customization;
 
   const PublicUserDto({
     required this.id,
@@ -182,6 +184,7 @@ class PublicUserDto {
     required this.bio,
     this.friendsCount = 0,
     this.postsCount = 0,
+    this.customization = const {},
   });
 
   MatrixUser toModel() => MatrixUser(
@@ -192,6 +195,7 @@ class PublicUserDto {
         avatarUrl: avatarUrl,
         friendsCount: friendsCount,
         postsCount: postsCount,
+        customization: customization,
       );
 
   factory PublicUserDto.fromJson(Map<String, dynamic> json) => PublicUserDto(
@@ -202,6 +206,67 @@ class PublicUserDto {
         bio: (json['bio'] as String?) ?? '',
         friendsCount: (json['friendsCount'] as num?)?.toInt() ?? 0,
         postsCount: (json['postsCount'] as num?)?.toInt() ?? 0,
+        customization: parseCustomization(json['customization']),
+      );
+}
+
+/// Parses the profile `customization` object: slot → equipped cosmetic.
+/// Absent/invalid payloads degrade to "nothing equipped" (all defaults).
+CosmeticMap parseCustomization(Object? raw) {
+  if (raw is! Map) return const {};
+  final map = <String, CosmeticItem>{};
+  raw.forEach((slot, value) {
+    if (slot is String && value is Map<String, dynamic>) {
+      final itemId = value['itemId'] as String?;
+      final name = value['name'] as String?;
+      if (itemId != null && name != null) {
+        map[slot] = CosmeticItem(
+          id: itemId,
+          slot: slot,
+          name: name,
+          assetUrl: (value['assetUrl'] as String?) ?? '',
+          rarity: (value['rarity'] as String?) ?? 'COMMON',
+        );
+      }
+    }
+  });
+  return map;
+}
+
+/// A cosmetic entry as returned by the customization endpoints
+/// (catalog / inventory / equipped).
+class CosmeticItemDto {
+  final String id;
+  final String slot;
+  final String name;
+  final String assetUrl;
+  final String rarity;
+
+  const CosmeticItemDto({
+    required this.id,
+    required this.slot,
+    required this.name,
+    this.assetUrl = '',
+    this.rarity = 'COMMON',
+  });
+
+  CosmeticItem toModel() => CosmeticItem(
+        id: id,
+        slot: slot,
+        name: name,
+        assetUrl: assetUrl,
+        rarity: rarity,
+      );
+
+  /// Catalog/inventory entries carry `id` + `type`; equipped entries carry
+  /// `itemId` + `slot`. Both shapes map onto the same model.
+  factory CosmeticItemDto.fromJson(Map<String, dynamic> json) =>
+      CosmeticItemDto(
+        id: (json['id'] as String?) ?? (json['itemId'] as String),
+        slot: (json['type'] as String?) ?? (json['slot'] as String),
+        name: json['name'] as String,
+        assetUrl: (json['assetUrl'] as String?) ?? '',
+        rarity: (json['rarity'] as String?) ?? 'COMMON',
       );
 }
 

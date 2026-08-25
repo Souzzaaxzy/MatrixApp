@@ -7,6 +7,7 @@ import 'package:matrix_app/core/widgets/app_state_scope.dart';
 import 'package:matrix_app/features/auth/login/login_screen.dart';
 import 'package:matrix_app/features/auth/register/register_screen.dart';
 import 'package:matrix_app/features/create_post/create_post_screen.dart';
+import 'package:matrix_app/features/customizations/customizations_screen.dart';
 import 'package:matrix_app/features/home/home_screen.dart';
 import 'package:matrix_app/features/post/post_detail_screen.dart';
 import 'package:matrix_app/features/profile/edit_profile_screen.dart';
@@ -40,6 +41,7 @@ Future<void> pumpMatrixApp(
           AppRoutes.home: (_) => const HomeScreen(),
           AppRoutes.createPost: (_) => const CreatePostScreen(),
           AppRoutes.editProfile: (_) => const EditProfileScreen(),
+          AppRoutes.customizations: (_) => const CustomizationsScreen(),
           AppRoutes.postDetail: (context) {
             final id = ModalRoute.of(context)!.settings.arguments as String;
             return PostDetailScreen(postId: id);

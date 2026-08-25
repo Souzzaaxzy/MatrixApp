@@ -71,6 +71,70 @@ void main() {
     expect(find.text('Test post'), findsWidgets);
   });
 
+  group('like state belongs to the authenticated user', () {
+    testWidgets(
+        "another user's post shows an EMPTY heart until the viewer likes it",
+        (tester) async {
+      final state = await seededAppState();
+      // p2 is authored by joao; the session user (leonardo) never liked it.
+      final post = state.posts.firstWhere((p) => p.id == 'p2');
+      expect(post.liked, isFalse);
+      expect(post.likes, greaterThan(0)); // counter must NOT imply a like
+
+      await pumpMatrixApp(
+          tester, const PostDetailScreen(postId: 'p2'), state: state);
+      await tester.pumpAndSettle();
+
+      expect(find.byIcon(Icons.favorite_border_rounded), findsOneWidget);
+      expect(find.byIcon(Icons.favorite_rounded), findsNothing);
+    });
+
+    testWidgets('like → filled; reopen → still filled; unlike → empty',
+        (tester) async {
+      final state = await seededAppState();
+      await pumpMatrixApp(
+          tester, const PostDetailScreen(postId: 'p2'), state: state);
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byIcon(Icons.favorite_border_rounded));
+      await tester.pumpAndSettle();
+      expect(find.byIcon(Icons.favorite_rounded), findsOneWidget);
+
+      // Close and reopen: the state comes from the (fake) server store.
+      await tester.pumpWidget(const SizedBox());
+      await pumpMatrixApp(
+          tester, const PostDetailScreen(postId: 'p2'), state: state);
+      await tester.pumpAndSettle();
+      expect(find.byIcon(Icons.favorite_rounded), findsOneWidget);
+
+      await tester.tap(find.byIcon(Icons.favorite_rounded));
+      await tester.pumpAndSettle();
+      expect(find.byIcon(Icons.favorite_border_rounded), findsOneWidget);
+    });
+
+    testWidgets('profile grid never shows a filled heart as a counter',
+        (tester) async {
+      final state = await seededAppState();
+      await state.loadProfile('joao');
+      await pumpMatrixApp(tester, const ProfileScreen(username: 'joao'),
+          state: state);
+      await tester.pumpAndSettle();
+
+      final grid = find.byType(SliverGrid);
+      expect(grid, findsOneWidget);
+      expect(
+        find.descendant(
+            of: grid, matching: find.byIcon(Icons.favorite_rounded)),
+        findsNothing,
+      );
+      expect(
+        find.descendant(
+            of: grid, matching: find.byIcon(Icons.favorite_border_rounded)),
+        findsWidgets,
+      );
+    });
+  });
+
   group('delete post', () {
     testWidgets('author sees the menu and can delete after confirmation',
         (tester) async {

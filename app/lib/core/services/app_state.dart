@@ -8,6 +8,7 @@ import '../../data/repositories/repositories.dart';
 import '../../data/services.dart';
 import '../../models/akame_message.dart';
 import '../../models/comment.dart';
+import '../../models/cosmetic_item.dart';
 import '../../models/friend_request.dart';
 import '../../models/matrix_notification.dart';
 import '../../models/matrix_user.dart';
@@ -49,6 +50,12 @@ class AppState extends ChangeNotifier {
   final List<MatrixNotification> _notifications = [];
   bool _loadingNotifications = false;
 
+  /// Cosmetics equipped by the SESSION user, keyed by slot. Server-owned:
+  /// loaded from `/api/customization/equipped` and refreshed after every
+  /// equip/unequip. Viewed users' cosmetics live in their [ProfileData].
+  CosmeticMap _myCosmetics = const {};
+  bool _loadingCosmetics = false;
+
   /// Posts fetched individually (detail screen) that may not be present in
   /// the feed/profile caches. Lets likes/comments work uniformly by id.
   final Map<String, Post> _postCache = {};
@@ -68,6 +75,11 @@ class AppState extends ChangeNotifier {
   List<MatrixNotification> get notifications => List.unmodifiable(_notifications);
   int get unreadNotifications => _notifications.where((n) => !n.read).length;
   bool get isLoadingNotifications => _loadingNotifications;
+
+  /// Cosmetics equipped by the session user (slot → item). Empty means
+  /// "all defaults" — the spec's "Nenhuma" state.
+  CosmeticMap get myCosmetics => Map.unmodifiable(_myCosmetics);
+  bool get isLoadingCosmetics => _loadingCosmetics;
   List<AkameMessage> get akameMessages => List.unmodifiable(_akameMessages);
   MatrixUser? get currentUser => _currentUser;
   bool get isLoadingFeed => _loadingFeed;
@@ -82,6 +94,8 @@ class AppState extends ChangeNotifier {
   FriendRepository get _friends => _repos?.friends ?? Services.instance.friends;
   NotificationRepository get _notificationRepo =>
       _repos?.notifications ?? Services.instance.notifications;
+  CustomizationRepository get _customizationRepo =>
+      _repos?.customization ?? Services.instance.customization;
 
   /// Restores the session from a stored refresh token. Called at startup.
   /// Returns true when the user is authenticated afterwards.
@@ -436,6 +450,38 @@ class AppState extends ChangeNotifier {
         _notifications[i] = _notifications[i].copyWith(read: true);
       }
     }
+    notifyListeners();
+  }
+
+  /// Loads the session user's equipped cosmetics from the server. The
+  /// server is the single source of truth — a fresh app start always
+  /// restores the exact same equipped state.
+  Future<void> loadMyCosmetics() async {
+    if (_loadingCosmetics) return;
+    _loadingCosmetics = true;
+    notifyListeners();
+    try {
+      _myCosmetics = await _customizationRepo.equipped();
+    } catch (_) {
+      // Non-blocking: the preview simply shows defaults until a retry.
+    } finally {
+      _loadingCosmetics = false;
+      notifyListeners();
+    }
+  }
+
+  /// Equips an owned item and refreshes the local equipped map from the
+  /// server response (ownership/expiry are validated server-side).
+  Future<void> equipCosmetic(String itemId) async {
+    final item = await _customizationRepo.equip(itemId);
+    _myCosmetics = {..._myCosmetics, item.slot: item};
+    notifyListeners();
+  }
+
+  /// Removes whatever is equipped in [slot].
+  Future<void> unequipCosmetic(String slot) async {
+    await _customizationRepo.unequip(slot);
+    _myCosmetics = {..._myCosmetics}..remove(slot);
     notifyListeners();
   }
 

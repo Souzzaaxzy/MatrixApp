@@ -134,12 +134,15 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     ];
 
+    // Non-const on purpose: identical const instances are skipped by the
+    // element tree on rebuild, which would freeze the previous theme's
+    // colors on these tabs (AppColors resolves at build time).
     final pages = <Widget>[
-      const FeedScreen(),
-      const SearchScreen(),
-      const AkameScreen(),
-      const NotificationsScreen(),
-      const ProfileScreen(),
+      FeedScreen(),
+      SearchScreen(),
+      AkameScreen(),
+      NotificationsScreen(),
+      ProfileScreen(),
     ];
 
     return PopScope(

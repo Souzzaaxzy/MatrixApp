@@ -6,6 +6,7 @@ import '../../app/theme/app_text_styles.dart';
 import '../../core/utils/date_utils.dart';
 import '../../core/widgets/app_state_scope.dart';
 import '../../core/widgets/hud_label.dart';
+import '../../core/widgets/theme_watcher.dart';
 import '../../core/widgets/user_avatar.dart';
 import '../../models/comment.dart';
 import '../../models/post.dart';
@@ -29,11 +30,15 @@ class CommentsSheet extends StatefulWidget {
           top: Radius.circular(AppDimensions.radiusXl),
         ),
       ),
-      builder: (_) => Padding(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.viewInsetsOf(context).bottom,
+      // ThemeWatcher keeps the sheet on the active palette when the theme
+      // flips while it is open.
+      builder: (_) => ThemeWatcher(
+        builder: (_) => Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.viewInsetsOf(context).bottom,
+          ),
+          child: CommentsSheet(post: post),
         ),
-        child: CommentsSheet(post: post),
       ),
     );
   }

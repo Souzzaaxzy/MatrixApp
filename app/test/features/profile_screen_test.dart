@@ -33,8 +33,11 @@ void main() {
     expect(find.text('ADICIONAR'), findsOneWidget);
     expect(find.text('EDITAR PERFIL'), findsNothing);
     expect(find.byIcon(Icons.add_rounded), findsNothing);
-    // Their posts keep rendering on their profile.
-    expect(find.byIcon(Icons.favorite_rounded), findsWidgets);
+    // Their posts keep rendering on their profile — with the NEUTRAL
+    // counter icon, never a filled heart (a filled heart means "I liked
+    // it", which is only true on the detail screen).
+    expect(find.byIcon(Icons.favorite_border_rounded), findsWidgets);
+    expect(find.byIcon(Icons.favorite_rounded), findsNothing);
   });
 
   testWidgets('tapping Adicionar sends the request and shows Solicitado', (tester) async {
@@ -51,7 +54,9 @@ void main() {
     await pumpMatrixApp(tester, const ProfileScreen());
 
     // The mock feed ships at least one post authored by leonardo (p1, p4).
-    expect(find.byIcon(Icons.favorite_rounded), findsWidgets);
+    // The grid shows the neutral like COUNTER, not a liked-state heart.
+    expect(find.byIcon(Icons.favorite_border_rounded), findsWidgets);
+    expect(find.byIcon(Icons.favorite_rounded), findsNothing);
   });
 
   group('profile counters and friends sheet', () {

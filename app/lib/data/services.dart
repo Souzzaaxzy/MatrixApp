@@ -32,6 +32,7 @@ class Services {
   FriendRepository get friends => repositories.friends;
   NotificationRepository get notifications => repositories.notifications;
   UploadRepository get uploads => repositories.uploads;
+  CustomizationRepository get customization => repositories.customization;
 
   /// Initializes the data layer. Call once before runApp.
   static Future<Services> init() async {
@@ -45,6 +46,7 @@ class Services {
     final friends = FriendRepository(apiClient);
     final notifications = NotificationRepository(apiClient);
     final uploads = UploadRepository(apiClient);
+    final customization = CustomizationRepository(apiClient);
     final push = PushService(api: apiClient, tokenStore: tokenStore);
     final services = Services._(
       apiClient: apiClient,
@@ -57,6 +59,7 @@ class Services {
         friends: friends,
         notifications: notifications,
         uploads: uploads,
+        customization: customization,
       ),
       push: push,
     );

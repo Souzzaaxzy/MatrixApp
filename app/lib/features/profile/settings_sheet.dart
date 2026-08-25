@@ -6,6 +6,7 @@ import '../../app/theme/app_dimensions.dart';
 import '../../app/theme/app_text_styles.dart';
 import '../../core/services/theme_controller.dart';
 import '../../core/widgets/app_state_scope.dart';
+import '../../core/widgets/theme_watcher.dart';
 
 /// Settings bottom sheet shown ONLY on the session user's own profile.
 ///
@@ -23,7 +24,9 @@ class SettingsSheet extends StatelessWidget {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (_) => const SettingsSheet(),
+      // ThemeWatcher: the sheet must repaint when the theme flips while it
+      // is open (sheet content is otherwise built once and cached).
+      builder: (_) => ThemeWatcher(builder: (_) => SettingsSheet()),
     );
   }
 
@@ -87,6 +90,18 @@ class SettingsSheet extends StatelessWidget {
               ),
             ),
             const Divider(height: AppDimensions.spaceXxl),
+            _SettingsRow(
+              icon: Icons.auto_awesome_rounded,
+              accent: false,
+              label: 'Personalizações',
+              onTap: () {
+                // Capture the Navigator BEFORE popping the sheet — the
+                // sheet's context is deactivated by the pop.
+                final navigator = Navigator.of(context);
+                navigator.pop();
+                navigator.pushNamed(AppRoutes.customizations);
+              },
+            ),
             _SettingsRow(
               icon: Icons.logout_rounded,
               accent: false,

@@ -526,8 +526,12 @@ class _ProfilePostTile extends StatelessWidget {
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.favorite_rounded,
-                          color: AppColors.error, size: 14),
+                      // Counter indicator only — never a filled heart here:
+                      // a filled heart means "I liked it" and this tile must
+                      // not imply the viewer liked the post (that's the
+                      // detail screen's job, driven by post.liked).
+                      Icon(Icons.favorite_border_rounded,
+                          color: AppColors.holographicBlue, size: 14),
                       const SizedBox(width: AppDimensions.spaceXs),
                       Text('${post.likes}', style: AppTextStyles.caption),
                       const SizedBox(width: AppDimensions.spaceMd),
