@@ -1,17 +1,16 @@
 import 'name_effect.dart';
 
 /// Comment model — real comments come from the server with the author's
-/// identity (id, username, avatar). Placeholders exist only for legacy
+/// identity (id, nickname, avatar). Placeholders exist only for legacy
 /// count-only contexts.
 class Comment {
   const Comment({
     required this.id,
     required this.authorId,
-    required this.author,
-    required this.authorUsername,
+    required this.authorNickname,
     this.authorAvatarUrl,
-    this.authorNameColor,
-    this.authorNameEffect,
+    this.authorNicknameColor,
+    this.authorNicknameEffect,
     required this.text,
     required this.createdAt,
   });
@@ -22,11 +21,10 @@ class Comment {
   const Comment.placeholder()
       : id = '',
         authorId = '',
-        author = '',
-        authorUsername = '',
+        authorNickname = '',
         authorAvatarUrl = null,
-        authorNameColor = null,
-        authorNameEffect = null,
+        authorNicknameColor = null,
+        authorNicknameEffect = null,
         text = '',
         createdAt = null;
 
@@ -34,14 +32,11 @@ class Comment {
 
   /// Unique user id of the comment author — used to detect when the
   /// commenter is also the post author (the "Autor" badge). Never compare
-  /// usernames: they are mutable.
+  /// nicknames: they are mutable.
   final String authorId;
 
-  /// Display name of the author.
-  final String author;
-
-  /// Public handle of the account (@username) — what the UI shows.
-  final String authorUsername;
+  /// The author's nickname — rendered as plain text (never '@').
+  final String authorNickname;
 
   /// Profile photo URL (absolute or server-relative /static path), same
   /// avatar used everywhere else in the app. Null → default avatar.
@@ -49,10 +44,10 @@ class Comment {
 
   /// The comment AUTHOR's own nickname color (hex), embedded by the
   /// server. Null → default color.
-  final String? authorNameColor;
+  final String? authorNicknameColor;
 
   /// The comment AUTHOR's own nickname effect (null → "Nenhum").
-  final NameEffect? authorNameEffect;
+  final NameEffect? authorNicknameEffect;
 
   final String text;
   final DateTime? createdAt;

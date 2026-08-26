@@ -12,7 +12,7 @@ import '../../../core/widgets/matrix_button.dart';
 import '../../../core/widgets/matrix_text_field.dart';
 import '../../../data/api_config.dart';
 
-/// Account recovery screen. The user supplies their username/MATRIX ID,
+/// Account recovery screen. The user supplies their nickname,
 /// the recovery code shown at registration, and a new password. No email
 /// or phone is involved — recovery is code-based only.
 class RecoverScreen extends StatefulWidget {
@@ -117,11 +117,11 @@ class _RecoverScreenState extends State<RecoverScreen> {
           FadeSlideTransition(
             delay: const Duration(milliseconds: 120),
             child: MatrixTextField(
-              label: 'Username ou MATRIX ID',
-              hint: 'seu_usuario',
+              label: 'Nickname',
+              hint: 'Leonardo',
               controller: _identifierController,
               textInputAction: TextInputAction.next,
-              validator: (v) => Validators.required(v, label: 'Informe seu username'),
+              validator: (v) => Validators.required(v, label: 'Informe seu nickname'),
               prefix: Icon(Icons.person_outline_rounded,
                   color: AppColors.holographicBlue, size: 20),
             ),

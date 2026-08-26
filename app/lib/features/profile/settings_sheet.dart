@@ -183,8 +183,8 @@ class SettingsSheet extends StatelessWidget {
     if (proceed != true || !context.mounted) return;
 
     final state = AppStateScope.of(context);
-    final username = state.currentUser?.username;
-    if (username == null) return;
+    final nickname = state.currentUser?.nickname;
+    if (nickname == null) return;
 
     String typed = '';
     final confirmedName = await showDialog<bool>(
@@ -197,7 +197,7 @@ class SettingsSheet extends StatelessWidget {
               autofocus: true,
               onChanged: (value) => typed = value,
               decoration: InputDecoration(
-                hintText: username,
+                hintText: nickname,
                 hintStyle: AppTextStyles.bodyMuted,
               ),
               style: AppTextStyles.body,
@@ -210,7 +210,7 @@ class SettingsSheet extends StatelessWidget {
               TextButton(
                 onPressed: () {
                   final ok = typed.trim().replaceAll('@', '').toLowerCase() ==
-                      username.toLowerCase();
+                      nickname.toLowerCase();
                   Navigator.of(dialogContext).pop(ok);
                 },
                 child: Text(

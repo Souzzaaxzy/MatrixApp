@@ -172,9 +172,7 @@ class _CommentsSheetState extends State<CommentsSheet> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             UserAvatar(
-                              name: c.authorUsername.isNotEmpty
-                                  ? c.authorUsername
-                                  : c.author,
+                              name: c.authorNickname,
                               imageUrl: c.authorAvatarUrl,
                               size: 32,
                             ),
@@ -187,11 +185,11 @@ class _CommentsSheetState extends State<CommentsSheet> {
                                     children: [
                                       Flexible(
                                         child: NicknameRenderer(
-                                          '@${c.authorUsername}',
+                                          c.authorNickname,
                                           baseStyle: AppTextStyles.label,
                                           background: AppColors.nightBlue,
-                                          nameColor: c.authorNameColor,
-                                          effect: c.authorNameEffect,
+                                          nameColor: c.authorNicknameColor,
+                                          effect: c.authorNicknameEffect,
                                           lightweight: true,
                                         ),
                                       ),
@@ -261,8 +259,8 @@ class _CommentsSheetState extends State<CommentsSheet> {
   }
 }
 
-/// Small "Autor" badge shown next to the username when the commenter is
-/// the author of the post (compared by user id, never by username).
+/// Small "Autor" badge shown next to the nickname when the commenter is
+/// the author of the post (compared by user id, never by nickname).
 class _AuthorBadge extends StatelessWidget {
   const _AuthorBadge();
 

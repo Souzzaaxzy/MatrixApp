@@ -17,8 +17,7 @@ void main() {
             Comment(
               id: 'sc1',
               authorId: 'u0', // same id as the post author
-              author: 'Leonardo',
-              authorUsername: 'leonardo',
+              authorNickname: 'leonardo',
               authorAvatarUrl: '/static/avatars/leo.png',
               text: 'Comentário do próprio autor',
               createdAt: DateTime(2024, 1, 1, 12),
@@ -26,8 +25,7 @@ void main() {
             Comment(
               id: 'sc2',
               authorId: 'u2', // different user
-              author: 'João',
-              authorUsername: 'joao',
+              authorNickname: 'joao',
               text: 'Comentário de outra pessoa',
               createdAt: DateTime(2024, 1, 1, 13),
             ),
@@ -40,19 +38,18 @@ void main() {
     return state;
   }
 
-  testWidgets('shows @username (not the display name) and the avatar',
-      (tester) async {
+  testWidgets('shows the nickname (no "@") and the avatar', (tester) async {
     final state = await stateWithComments();
     final post = state.posts.firstWhere((p) => p.id == 'p1');
 
     await pumpMatrixApp(tester, Scaffold(body: CommentsSheet(post: post)), state: state);
     await tester.pumpAndSettle();
 
-    expect(find.text('@leonardo'), findsOneWidget);
-    expect(find.text('@joao'), findsOneWidget);
-    // Display names must NOT headline the comment.
-    expect(find.text('Leonardo'), findsNothing);
-    expect(find.text('João'), findsNothing);
+    expect(find.textContaining('leonardo', findRichText: true), findsOneWidget);
+    expect(find.textContaining('joao', findRichText: true), findsOneWidget);
+    // There is no '@'-prefixed identity anymore.
+    expect(find.text('@leonardo'), findsNothing);
+    expect(find.text('@joao'), findsNothing);
     expect(find.byType(UserAvatar), findsNWidgets(2));
   });
 
@@ -70,7 +67,7 @@ void main() {
     expect(find.text('Comentário de outra pessoa'), findsOneWidget);
   });
 
-  testWidgets('new comment by the current user appears with @username',
+  testWidgets('new comment by the current user appears with the nickname',
       (tester) async {
     final state = await seededAppState();
     final post = state.posts.firstWhere((p) => p.id == 'p1');
@@ -82,7 +79,8 @@ void main() {
     await tester.tap(find.byIcon(Icons.send_rounded));
     await tester.pumpAndSettle();
 
-    expect(find.text('@leonardo'), findsOneWidget);
+    expect(
+        find.textContaining('leonardo', findRichText: true), findsWidgets);
     expect(find.text('Ficou ótimo!'), findsOneWidget);
     // The current user IS the author of p1 in the fake store.
     expect(find.text('AUTOR'), findsOneWidget);

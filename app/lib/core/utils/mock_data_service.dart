@@ -12,8 +12,7 @@ class MockDataService {
 
   static const MatrixUser currentUser = MatrixUser(
     id: 'u0',
-    name: 'Leonardo',
-    username: 'leonardo',
+    nickname: 'leonardo',
     bio: 'Construindo o futuro, uma linha por vez. ⚡',
     avatarSeed: 'leonardo',
   );
@@ -23,8 +22,7 @@ class MockDataService {
     return [
       Post(
         id: 'p1',
-        authorName: 'Leonardo',
-        authorUsername: 'leonardo',
+        authorNickname: 'Leonardo',
         text: 'Finalmente terminei isso! 🚀',
         createdAt: now.subtract(const Duration(minutes: 2)),
         avatarSeed: 'leonardo',
@@ -33,8 +31,7 @@ class MockDataService {
           Comment(
             id: 'c1',
             authorId: 'mock-maria',
-            author: 'Maria',
-            authorUsername: 'maria',
+            authorNickname: 'maria',
             text: 'Gostei muito!',
             createdAt: now.subtract(const Duration(minutes: 1)),
           ),
@@ -42,8 +39,7 @@ class MockDataService {
       ),
       Post(
         id: 'p2',
-        authorName: 'Maria',
-        authorUsername: 'maria',
+        authorNickname: 'Maria',
         text: 'Olhem isso 👀',
         imageUrl:
             'https://images.unsplash.com/photo-1518770660439-4636190af475?w=900',
@@ -54,16 +50,14 @@ class MockDataService {
           Comment(
             id: 'c2',
             authorId: 'mock-joao',
-            author: 'João',
-            authorUsername: 'joao',
+            authorNickname: 'joao',
             text: 'Ficou muito bom.',
             createdAt: now.subtract(const Duration(minutes: 6)),
           ),
           Comment(
             id: 'c3',
             authorId: 'mock-leonardo',
-            author: 'Leonardo',
-            authorUsername: 'leonardo',
+            authorNickname: 'leonardo',
             text: '🔥🔥🔥',
             createdAt: now.subtract(const Duration(minutes: 5)),
           ),
@@ -71,8 +65,7 @@ class MockDataService {
       ),
       Post(
         id: 'p3',
-        authorName: 'João',
-        authorUsername: 'joao',
+        authorNickname: 'João',
         text: 'Novo commit no repositório. O sistema está estável. ✅',
         createdAt: now.subtract(const Duration(minutes: 23)),
         avatarSeed: 'joao',
@@ -81,8 +74,7 @@ class MockDataService {
       ),
       Post(
         id: 'p4',
-        authorName: 'Akame',
-        authorUsername: 'akame',
+        authorNickname: 'Akame',
         text: 'A rede MATRIX está online. Bem-vindos. ✦',
         createdAt: now.subtract(const Duration(hours: 1)),
         avatarSeed: 'akame',
@@ -91,8 +83,7 @@ class MockDataService {
           Comment(
             id: 'c4',
             authorId: 'mock-leonardo',
-            author: 'Leonardo',
-            authorUsername: 'leonardo',
+            authorNickname: 'leonardo',
             text: 'Sistema impecável.',
             createdAt: now.subtract(const Duration(minutes: 58)),
           ),
@@ -100,8 +91,7 @@ class MockDataService {
       ),
       Post(
         id: 'p5',
-        authorName: 'Maria',
-        authorUsername: 'maria',
+        authorNickname: 'Maria',
         text: 'Trabalhando em algo novo essa semana. Em breve novidades. 💻',
         createdAt: now.subtract(const Duration(hours: 3)),
         avatarSeed: 'maria',
@@ -115,22 +105,19 @@ class MockDataService {
         currentUser,
         MatrixUser(
           id: 'u2',
-          name: 'Maria',
-          username: 'maria',
+          nickname: 'maria',
           bio: 'Design e código em harmonia.',
           avatarSeed: 'maria',
         ),
         MatrixUser(
           id: 'u3',
-          name: 'João',
-          username: 'joao',
+          nickname: 'joao',
           bio: 'Engenheiro de software. Café ☕.',
           avatarSeed: 'joao',
         ),
         MatrixUser(
           id: 'u4',
-          name: 'Akame',
-          username: 'akame',
+          nickname: 'akame',
           bio: 'Núcleo da rede MATRIX. ✦',
           avatarSeed: 'akame',
         ),

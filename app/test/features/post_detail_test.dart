@@ -13,7 +13,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('PUBLICAÇÃO'), findsOneWidget);
-    expect(find.text(post.authorName), findsOneWidget);
+    expect(find.textContaining(post.authorNickname, findRichText: true),
+        findsWidgets);
     expect(find.text(post.text), findsOneWidget);
     expect(find.text('${post.likes}'), findsOneWidget);
   });
@@ -52,7 +53,7 @@ void main() {
 
   testWidgets('profile grid tile opens the post detail', (tester) async {
     final state = await seededAppState();
-    await state.loadProfile(state.currentUser!.username);
+    await state.loadProfile(state.currentUser!.nickname);
     await pumpMatrixApp(tester, const ProfileScreen(), state: state);
     await tester.pumpAndSettle();
 
@@ -116,7 +117,7 @@ void main() {
         (tester) async {
       final state = await seededAppState();
       await state.loadProfile('joao');
-      await pumpMatrixApp(tester, const ProfileScreen(username: 'joao'),
+      await pumpMatrixApp(tester, const ProfileScreen(nickname: 'joao'),
           state: state);
       await tester.pumpAndSettle();
 

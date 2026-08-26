@@ -5,7 +5,7 @@ import '../../app/theme/app_dimensions.dart';
 import '../../app/theme/app_text_styles.dart';
 import '../../models/cosmetic_item.dart';
 
-/// Renders the equipped BADGE cosmetic next to a username.
+/// Renders the equipped BADGE cosmetic next to a nickname.
 ///
 /// Returns an empty box when [badge] is null (nothing equipped), so call
 /// sites can place it unconditionally. Real badge art (Founder, Verified,

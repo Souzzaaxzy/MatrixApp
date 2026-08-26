@@ -47,10 +47,11 @@ Future<void> pumpMatrixApp(
             return PostDetailScreen(postId: id);
           },
           AppRoutes.profile: (context) {
-            final username =
+            final nickname =
                 ModalRoute.of(context)!.settings.arguments as String?;
             return ProfileScreen(
-              username: (username != null && username.isNotEmpty) ? username : null,
+              nickname:
+                  (nickname != null && nickname.isNotEmpty) ? nickname : null,
             );
           },
         },

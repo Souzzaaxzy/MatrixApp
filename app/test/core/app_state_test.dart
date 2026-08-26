@@ -16,7 +16,7 @@ void main() {
   test('initial state restores the current user and loads the feed', () {
     expect(state.posts, isNotEmpty);
     expect(state.currentUser, isNotNull);
-    expect(state.currentUser!.name, isNotEmpty);
+    expect(state.currentUser!.nickname, isNotEmpty);
     expect(state.isAuthenticated, isTrue);
   });
 
@@ -81,19 +81,19 @@ void main() {
       await state.loadProfile('leonardo');
       final profile = state.profileFor('leonardo');
       expect(profile, isNotNull);
-      expect(profile!.user.username, 'leonardo');
+      expect(profile!.user.nickname, 'leonardo');
       expect(profile.posts, isNotEmpty);
       expect(
-        profile.posts.every((p) => p.authorUsername == 'leonardo'),
+        profile.posts.every((p) => p.authorNickname == 'leonardo'),
         isTrue,
       );
     });
 
     test('keeps the session user in sync when viewing the own profile',
         () async {
-      await state.updateProfile(name: 'Neo');
+      await state.updateProfile(nickname: 'Neo');
       await state.loadProfile('leonardo');
-      expect(state.currentUser!.name, 'Neo');
+      expect(state.currentUser!.nickname, 'Neo');
     });
   });
 
@@ -104,16 +104,16 @@ void main() {
     test('viewing another profile never overwrites the session user',
         () async {
       await state.loadProfile('joao');
-      expect(state.currentUser!.username, 'leonardo');
-      expect(state.profileFor('joao')!.user.username, 'joao');
+      expect(state.currentUser!.nickname, 'leonardo');
+      expect(state.profileFor('joao')!.user.nickname, 'joao');
     });
 
     test('slots stay independent across A → B → A navigation', () async {
       await state.loadProfile('joao');
       await state.loadProfile('leonardo');
-      expect(state.profileFor('joao')!.user.username, 'joao');
-      expect(state.profileFor('leonardo')!.user.username, 'leonardo');
-      expect(state.currentUser!.username, 'leonardo');
+      expect(state.profileFor('joao')!.user.nickname, 'joao');
+      expect(state.profileFor('leonardo')!.user.nickname, 'leonardo');
+      expect(state.currentUser!.nickname, 'leonardo');
     });
 
     test('sendFriendRequest only touches that profile slot', () async {
@@ -123,7 +123,7 @@ void main() {
         state.profileFor('joao')!.friendship,
         Friendship.outgoingPending,
       );
-      expect(state.currentUser!.username, 'leonardo');
+      expect(state.currentUser!.nickname, 'leonardo');
     });
   });
 
@@ -145,7 +145,7 @@ void main() {
       final comment = await state.addComment(first.id, 'Olá');
 
       expect(comment.text, 'Olá');
-      expect(comment.author, state.currentUser!.name);
+      expect(comment.authorNickname, state.currentUser!.nickname);
     });
   });
 
@@ -173,7 +173,7 @@ void main() {
       expect(state.posts.length, initialLength + 1);
       expect(state.posts.first.id, id);
       expect(state.posts.first.text, 'Nova publicação');
-      expect(state.posts.first.authorUsername, state.currentUser!.username);
+      expect(state.posts.first.authorNickname, state.currentUser!.nickname);
       expect(state.posts.first.likes, 0);
       expect(state.posts.first.liked, isFalse);
     });
@@ -192,9 +192,9 @@ void main() {
 
   group('login', () {
     test('sets the current user', () async {
-      await state.login(username: 'leonardo', password: 'whatever');
+      await state.login(nickname: 'leonardo', password: 'whatever');
       expect(state.currentUser, isNotNull);
-      expect(state.currentUser!.username, 'leonardo');
+      expect(state.currentUser!.nickname, 'leonardo');
       expect(state.isAuthenticated, isTrue);
     });
   });
@@ -234,16 +234,16 @@ void main() {
 
   group('updateProfile', () {
     test('updates name and bio remotely', () async {
-      await state.updateProfile(name: 'Neo', bio: 'The one');
-      expect(state.currentUser!.name, 'Neo');
+      await state.updateProfile(nickname: 'Neo', bio: 'The one');
+      expect(state.currentUser!.nickname, 'Neo');
       expect(state.currentUser!.bio, 'The one');
     });
 
     test('preserves previous values when fields are null', () async {
-      await state.updateProfile(name: 'Neo');
-      expect(state.currentUser!.name, 'Neo');
+      await state.updateProfile(nickname: 'Neo');
+      expect(state.currentUser!.nickname, 'Neo');
       await state.updateProfile(bio: 'updated bio');
-      expect(state.currentUser!.name, 'Neo');
+      expect(state.currentUser!.nickname, 'Neo');
       expect(state.currentUser!.bio, 'updated bio');
     });
   });

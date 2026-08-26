@@ -19,7 +19,7 @@ void main() {
     await pumpMatrixApp(tester, const LoginScreen());
 
     // Label shows the plain nickname (uppercased by MatrixTextField).
-    expect(find.text('NICKNAME DO USUÁRIO'), findsOneWidget);
+    expect(find.text('NICKNAME'), findsOneWidget);
     // No "@" text widget anywhere (no separate @ prefix/decoration).
     expect(find.text('@'), findsNothing);
     expect(find.byIcon(Icons.alternate_email_rounded), findsNothing);
@@ -31,11 +31,11 @@ void main() {
     await tester.tap(find.text('ENTRAR'));
     await tester.pump();
 
-    expect(find.text('Informe um username'), findsOneWidget);
+    expect(find.text('Informe um nickname'), findsOneWidget);
     expect(find.text('Informe sua senha'), findsOneWidget);
   });
 
-  testWidgets('accepts a username and navigates to home', (tester) async {
+  testWidgets('accepts a nickname and navigates to home', (tester) async {
     await pumpMatrixApp(tester, const LoginScreen());
 
     await tester.enterText(find.byType(TextField).at(0), 'leonardo');

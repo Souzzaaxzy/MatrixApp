@@ -30,7 +30,7 @@ class AppRoutes {
   /// Post detail. Argument: the post's server id (String).
   static const String postDetail = '/home/post';
 
-  /// Profile of another user. Argument: the username (String). A null/
+  /// Profile of another user. Argument: the nickname (String). A null/
   /// empty argument means the session user's own profile.
   static const String profile = '/home/profile';
 }
@@ -78,7 +78,7 @@ Widget _buildPage(RouteSettings settings) {
     AppRoutes.editProfile => EditProfileScreen(),
     AppRoutes.customizations => CustomizationsScreen(),
     AppRoutes.postDetail => _postDetail(settings.arguments as String?),
-    AppRoutes.profile => ProfileScreen(username: _usernameArg(settings.arguments)),
+    AppRoutes.profile => ProfileScreen(nickname: _nicknameArg(settings.arguments)),
     _ => HomeScreen(), // defensive fallback — never a 404 page
   };
 }
@@ -88,9 +88,9 @@ Widget _postDetail(String? postId) {
   return HomeScreen();
 }
 
-String? _usernameArg(Object? arg) {
-  final username = arg as String?;
-  return (username != null && username.isNotEmpty) ? username : null;
+String? _nicknameArg(Object? arg) {
+  final nickname = arg as String?;
+  return (nickname != null && nickname.isNotEmpty) ? nickname : null;
 }
 
 /// Resolves the app's first route. The default `Navigator` implementation

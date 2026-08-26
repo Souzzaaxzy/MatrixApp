@@ -28,8 +28,7 @@ class EditProfileScreen extends StatefulWidget {
 
 class _EditProfileScreenState extends State<EditProfileScreen> {
   final _formKey = GlobalKey<FormState>();
-  late final TextEditingController _nameController;
-  late final TextEditingController _usernameController;
+  late final TextEditingController _nicknameController;
   late final TextEditingController _bioController;
   bool _saving = false;
   bool _uploadingAvatar = false;
@@ -40,17 +39,15 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     super.didChangeDependencies();
     if (_initialized) return;
     final user = AppStateScope.of(context).currentUser;
-    _nameController = TextEditingController(text: user?.name ?? '');
-    _usernameController =
-        TextEditingController(text: (user?.username ?? '').replaceAll('@', ''));
+    _nicknameController =
+        TextEditingController(text: (user?.nickname ?? '').replaceAll('@', ''));
     _bioController = TextEditingController(text: user?.bio ?? '');
     _initialized = true;
   }
 
   @override
   void dispose() {
-    _nameController.dispose();
-    _usernameController.dispose();
+    _nicknameController.dispose();
     _bioController.dispose();
     super.dispose();
   }
@@ -126,8 +123,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     setState(() => _saving = true);
     try {
       await AppStateScope.of(context).updateProfile(
-        name: _nameController.text.trim(),
-        username: _usernameController.text.trim().replaceAll(RegExp(r'^@+'), ''),
+        nickname: _nicknameController.text.trim().replaceAll(RegExp(r'^@+'), ''),
         bio: _bioController.text.trim(),
       );
       if (!mounted) return;
@@ -171,10 +167,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                     child: Stack(
                       children: [
                         UserAvatar(
-                          name: _nameController.text.isEmpty
-                              ? (user?.name ?? '')
-                              : _nameController.text,
-                          seed: user?.avatarSeed ?? user?.username,
+                          name: _nicknameController.text.isEmpty
+                              ? (user?.nickname ?? '')
+                              : _nicknameController.text,
+                          seed: user?.avatarSeed ?? user?.nickname,
                           imageUrl: user?.avatarUrl,
                           size: 96,
                           ring: true,
@@ -224,16 +220,8 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                 ),
                 const SizedBox(height: AppDimensions.spaceXxl),
                 MatrixTextField(
-                  label: 'Nome',
-                  controller: _nameController,
-                  textCapitalization: TextCapitalization.words,
-                  textInputAction: TextInputAction.next,
-                  validator: Validators.name,
-                ),
-                const SizedBox(height: AppDimensions.spaceLg),
-                MatrixTextField(
                   label: 'Nickname',
-                  controller: _usernameController,
+                  controller: _nicknameController,
                   prefix: Icon(Icons.person_outline_rounded,
                       color: AppColors.holographicBlue, size: 20),
                   textInputAction: TextInputAction.next,

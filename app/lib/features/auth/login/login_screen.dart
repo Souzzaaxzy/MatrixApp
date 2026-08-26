@@ -23,7 +23,7 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _usernameController = TextEditingController();
+  final _nicknameController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _obscure = true;
   bool _loading = false;
@@ -31,7 +31,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   void dispose() {
-    _usernameController.dispose();
+    _nicknameController.dispose();
     _passwordController.dispose();
     super.dispose();
   }
@@ -44,7 +44,7 @@ class _LoginScreenState extends State<LoginScreen> {
     });
     try {
       await AppStateScope.of(context).login(
-        username: _usernameController.text.trim().replaceAll(RegExp(r'^@+'), ''),
+        nickname: _nicknameController.text.trim().replaceAll(RegExp(r'^@+'), ''),
         password: _passwordController.text,
       );
       if (!mounted) return;
@@ -107,12 +107,12 @@ class _LoginScreenState extends State<LoginScreen> {
                 FadeSlideTransition(
                   delay: const Duration(milliseconds: 250),
                   child: MatrixTextField(
-                    label: 'Nickname do usuário',
-                    hint: 'seu_usuario',
-                    controller: _usernameController,
+                    label: 'Nickname',
+                    hint: 'Leonardo',
+                    controller: _nicknameController,
                     keyboardType: TextInputType.text,
                     textInputAction: TextInputAction.next,
-                    validator: Validators.username,
+                    validator: Validators.nickname,
                     prefix: Icon(Icons.person_outline_rounded,
                         color: AppColors.holographicBlue, size: 20),
                   ),

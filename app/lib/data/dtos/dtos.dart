@@ -43,31 +43,27 @@ class AuthDto {
 
 class AuthUserDto {
   final String id;
-  final String name;
-  final String username;
+  final String nickname;
   final String? avatarUrl;
   final String bio;
 
   const AuthUserDto({
     required this.id,
-    required this.name,
-    required this.username,
+    required this.nickname,
     this.avatarUrl,
     required this.bio,
   });
 
   MatrixUser toModel() => MatrixUser(
         id: id,
-        name: name,
-        username: username,
+        nickname: nickname,
         bio: bio,
         avatarUrl: avatarUrl,
       );
 
   factory AuthUserDto.fromJson(Map<String, dynamic> json) => AuthUserDto(
         id: json['id'] as String,
-        name: json['name'] as String,
-        username: json['username'] as String,
+        nickname: json['nickname'] as String,
         avatarUrl: json['avatarUrl'] as String?,
         bio: (json['bio'] as String?) ?? '',
       );
@@ -79,11 +75,10 @@ class FeedPostDto {
   final String? imageUrl;
   final DateTime createdAt;
   final String authorId;
-  final String authorName;
-  final String authorUsername;
+  final String authorNickname;
   final String? authorAvatarUrl;
-  final String? authorNameColor;
-  final NameEffect? authorNameEffect;
+  final String? authorNicknameColor;
+  final NameEffect? authorNicknameEffect;
   final int likeCount;
   final bool liked;
   final int commentCount;
@@ -94,11 +89,10 @@ class FeedPostDto {
     this.imageUrl,
     required this.createdAt,
     required this.authorId,
-    required this.authorName,
-    required this.authorUsername,
+    required this.authorNickname,
     this.authorAvatarUrl,
-    this.authorNameColor,
-    this.authorNameEffect,
+    this.authorNicknameColor,
+    this.authorNicknameEffect,
     required this.likeCount,
     required this.liked,
     required this.commentCount,
@@ -107,14 +101,13 @@ class FeedPostDto {
   Post toModel() => Post(
         id: id,
         authorId: authorId,
-        authorName: authorName,
-        authorUsername: authorUsername,
+        authorNickname: authorNickname,
         text: text,
         createdAt: createdAt,
-        avatarSeed: authorUsername,
+        avatarSeed: authorNickname,
         authorAvatarUrl: authorAvatarUrl,
-        authorNameColor: authorNameColor,
-        authorNameEffect: authorNameEffect,
+        authorNicknameColor: authorNicknameColor,
+        authorNicknameEffect: authorNicknameEffect,
         imageUrl: imageUrl,
         likes: likeCount,
         liked: liked,
@@ -129,11 +122,10 @@ class FeedPostDto {
       imageUrl: json['imageUrl'] as String?,
       createdAt: DateTime.parse(json['createdAt'] as String),
       authorId: (author['id'] as String?) ?? '',
-      authorName: author['name'] as String,
-      authorUsername: author['username'] as String,
+      authorNickname: author['nickname'] as String,
       authorAvatarUrl: author['avatarUrl'] as String?,
-      authorNameColor: author['nameColor'] as String?,
-      authorNameEffect: parseNameEffect(author['nameEffect']),
+      authorNicknameColor: author['nameColor'] as String?,
+      authorNicknameEffect: parseNameEffect(author['nameEffect']),
       likeCount: (json['likeCount'] as num?)?.toInt() ?? 0,
       liked: (json['liked'] as bool?) ?? false,
       commentCount: (json['commentCount'] as num?)?.toInt() ?? 0,
@@ -146,32 +138,29 @@ class CommentDto {
   final String text;
   final DateTime createdAt;
   final String authorId;
-  final String authorName;
-  final String authorUsername;
+  final String authorNickname;
   final String? authorAvatarUrl;
-  final String? authorNameColor;
-  final NameEffect? authorNameEffect;
+  final String? authorNicknameColor;
+  final NameEffect? authorNicknameEffect;
 
   const CommentDto({
     required this.id,
     required this.text,
     required this.createdAt,
     required this.authorId,
-    required this.authorName,
-    required this.authorUsername,
+    required this.authorNickname,
     this.authorAvatarUrl,
-    this.authorNameColor,
-    this.authorNameEffect,
+    this.authorNicknameColor,
+    this.authorNicknameEffect,
   });
 
   Comment toModel() => Comment(
         id: id,
         authorId: authorId,
-        author: authorName,
-        authorUsername: authorUsername,
+        authorNickname: authorNickname,
         authorAvatarUrl: authorAvatarUrl,
-        authorNameColor: authorNameColor,
-        authorNameEffect: authorNameEffect,
+        authorNicknameColor: authorNicknameColor,
+        authorNicknameEffect: authorNicknameEffect,
         text: text,
         createdAt: createdAt,
       );
@@ -183,19 +172,17 @@ class CommentDto {
       text: json['text'] as String,
       createdAt: DateTime.parse(json['createdAt'] as String),
       authorId: author['id'] as String,
-      authorName: author['name'] as String,
-      authorUsername: author['username'] as String,
+      authorNickname: author['nickname'] as String,
       authorAvatarUrl: author['avatarUrl'] as String?,
-      authorNameColor: author['nameColor'] as String?,
-      authorNameEffect: parseNameEffect(author['nameEffect']),
+      authorNicknameColor: author['nameColor'] as String?,
+      authorNicknameEffect: parseNameEffect(author['nameEffect']),
     );
   }
 }
 
 class PublicUserDto {
   final String id;
-  final String name;
-  final String username;
+  final String nickname;
   final String? avatarUrl;
   final String bio;
   final int friendsCount;
@@ -206,8 +193,7 @@ class PublicUserDto {
 
   const PublicUserDto({
     required this.id,
-    required this.name,
-    required this.username,
+    required this.nickname,
     this.avatarUrl,
     required this.bio,
     this.friendsCount = 0,
@@ -219,8 +205,7 @@ class PublicUserDto {
 
   MatrixUser toModel() => MatrixUser(
         id: id,
-        name: name,
-        username: username,
+        nickname: nickname,
         bio: bio,
         avatarUrl: avatarUrl,
         friendsCount: friendsCount,
@@ -232,8 +217,7 @@ class PublicUserDto {
 
   factory PublicUserDto.fromJson(Map<String, dynamic> json) => PublicUserDto(
         id: json['id'] as String,
-        name: json['name'] as String,
-        username: json['username'] as String,
+        nickname: json['nickname'] as String,
         avatarUrl: json['avatarUrl'] as String?,
         bio: (json['bio'] as String?) ?? '',
         friendsCount: (json['friendsCount'] as num?)?.toInt() ?? 0,
@@ -381,11 +365,10 @@ class NotificationDto {
         read: read,
         createdAt: createdAt,
         actorId: actor.id,
-        actorName: actor.name,
-        actorUsername: actor.username,
+        actorNickname: actor.nickname,
         actorAvatarUrl: actor.avatarUrl,
-        actorNameColor: actor.nameColor,
-        actorNameEffect: actor.nameEffect,
+        actorNicknameColor: actor.nameColor,
+        actorNicknameEffect: actor.nameEffect,
         postId: postId,
         commentId: commentId,
         friendRequestId: friendRequestId,

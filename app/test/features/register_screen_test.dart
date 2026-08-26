@@ -17,7 +17,9 @@ void main() {
     await pumpMatrixApp(tester, const RegisterScreen());
 
     expect(find.text('CRIAR CONTA'), findsWidgets);
-    expect(find.text('NOME'), findsOneWidget);
+    // ONE identity field — nickname only. No "NOME"/"USERNAME" anymore.
+    expect(find.text('NOME'), findsNothing);
+    expect(find.text('USERNAME'), findsNothing);
     expect(find.text('NICKNAME'), findsOneWidget);
     expect(find.text('SENHA'), findsOneWidget);
     expect(find.text('CONFIRMAR SENHA'), findsOneWidget);
@@ -34,18 +36,16 @@ void main() {
     await tester.tap(createButton());
     await tester.pump();
 
-    expect(find.text('Informe seu nome'), findsOneWidget);
-    expect(find.text('Informe um username'), findsOneWidget);
+    expect(find.text('Informe um nickname'), findsOneWidget);
   });
 
   testWidgets('rejects password shorter than 8 chars', (tester) async {
     await pumpMatrixApp(tester, const RegisterScreen());
     await tester.pumpAndSettle();
 
-    await tester.enterText(find.byType(TextField).at(0), 'Leonardo');
-    await tester.enterText(find.byType(TextField).at(1), 'leo');
+    await tester.enterText(find.byType(TextField).at(0), 'leo');
+    await tester.enterText(find.byType(TextField).at(1), '123');
     await tester.enterText(find.byType(TextField).at(2), '123');
-    await tester.enterText(find.byType(TextField).at(3), '123');
     await tester.ensureVisible(createButton());
     await tester.tap(createButton());
     await tester.pump();
@@ -57,10 +57,9 @@ void main() {
     await pumpMatrixApp(tester, const RegisterScreen());
     await tester.pumpAndSettle();
 
-    await tester.enterText(find.byType(TextField).at(0), 'Leonardo');
-    await tester.enterText(find.byType(TextField).at(1), 'leo');
-    await tester.enterText(find.byType(TextField).at(2), 'Matrix123');
-    await tester.enterText(find.byType(TextField).at(3), 'Matrix321');
+    await tester.enterText(find.byType(TextField).at(0), 'leo');
+    await tester.enterText(find.byType(TextField).at(1), 'Matrix123');
+    await tester.enterText(find.byType(TextField).at(2), 'Matrix321');
     await tester.ensureVisible(createButton());
     await tester.tap(createButton());
     await tester.pump();
@@ -72,10 +71,9 @@ void main() {
     await pumpMatrixApp(tester, const RegisterScreen());
     await tester.pumpAndSettle();
 
-    await tester.enterText(find.byType(TextField).at(0), 'Leonardo');
-    await tester.enterText(find.byType(TextField).at(1), 'leo');
+    await tester.enterText(find.byType(TextField).at(0), 'leo');
+    await tester.enterText(find.byType(TextField).at(1), 'Matrix123');
     await tester.enterText(find.byType(TextField).at(2), 'Matrix123');
-    await tester.enterText(find.byType(TextField).at(3), 'Matrix123');
     await tester.ensureVisible(createButton());
     await tester.tap(createButton());
     // The register flow uses simulated async; advance the fake clock so the
@@ -89,7 +87,7 @@ void main() {
     await tester.tap(find.text('ENTENDI'));
     await tester.pump(const Duration(milliseconds: 200));
 
-    expect(find.text('Informe seu nome'), findsNothing);
+    expect(find.text('Informe um nickname'), findsNothing);
     expect(find.text('As senhas não coincidem'), findsNothing);
   });
 }

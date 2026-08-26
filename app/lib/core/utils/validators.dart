@@ -21,13 +21,15 @@ class Validators {
     return null;
   }
 
-  static final RegExp _username = RegExp(r'^[a-zA-Z0-9_.]+$');
+  static final RegExp _nickname = RegExp(r'^[a-zA-Z0-9_.]+$');
 
-  static String? username(String? value) {
+  /// The nickname is the single visual identity. Any leading '@' the user
+  /// may type is tolerated and normalized away (storage is canonical).
+  static String? nickname(String? value) {
     final v = (value ?? '').trim().replaceAll('@', '');
-    if (v.isEmpty) return 'Informe um username';
+    if (v.isEmpty) return 'Informe um nickname';
     if (v.length < 3) return 'Mínimo de 3 caracteres';
-    if (!_username.hasMatch(v)) return 'Apenas letras, números, _ e .';
+    if (!_nickname.hasMatch(v)) return 'Apenas letras, números, _ e .';
     return null;
   }
 

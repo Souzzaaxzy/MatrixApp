@@ -71,16 +71,14 @@ class FakeStore {
     users = {
       'u0': MatrixUser(
         id: 'u0',
-        name: 'Leonardo',
-        username: 'leonardo',
+        nickname: 'leonardo',
         bio: 'Construindo o futuro. ⚡',
         avatarSeed: 'leonardo',
       ),
       // A second full user — needed for search/profile/friendship tests.
       'u2': MatrixUser(
         id: 'u2',
-        name: 'João',
-        username: 'joao',
+        nickname: 'joao',
         bio: '',
         avatarSeed: 'joao',
       ),
@@ -90,8 +88,7 @@ class FakeStore {
       Post(
         id: 'p1',
         authorId: 'u0',
-        authorName: 'Leonardo',
-        authorUsername: 'leonardo',
+        authorNickname: 'leonardo',
         text: 'Test post',
         createdAt: DateTime(2024, 1, 1),
         avatarSeed: 'leonardo',
@@ -104,8 +101,7 @@ class FakeStore {
       Post(
         id: 'p2',
         authorId: 'u2',
-        authorName: 'João',
-        authorUsername: 'joao',
+        authorNickname: 'joao',
         text: 'Post de outro usuário',
         createdAt: DateTime(2024, 1, 2),
         avatarSeed: 'joao',
@@ -173,14 +169,12 @@ class _FakeAuthRepository implements AuthRepository {
 
   @override
   Future<AuthDto> register({
-    required String name,
-    required String username,
+    required String nickname,
     required String password,
   }) async {
     final user = MatrixUser(
       id: 'u${_store.users.length}',
-      name: name,
-      username: username,
+      nickname: nickname,
       bio: '',
     );
     _store.users[user.id] = user;
@@ -190,8 +184,8 @@ class _FakeAuthRepository implements AuthRepository {
       refreshToken: 'fake-refresh',
       user: AuthUserDto(
         id: user.id,
-        name: user.name,
-        username: user.username,
+        
+        nickname: user.nickname,
         avatarUrl: user.avatarUrl,
         bio: user.bio,
       ),
@@ -201,7 +195,7 @@ class _FakeAuthRepository implements AuthRepository {
 
   @override
   Future<AuthDto> login({
-    required String username,
+    required String nickname,
     required String password,
   }) async {
     final u = _store.currentUser;
@@ -210,8 +204,8 @@ class _FakeAuthRepository implements AuthRepository {
       refreshToken: 'fake-refresh',
       user: AuthUserDto(
         id: u.id,
-        name: u.name,
-        username: u.username,
+        
+        nickname: u.nickname,
         avatarUrl: u.avatarUrl,
         bio: u.bio,
       ),
@@ -230,8 +224,8 @@ class _FakeAuthRepository implements AuthRepository {
     final u = _store.currentUser;
     return AuthUserDto(
       id: u.id,
-      name: u.name,
-      username: u.username,
+      
+      nickname: u.nickname,
       avatarUrl: u.avatarUrl,
       bio: u.bio,
     );
@@ -272,8 +266,7 @@ class _FakePostRepository implements PostRepository {
     final post = Post(
       id: 'p${DateTime.now().millisecondsSinceEpoch}',
       authorId: u.id,
-      authorName: u.name,
-      authorUsername: u.username,
+      authorNickname: u.nickname,
       text: text,
       createdAt: DateTime.now(),
       avatarSeed: u.avatarSeed,
@@ -344,8 +337,7 @@ class _FakeCommentRepository implements CommentRepository {
     final comment = Comment(
       id: 'c${DateTime.now().millisecondsSinceEpoch}',
       authorId: _store.currentUser.id,
-      author: _store.currentUser.name,
-      authorUsername: _store.currentUser.username,
+      authorNickname: _store.currentUser.nickname,
       authorAvatarUrl: _store.currentUser.avatarUrl,
       text: text,
       createdAt: DateTime.now(),
@@ -369,14 +361,14 @@ class _FakeUserRepository implements UserRepository {
 
   @override
   Future<({MatrixUser user, List<Post> posts, Friendship? friendship})> profile(
-    String username,
+    String nickname,
   ) async {
     final user = _store.users.values.firstWhere(
-      (u) => u.username == username,
+      (u) => u.nickname == nickname,
       orElse: () => _store.currentUser,
     );
     final userPosts =
-        _store.posts.where((p) => p.authorUsername == username).toList();
+        _store.posts.where((p) => p.authorNickname == nickname).toList();
     final isCurrent = user.id == _store.currentUserId;
     // Real counters, like the server computes them: posts of THIS user and
     // accepted friendships only.
@@ -395,16 +387,14 @@ class _FakeUserRepository implements UserRepository {
 
   @override
   Future<MatrixUser> updateProfile({
-    String? name,
-    String? username,
+    String? nickname,
     String? bio,
     String? avatarUrl,
   }) async {
     final old = _store.currentUser;
     final updated = MatrixUser(
       id: old.id,
-      name: name ?? old.name,
-      username: username ?? old.username,
+      nickname: nickname ?? old.nickname,
       bio: bio ?? old.bio,
       avatarSeed: old.avatarSeed,
       avatarUrl: avatarUrl ?? old.avatarUrl,
@@ -419,9 +409,7 @@ class _FakeUserRepository implements UserRepository {
     if (query.trim().isEmpty) return users;
     final q = query.toLowerCase();
     return users
-        .where((u) =>
-            u.name.toLowerCase().contains(q) ||
-            u.username.toLowerCase().contains(q))
+        .where((u) => u.nickname.toLowerCase().contains(q))
         .toList();
   }
 }

@@ -39,7 +39,7 @@ class AppState extends ChangeNotifier {
 
   final List<Post> _posts = [];
 
-  /// Viewed profiles, keyed by lowercase username. This is the core
+  /// Viewed profiles, keyed by lowercase nickname. This is the core
   /// currentUser/viewedUser separation: the authenticated user lives ONLY
   /// in [_currentUser]; every viewed profile (including our own, once
   /// loaded) is a standalone entry in this map that never overwrites
@@ -75,12 +75,12 @@ class AppState extends ChangeNotifier {
   List<Post> get posts => List.unmodifiable(_posts);
   bool get isLoadingProfile => _loadingProfile;
 
-  /// The viewed-profile snapshot for [username] (null/empty → the session
+  /// The viewed-profile snapshot for [nickname] (null/empty → the session
   /// user's own). Returns null until the first server load completes.
-  ProfileData? profileFor(String? username) {
-    final key = (username == null || username.isEmpty)
-        ? _currentUser?.username
-        : username;
+  ProfileData? profileFor(String? nickname) {
+    final key = (nickname == null || nickname.isEmpty)
+        ? _currentUser?.nickname
+        : nickname;
     if (key == null) return null;
     return _profiles[key.toLowerCase()];
   }
@@ -136,9 +136,9 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  /// Logs in with a username + password.
-  Future<void> login({required String username, required String password}) async {
-    final dto = await _auth.login(username: username, password: password);
+  /// Logs in with a nickname + password.
+  Future<void> login({required String nickname, required String password}) async {
+    final dto = await _auth.login(nickname: nickname, password: password);
     _currentUser = dto.user.toModel();
     notifyListeners();
     _syncPush();
@@ -147,13 +147,11 @@ class AppState extends ChangeNotifier {
   /// Registers a new account and logs in. Returns the one-time recovery
   /// code the backend generated so the UI can display it to the user.
   Future<String> register({
-    required String name,
-    required String username,
+    required String nickname,
     required String password,
   }) async {
     final dto = await _auth.register(
-      name: name,
-      username: username,
+      nickname: nickname,
       password: password,
     );
     _currentUser = dto.user.toModel();
@@ -321,7 +319,7 @@ class AppState extends ChangeNotifier {
     _posts.insert(0, post);
     // Reflect on the author's viewed profile, if loaded: posts list grows
     // and the server-side counter bumps by one (matches Part 2.3).
-    final key = post.authorUsername.toLowerCase();
+    final key = post.authorNickname.toLowerCase();
     final profile = _profiles[key];
     if (profile != null) {
       _profiles[key] = profile.copyWith(
@@ -403,24 +401,24 @@ class AppState extends ChangeNotifier {
   /// server into its OWN keyed slot. This is the ONLY source for the
   /// profile screen — never the local feed cache, and never the data of
   /// another profile: a concurrent visit to B never rewrites A's slot.
-  Future<void> loadProfile(String username) async {
+  Future<void> loadProfile(String nickname) async {
     if (_loadingProfile) return;
     _loadingProfile = true;
     notifyListeners();
     try {
-      final result = await _users.profile(username);
-      final key = result.user.username.toLowerCase();
+      final result = await _users.profile(nickname);
+      final key = result.user.nickname.toLowerCase();
       _profiles[key] = ProfileData(
         user: result.user,
         posts: result.posts,
         friendship: result.friendship,
       );
       // Keep the session user fresh when viewing our own profile — a copy
-      // of name/bio/avatar only, identity fields (id/username) are NEVER
+      // of name/bio/avatar only, identity fields (id/nickname) are NEVER
       // overwritten by a viewed profile.
-      if (_currentUser?.username.toLowerCase() == key) {
+      if (_currentUser?.nickname.toLowerCase() == key) {
         _currentUser = _currentUser!.copyWith(
-          name: result.user.name,
+          nickname: result.user.nickname,
           bio: result.user.bio,
           avatarUrl: result.user.avatarUrl,
           customization: result.user.customization,
@@ -591,7 +589,7 @@ class AppState extends ChangeNotifier {
     final me = _currentUser;
     if (me == null) return;
     _currentUser = me.copyWith(nameColor: () => hex, nameEffect: () => effect);
-    final key = me.username.toLowerCase();
+    final key = me.nickname.toLowerCase();
     final profile = _profiles[key];
     if (profile != null) {
       _profiles[key] = profile.copyWith(
@@ -704,14 +702,12 @@ class AppState extends ChangeNotifier {
   /// The server response is authoritative — local state is replaced with
   /// whatever the server persisted.
   Future<void> updateProfile({
-    String? name,
-    String? username,
+    String? nickname,
     String? bio,
     String? avatarUrl,
   }) async {
     final updated = await _users.updateProfile(
-      name: name,
-      username: username,
+      nickname: nickname,
       bio: bio,
       avatarUrl: avatarUrl,
     );
@@ -730,7 +726,7 @@ class AppState extends ChangeNotifier {
     return url;
   }
 
-  /// Searches users by name / username.
+  /// Searches users by name / nickname.
   Future<List<MatrixUser>> searchUsers(String query) async {
     return _users.search(query);
   }
@@ -744,7 +740,7 @@ class AppState extends ChangeNotifier {
 
 /// Immutable snapshot of a viewed profile: the viewed user, their posts
 /// and the friendship state between the session user and [user]. Stored in
-/// [AppState] keyed by lowercase username so the session user
+/// [AppState] keyed by lowercase nickname so the session user
 /// (currentUser) and every viewed profile (viewedUser) stay isolated —
 /// navigating A → B → C → A never corrupts A.
 class ProfileData {

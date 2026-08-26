@@ -44,9 +44,9 @@ class _MatrixAppState extends State<MatrixApp> {
       case 'FRIEND_REQUEST':
         navigator.pushNamed(AppRoutes.home, arguments: 3);
       case 'FRIEND_ACCEPTED':
-        final username = data['actorUsername'] as String?;
-        if (username != null && username.isNotEmpty) {
-          navigator.pushNamed(AppRoutes.profile, arguments: username);
+        final nickname = data['actorNickname'] as String?;
+        if (nickname != null && nickname.isNotEmpty) {
+          navigator.pushNamed(AppRoutes.profile, arguments: nickname);
         }
     }
   }

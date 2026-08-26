@@ -23,8 +23,7 @@ MatrixNotification _notification({
     read: read,
     createdAt: DateTime(2024, 1, 10, 12),
     actorId: 'u2',
-    actorName: 'João',
-    actorUsername: 'joao',
+    actorNickname: 'joao',
     postId: postId,
     commentId: commentId,
     friendRequestId: friendRequestId,
@@ -37,7 +36,7 @@ FriendRequest _request(String id) {
     id: id,
     status: 'PENDING',
     createdAt: DateTime(2024, 1, 10),
-    sender: MatrixUser(id: 'u2', name: 'João', username: 'joao'),
+    sender: MatrixUser(id: 'u2', nickname: 'joao'),
     receiverId: 'u0',
   );
 }
@@ -52,7 +51,7 @@ void main() {
   });
 
   testWidgets(
-      'friend accepted shows "Agora você e @x são amigos." and opens the '
+      'friend accepted shows the actor nickname (without "@") and opens the '
       'friend profile on tap', (tester) async {
     final state = await seededAppStateWithSocial(notifications: [
       _notification(id: 'n9', type: 'FRIEND_ACCEPTED', read: false),
@@ -65,7 +64,7 @@ void main() {
     expect(find.textContaining('Agora você e', findRichText: true), findsOneWidget);
     expect(find.textContaining('são amigos.', findRichText: true), findsOneWidget);
     final actor = find.byWidgetPredicate(
-      (w) => w is NicknameRenderer && w.text == '@joao',
+      (w) => w is NicknameRenderer && w.text == 'joao',
     );
     expect(actor, findsOneWidget);
 

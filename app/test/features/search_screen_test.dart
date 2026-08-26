@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:matrix_app/core/widgets/matrix_card.dart';
 import 'package:matrix_app/features/search/search_screen.dart';
 
 import '../helpers/test_app.dart';
@@ -12,15 +13,15 @@ void main() {
     expect(find.text('Pesquisar usuários...'), findsOneWidget);
   });
 
-  testWidgets('filters users by name', (tester) async {
+  testWidgets('filters users by nickname', (tester) async {
     await pumpMatrixApp(tester, const SearchScreen());
     await tester.pumpAndSettle();
 
     await tester.enterText(find.byType(TextField), 'Leonardo');
     await tester.pumpAndSettle();
 
-    // Only Leonardo matches.
-    expect(find.text('@leonardo'), findsOneWidget);
+    // Only Leonardo matches — rendered WITHOUT the '@' prefix.
+    expect(find.text('leonardo'), findsOneWidget);
   });
 
   testWidgets('tapping a result opens that user profile', (tester) async {
@@ -30,8 +31,13 @@ void main() {
     await tester.enterText(find.byType(TextField), 'joao');
     await tester.pumpAndSettle();
 
-    expect(find.text('@joao'), findsOneWidget);
-    await tester.tap(find.text('@joao'));
+    // The RichText result (NOT the EditableText query field) is the target.
+    final result = find.ancestor(
+      of: find.textContaining('joao', findRichText: true),
+      matching: find.byType(MatrixCard),
+    );
+    expect(result, findsOneWidget);
+    await tester.tap(result);
     await tester.pump(const Duration(milliseconds: 800));
     await tester.pump(const Duration(milliseconds: 800));
 

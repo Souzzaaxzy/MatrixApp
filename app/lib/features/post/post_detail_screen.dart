@@ -234,7 +234,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
           Row(
             children: [
               UserAvatar(
-                name: post.authorName,
+                name: post.authorNickname,
                 seed: post.avatarSeed,
                 imageUrl: post.authorAvatarUrl,
               ),
@@ -244,14 +244,14 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     NicknameRenderer(
-                      post.authorName,
+                      post.authorNickname,
                       baseStyle: AppTextStyles.h3,
                       background: AppColors.cardSurface,
-                      nameColor: post.authorNameColor,
-                      effect: post.authorNameEffect,
+                      nameColor: post.authorNicknameColor,
+                      effect: post.authorNicknameEffect,
                     ),
                     Text(
-                      '@${post.authorUsername} • ${relativeTime(post.createdAt)}',
+                      '${post.authorNickname} • ${relativeTime(post.createdAt)}',
                       style: AppTextStyles.caption,
                     ),
                   ],

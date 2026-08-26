@@ -22,8 +22,7 @@ class RegisterScreen extends StatefulWidget {
 
 class _RegisterScreenState extends State<RegisterScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _nameController = TextEditingController();
-  final _usernameController = TextEditingController();
+  final _nicknameController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmController = TextEditingController();
   bool _obscure = true;
@@ -33,8 +32,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   @override
   void dispose() {
-    _nameController.dispose();
-    _usernameController.dispose();
+    _nicknameController.dispose();
     _passwordController.dispose();
     _confirmController.dispose();
     super.dispose();
@@ -48,8 +46,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     });
     try {
       final recoveryCode = await AppStateScope.of(context).register(
-        name: _nameController.text.trim(),
-        username: _usernameController.text.trim().replaceAll(RegExp(r'^@+'), ''),
+        nickname: _nicknameController.text.trim().replaceAll(RegExp(r'^@+'), ''),
         password: _passwordController.text,
       );
       if (!mounted) return;
@@ -150,25 +147,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 FadeSlideTransition(
                   delay: const Duration(milliseconds: 120),
                   child: MatrixTextField(
-                    label: 'Nome',
-                    hint: 'Seu nome',
-                    controller: _nameController,
-                    textCapitalization: TextCapitalization.words,
-                    textInputAction: TextInputAction.next,
-                    validator: Validators.name,
-                    prefix: Icon(Icons.person_outline_rounded,
-                        color: AppColors.holographicBlue, size: 20),
-                  ),
-                ),
-                const SizedBox(height: AppDimensions.spaceLg),
-                FadeSlideTransition(
-                  delay: const Duration(milliseconds: 160),
-                  child: MatrixTextField(
                     label: 'Nickname',
-                    hint: 'seu_usuario',
-                    controller: _usernameController,
+                    hint: 'Leonardo',
+                    controller: _nicknameController,
                     textInputAction: TextInputAction.next,
-                    validator: Validators.username,
+                    validator: Validators.nickname,
                     prefix: Icon(Icons.person_outline_rounded,
                         color: AppColors.holographicBlue, size: 20),
                   ),

@@ -5,15 +5,14 @@ import 'name_effect.dart';
 class Post {
   Post({
     required this.id,
-    required this.authorName,
-    required this.authorUsername,
+    required this.authorNickname,
     required this.text,
     required this.createdAt,
     this.authorId,
     this.avatarSeed,
     this.authorAvatarUrl,
-    this.authorNameColor,
-    this.authorNameEffect,
+    this.authorNicknameColor,
+    this.authorNicknameEffect,
     this.imageUrl,
     this.likes = 0,
     this.liked = false,
@@ -24,10 +23,12 @@ class Post {
   /// Unique server-side id. ALL operations (like, comment, detail, delete)
   /// key off this — never off the position in a list.
   final String id;
-  final String authorName;
-  final String authorUsername;
 
-  /// Server-side id of the author (stable; username is mutable).
+  /// The author's nickname — the single visual identity, rendered as plain
+  /// text (never '@').
+  final String authorNickname;
+
+  /// Server-side id of the author (stable; nickname is mutable).
   final String? authorId;
   final String text;
   final DateTime createdAt;
@@ -38,12 +39,12 @@ class Post {
 
   /// The AUTHOR's own nickname color (hex), embedded by the server. Null →
   /// default color. Never the viewer's color.
-  final String? authorNameColor;
+  final String? authorNicknameColor;
 
   /// The AUTHOR's own nickname effect (server catalog entry with its render
   /// config). Null → "Nenhum" (plain colored nickname). Fully independent
-  /// from [authorNameColor].
-  final NameEffect? authorNameEffect;
+  /// from [authorNicknameColor].
+  final NameEffect? authorNicknameEffect;
   final String? imageUrl;
 
   int likes;
@@ -64,15 +65,14 @@ class Post {
   }) =>
       Post(
         id: id,
-        authorName: authorName,
-        authorUsername: authorUsername,
+        authorNickname: authorNickname,
         authorId: authorId,
         text: text ?? this.text,
         createdAt: createdAt,
         avatarSeed: avatarSeed,
         authorAvatarUrl: authorAvatarUrl,
-        authorNameColor: authorNameColor,
-        authorNameEffect: authorNameEffect,
+        authorNicknameColor: authorNicknameColor,
+        authorNicknameEffect: authorNicknameEffect,
         imageUrl: imageUrl ?? this.imageUrl,
         likes: likes ?? this.likes,
         liked: liked ?? this.liked,

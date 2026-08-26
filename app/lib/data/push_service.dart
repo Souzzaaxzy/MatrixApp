@@ -32,7 +32,7 @@ class PushService {
       FlutterLocalNotificationsPlugin();
 
   /// Called when the user taps a native notification. Receives the routing
-  /// payload (type / actorUsername / postId / commentId / friendRequestId).
+  /// payload (type / actorNickname / postId / commentId / friendRequestId).
   void Function(Map<String, dynamic> data)? onNavigate;
 
   static const _channelId = 'matrix_notifications';

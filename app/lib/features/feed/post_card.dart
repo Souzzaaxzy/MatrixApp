@@ -87,7 +87,7 @@ class _PostCardState extends State<PostCard>
             Row(
               children: [
                 UserAvatar(
-                  name: post.authorName,
+                  name: post.authorNickname,
                   seed: post.avatarSeed,
                   imageUrl: post.authorAvatarUrl,
                 ),
@@ -97,15 +97,15 @@ class _PostCardState extends State<PostCard>
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       NicknameRenderer(
-                        post.authorName,
+                        post.authorNickname,
                         baseStyle: AppTextStyles.h3,
                         background: AppColors.cardSurface,
-                        nameColor: post.authorNameColor,
-                        effect: post.authorNameEffect,
+                        nameColor: post.authorNicknameColor,
+                        effect: post.authorNicknameEffect,
                         lightweight: true,
                       ),
                       Text(
-                        '@${post.authorUsername} • ${relativeTime(post.createdAt)}',
+                        '${post.authorNickname} • ${relativeTime(post.createdAt)}',
                         style: AppTextStyles.caption,
                       ),
                     ],

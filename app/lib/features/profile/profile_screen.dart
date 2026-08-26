@@ -21,14 +21,14 @@ import 'settings_sheet.dart';
 
 /// Profile screen — the server is the single source of truth.
 ///
-/// [username] null (or equal to the session user's) means "own profile":
+/// [nickname] null (or equal to the session user's) means "own profile":
 /// renders the Edit button and the floating "+" create-post button, and
 /// NEVER the friendship button. Another user's profile shows the big
 /// Seguir / Solicitado / Amigos friendship button (server-managed state).
 class ProfileScreen extends StatefulWidget {
-  const ProfileScreen({super.key, this.username});
+  const ProfileScreen({super.key, this.nickname});
 
-  final String? username;
+  final String? nickname;
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
@@ -41,9 +41,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   bool get _isOwn {
     final state = AppStateScope.of(context);
-    return widget.username == null ||
-        widget.username!.toLowerCase() ==
-            (state.currentUser?.username.toLowerCase() ?? '');
+    return widget.nickname == null ||
+        widget.nickname!.toLowerCase() ==
+            (state.currentUser?.nickname.toLowerCase() ?? '');
   }
 
   @override
@@ -59,11 +59,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _load() async {
     final state = AppStateScope.of(context);
-    final username = widget.username ?? state.currentUser?.username;
-    if (username == null) return;
+    final nickname = widget.nickname ?? state.currentUser?.nickname;
+    if (nickname == null) return;
     setState(() => _error = null);
     try {
-      await state.loadProfile(username);
+      await state.loadProfile(nickname);
     } on ApiException catch (e) {
       if (!mounted) return;
       setState(() => _error = e.message);
@@ -122,7 +122,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     // The viewed profile is read from ITS OWN keyed slot — never from a
     // shared variable. Visiting B and coming back shows A immediately,
     // because A's slot was never overwritten by B.
-    final profile = state.profileFor(widget.username);
+    final profile = state.profileFor(widget.nickname);
     final user = profile?.user ?? (isOwn ? sessionUser : null);
     final posts = profile?.posts ?? const <Post>[];
     final friendship = profile?.friendship;
@@ -280,54 +280,24 @@ class _ProfileHeader extends StatelessWidget {
             background: Colors.transparent,
             borderRadius: BorderRadius.circular(999),
             child: UserAvatar(
-              name: user.name,
-              seed: user.avatarSeed ?? user.username,
+              name: user.nickname,
+              seed: user.avatarSeed ?? user.nickname,
               imageUrl: user.avatarUrl,
               size: 110,
               ring: true,
             ),
           ),
           const SizedBox(height: AppDimensions.spaceLg),
-          // The server username (not the display name) with a discreet
-          // glowing "@" — blurred shadow per the design spec.
-          RichText(
-            text: TextSpan(
-              children: [
-                TextSpan(
-                  text: '@',
-                  style: TextStyle(
-                    color: AppColors.holographicBlue,
-                    fontSize: 20,
-                    fontWeight: FontWeight.w600,
-                    shadows: const [
-                      Shadow(color: AppColors.electricBlue, blurRadius: 10),
-                    ],
-                  ),
-                ),
-                WidgetSpan(
-                  alignment: PlaceholderAlignment.baseline,
-                  baseline: TextBaseline.alphabetic,
-                  child: NicknameRenderer(
-                    user.username,
-                    baseStyle: AppTextStyles.h2.copyWith(fontSize: 20),
-                    background: AppColors.absoluteBlack,
-                    nameColor: user.nameColor,
-                    effect: user.nameEffect,
-                  ),
-                ),
-              ],
-            ),
+          // The nickname rendered plain (never '@') — the single visual
+          // identity of the account.
+          NicknameRenderer(
+            user.nickname,
+            baseStyle: AppTextStyles.h2.copyWith(fontSize: 22),
+            background: AppColors.absoluteBlack,
+            nameColor: user.nameColor,
+            effect: user.nameEffect,
+            textAlign: TextAlign.center,
           ),
-          const SizedBox(height: AppDimensions.spaceMd),
-          if (user.name.isNotEmpty)
-            NicknameRenderer(
-              user.name,
-              baseStyle: AppTextStyles.bodyMuted,
-              background: AppColors.absoluteBlack,
-              nameColor: user.nameColor,
-              effect: user.nameEffect,
-              textAlign: TextAlign.center,
-            ),
           const SizedBox(height: AppDimensions.spaceLg),
           // Real counters (server): Amigos opens the friends bottom sheet.
           _ProfileStats(user: user, onFriendsTap: onFriendsTap),

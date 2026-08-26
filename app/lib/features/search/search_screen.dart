@@ -13,7 +13,7 @@ import '../../core/widgets/nickname_renderer.dart';
 import '../../core/widgets/user_avatar.dart';
 import '../../models/matrix_user.dart';
 
-/// MATRIX search — backend search by name / username.
+/// MATRIX search — backend search by nickname.
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});
 
@@ -62,7 +62,7 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   void _openUser(MatrixUser user) {
-    Navigator.of(context).pushNamed(AppRoutes.profile, arguments: user.username);
+    Navigator.of(context).pushNamed(AppRoutes.profile, arguments: user.nickname);
   }
 
   @override
@@ -132,8 +132,8 @@ class _SearchScreenState extends State<SearchScreen> {
                     child: Row(
                       children: [
                         UserAvatar(
-                          name: user.name,
-                          seed: user.avatarSeed ?? user.username,
+                          name: user.nickname,
+                          seed: user.avatarSeed ?? user.nickname,
                           imageUrl: user.avatarUrl,
                           size: 42,
                         ),
@@ -143,14 +143,13 @@ class _SearchScreenState extends State<SearchScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               NicknameRenderer(
-                                user.name,
+                                user.nickname,
                                 baseStyle: AppTextStyles.h3,
                                 background: AppColors.cardSurface,
                                 nameColor: user.nameColor,
                                 effect: user.nameEffect,
                                 lightweight: true,
                               ),
-                              Text('@${user.username}', style: AppTextStyles.caption),
                             ],
                           ),
                         ),

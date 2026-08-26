@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:matrix_app/core/services/app_state.dart';
+import 'package:matrix_app/core/widgets/matrix_card.dart';
 import 'package:matrix_app/features/home/home_screen.dart';
 import 'package:matrix_app/features/profile/edit_profile_screen.dart';
 import 'package:matrix_app/features/profile/friends_sheet.dart';
@@ -10,11 +11,10 @@ import '../helpers/fake_repositories.dart';
 import '../helpers/test_app.dart';
 
 void main() {
-  testWidgets('renders own profile: avatar, @nickname, edit button, FAB', (tester) async {
+      testWidgets('renders own profile: avatar, nickname, edit button, FAB', (tester) async {
     await pumpMatrixApp(tester, const ProfileScreen());
 
     expect(find.text('PERFIL'), findsOneWidget);
-    expect(find.text('Leonardo'), findsOneWidget);
     expect(find.textContaining('leonardo', findRichText: true), findsOneWidget);
     expect(find.text('PUBLICAÇÕES'), findsOneWidget);
     expect(find.text('EDITAR PERFIL'), findsOneWidget);
@@ -26,7 +26,7 @@ void main() {
   });
 
   testWidgets('other user profile: shows Adicionar, no edit, no FAB', (tester) async {
-    await pumpMatrixApp(tester, const ProfileScreen(username: 'joao'));
+    await pumpMatrixApp(tester, const ProfileScreen(nickname: 'joao'));
     await tester.pump(const Duration(milliseconds: 400));
 
     expect(find.textContaining('joao', findRichText: true), findsOneWidget);
@@ -41,7 +41,7 @@ void main() {
   });
 
   testWidgets('tapping Adicionar sends the request and shows Solicitado', (tester) async {
-    await pumpMatrixApp(tester, const ProfileScreen(username: 'joao'));
+    await pumpMatrixApp(tester, const ProfileScreen(nickname: 'joao'));
     await tester.pump(const Duration(milliseconds: 400));
 
     await tester.tap(find.text('ADICIONAR'));
@@ -76,7 +76,7 @@ void main() {
 
     testWidgets('viewed profile shows THAT user counters, not the session',
         (tester) async {
-      await pumpMatrixApp(tester, const ProfileScreen(username: 'joao'));
+      await pumpMatrixApp(tester, const ProfileScreen(nickname: 'joao'));
       await tester.pump(const Duration(milliseconds: 400));
 
       expect(find.text('Amigos'), findsOneWidget);
@@ -100,10 +100,10 @@ void main() {
       await tester.pump(const Duration(milliseconds: 400));
 
       expect(find.byType(FriendsSheet), findsOneWidget);
-      expect(find.text('AMIGOS DE @LEONARDO'), findsOneWidget);
-      expect(find.text('@joao'), findsOneWidget);
+      expect(find.text('AMIGOS DE LEONARDO'), findsOneWidget);
+      expect(find.text('joao'), findsOneWidget);
 
-      await tester.tap(find.text('@joao'));
+      await tester.tap(find.text('joao'));
       await tester.pump(const Duration(milliseconds: 800));
       await tester.pump(const Duration(milliseconds: 800));
 
@@ -136,7 +136,10 @@ void main() {
       await tester.pump(const Duration(milliseconds: 400));
 
       // Open the viewed profile (loaded in its own keyed slot).
-      await tester.tap(find.text('@joao'));
+      await tester.tap(find.ancestor(
+        of: find.textContaining('joao', findRichText: true),
+        matching: find.byType(MatrixCard),
+      ));
       await tester.pump(const Duration(milliseconds: 800));
       await tester.pump(const Duration(milliseconds: 800));
       expect(find.text('ADICIONAR'), findsOneWidget);
@@ -163,22 +166,19 @@ void main() {
       await pumpMatrixApp(tester, const EditProfileScreen());
 
       expect(find.text('EDITAR PERFIL'), findsOneWidget);
-      // Name field is pre-filled with "Leonardo".
-      expect(find.widgetWithText(TextField, 'Leonardo'), findsOneWidget);
+      // Nickname field is pre-filled with the session nickname.
+      expect(find.widgetWithText(TextField, 'leonardo'), findsOneWidget);
     });
 
-    testWidgets('validates required name and username', (tester) async {
+    testWidgets('validates required nickname', (tester) async {
       await pumpMatrixApp(tester, const EditProfileScreen());
 
-      // Clear the name field.
+      // Clear the nickname field.
       await tester.enterText(find.byType(TextField).at(0), '');
-      // Clear the username field.
-      await tester.enterText(find.byType(TextField).at(1), '');
 
       await tester.tap(find.text('SALVAR'));
       await tester.pump();
 
-      expect(find.text('Informe seu nome'), findsOneWidget);
       expect(find.text('Nickname obrigatório'), findsOneWidget);
     });
 
@@ -187,11 +187,11 @@ void main() {
       await pumpMatrixApp(tester, const EditProfileScreen(), state: state);
 
       await tester.enterText(find.byType(TextField).at(0), 'Neo');
-      await tester.enterText(find.byType(TextField).at(2), 'The one');
+      await tester.enterText(find.byType(TextField).at(1), 'The one');
       await tester.tap(find.text('SALVAR'));
       await tester.pumpAndSettle();
 
-      expect(state.currentUser!.name, 'Neo');
+      expect(state.currentUser!.nickname, 'Neo');
       expect(state.currentUser!.bio, 'The one');
     });
   });

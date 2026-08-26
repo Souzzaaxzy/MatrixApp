@@ -113,7 +113,7 @@ class _FriendsSheetState extends State<FriendsSheet> {
     Navigator.of(context).pop();
     Navigator.of(context).pushNamed(
       AppRoutes.profile,
-      arguments: friend.username,
+      arguments: friend.nickname,
     );
   }
 
@@ -164,7 +164,7 @@ class _FriendsSheetState extends State<FriendsSheet> {
                   children: [
                     Expanded(
                       child: HudLabel(
-                        text: 'Amigos de @${widget.user.username}',
+                        text: 'Amigos de ${widget.user.nickname}',
                       ),
                     ),
                     Text(
@@ -249,31 +249,21 @@ class _FriendsSheetState extends State<FriendsSheet> {
             vertical: 2,
           ),
           leading: UserAvatar(
-            name: friend.name,
-            seed: friend.username,
+            name: friend.nickname,
+            seed: friend.avatarSeed ?? friend.nickname,
             imageUrl: friend.avatarUrl == null
                 ? null
                 : ApiConfig.resolveUrl(friend.avatarUrl!),
             size: 44,
           ),
           title: NicknameRenderer(
-            '@${friend.username}',
+            friend.nickname,
             baseStyle: AppTextStyles.body,
             background: AppColors.nightBlue,
             nameColor: friend.nameColor,
             effect: friend.nameEffect,
             lightweight: true,
           ),
-          subtitle: friend.name.isNotEmpty
-              ? NicknameRenderer(
-                  friend.name,
-                  baseStyle: AppTextStyles.bodyMuted,
-                  background: AppColors.nightBlue,
-                  nameColor: friend.nameColor,
-                  effect: friend.nameEffect,
-                  lightweight: true,
-                )
-              : null,
           trailing: Icon(
             Icons.chevron_right_rounded,
             color: AppColors.holographicBlue,

@@ -16,7 +16,7 @@ import '../helpers/fake_repositories.dart';
 Future<void> pumpProfile(
   WidgetTester tester,
   AppState state, {
-  String? username,
+  String? nickname,
 }) async {
   // Restore the session so screens relying on currentUser render content.
   await state.restoreSession();
@@ -26,7 +26,7 @@ Future<void> pumpProfile(
       state: state,
       child: MaterialApp(
         theme: AppTheme.dark,
-        home: ProfileScreen(username: username),
+        home: ProfileScreen(nickname: nickname),
         onGenerateRoute: buildAppRoute,
       ),
     ),
@@ -47,7 +47,7 @@ void main() {
     expect(settingsButton(), findsOneWidget);
 
     // Another user's profile -> no settings entry.
-    await pumpProfile(tester, state, username: 'joao');
+    await pumpProfile(tester, state, nickname: 'joao');
     expect(settingsButton(), findsNothing);
   });
 

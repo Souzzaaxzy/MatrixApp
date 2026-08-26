@@ -21,15 +21,13 @@ class AuthRepository {
   /// Registers a new account. The backend returns a recovery code that
   /// must be shown to the user once — it is never sent again.
   Future<AuthDto> register({
-    required String name,
-    required String username,
+    required String nickname,
     required String password,
   }) async {
     final json = await _api.post<Map<String, dynamic>>(
       '/api/auth/register',
       data: {
-        'name': name,
-        'username': username,
+        'nickname': nickname,
         'password': password,
       },
     );
@@ -42,12 +40,12 @@ class AuthRepository {
   }
 
   Future<AuthDto> login({
-    required String username,
+    required String nickname,
     required String password,
   }) async {
     final json = await _api.post<Map<String, dynamic>>(
       '/api/auth/login',
-      data: {'username': username, 'password': password},
+      data: {'nickname': nickname, 'password': password},
     );
     final dto = AuthDto.fromJson(json);
     await _api.tokenStore.save(
@@ -187,12 +185,12 @@ class UserRepository {
 
   final ApiClient _api;
 
-  /// Fetches a public profile by username: user, posts and (for an
+  /// Fetches a public profile by nickname: user, posts and (for an
   /// authenticated viewer) the friendship state Seguir/Solicitado/Amigos.
   Future<({MatrixUser user, List<Post> posts, Friendship? friendship})> profile(
-    String username,
+    String nickname,
   ) async {
-    final json = await _api.get<Map<String, dynamic>>('/api/users/$username');
+    final json = await _api.get<Map<String, dynamic>>('/api/users/$nickname');
     final user = PublicUserDto.fromJson(json['user'] as Map<String, dynamic>).toModel();
     final list = (json['posts'] as List).cast<Map<String, dynamic>>();
     final posts = list.map(FeedPostDto.fromJson).map((d) => d.toModel()).toList();
@@ -202,16 +200,14 @@ class UserRepository {
   }
 
   Future<MatrixUser> updateProfile({
-    String? name,
-    String? username,
+    String? nickname,
     String? bio,
     String? avatarUrl,
   }) async {
     final json = await _api.patch<Map<String, dynamic>>(
       '/api/users/me',
       data: {
-        if (name != null) 'name': name,
-        if (username != null) 'username': username,
+        if (nickname != null) 'nickname': nickname,
         if (bio != null) 'bio': bio,
         if (avatarUrl != null) 'avatarUrl': avatarUrl,
       },

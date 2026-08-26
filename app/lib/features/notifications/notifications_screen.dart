@@ -82,7 +82,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           .pushNamed(AppRoutes.postDetail, arguments: notification.postId);
     } else {
       Navigator.of(context)
-          .pushNamed(AppRoutes.profile, arguments: notification.actorUsername);
+          .pushNamed(AppRoutes.profile, arguments: notification.actorNickname);
     }
   }
 
@@ -239,8 +239,8 @@ class _NotificationTile extends StatelessWidget {
             ),
           if (!n.read) const SizedBox(width: AppDimensions.spaceSm),
           UserAvatar(
-            name: n.actorName,
-            seed: n.actorUsername,
+            name: n.actorNickname,
+            seed: n.actorNickname,
             imageUrl: n.actorAvatarUrl,
             size: 42,
           ),
@@ -262,12 +262,12 @@ class _NotificationTile extends StatelessWidget {
                         alignment: PlaceholderAlignment.baseline,
                         baseline: TextBaseline.alphabetic,
                         child: NicknameRenderer(
-                          '@${n.actorUsername}',
+                          n.actorNickname,
                           baseStyle:
                               AppTextStyles.h3.copyWith(fontSize: 14),
                           background: AppColors.cardSurface,
-                          nameColor: n.actorNameColor,
-                          effect: n.actorNameEffect,
+                          nameColor: n.actorNicknameColor,
+                          effect: n.actorNicknameEffect,
                           lightweight: true,
                         ),
                       ),
@@ -323,19 +323,19 @@ class _FriendRequestCard extends StatelessWidget {
       child: Column(
         children: [
           UserAvatar(
-            name: n.actorName,
-            seed: n.actorUsername,
+            name: n.actorNickname,
+            seed: n.actorNickname,
             imageUrl: n.actorAvatarUrl,
             size: 64,
             ring: true,
           ),
           const SizedBox(height: AppDimensions.spaceMd),
           NicknameRenderer(
-            '@${n.actorUsername}',
+            n.actorNickname,
             baseStyle: AppTextStyles.h2.copyWith(fontSize: 16),
             background: AppColors.cardSurface,
-            nameColor: n.actorNameColor,
-            effect: n.actorNameEffect,
+            nameColor: n.actorNicknameColor,
+            effect: n.actorNicknameEffect,
           ),
           const SizedBox(height: AppDimensions.spaceXs),
           Text(

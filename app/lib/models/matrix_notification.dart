@@ -12,11 +12,10 @@ class MatrixNotification {
     required this.read,
     required this.createdAt,
     required this.actorId,
-    required this.actorName,
-    required this.actorUsername,
+    required this.actorNickname,
     this.actorAvatarUrl,
-    this.actorNameColor,
-    this.actorNameEffect,
+    this.actorNicknameColor,
+    this.actorNicknameEffect,
     this.postId,
     this.commentId,
     this.friendRequestId,
@@ -32,17 +31,18 @@ class MatrixNotification {
   final DateTime createdAt;
 
   final String actorId;
-  final String actorName;
-  final String actorUsername;
+
+  /// The acting user's nickname — rendered as plain text (never '@').
+  final String actorNickname;
   final String? actorAvatarUrl;
 
   /// The ACTOR's own nickname color (hex), embedded by the server. Null →
   /// default color.
-  final String? actorNameColor;
+  final String? actorNicknameColor;
 
   /// The ACTOR's own nickname effect (null → "Nenhum"). Independent from
-  /// [actorNameColor].
-  final NameEffect? actorNameEffect;
+  /// [actorNicknameColor].
+  final NameEffect? actorNicknameEffect;
 
   final String? postId;
   final String? commentId;
@@ -58,11 +58,10 @@ class MatrixNotification {
         read: read ?? this.read,
         createdAt: createdAt,
         actorId: actorId,
-        actorName: actorName,
-        actorUsername: actorUsername,
+        actorNickname: actorNickname,
         actorAvatarUrl: actorAvatarUrl,
-        actorNameColor: actorNameColor,
-        actorNameEffect: actorNameEffect,
+        actorNicknameColor: actorNicknameColor,
+        actorNicknameEffect: actorNicknameEffect,
         postId: postId,
         commentId: commentId,
         friendRequestId: friendRequestId,

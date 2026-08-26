@@ -58,8 +58,9 @@ void main() {
       expect(find.text('PERSONALIZAÇÕES'), findsOneWidget);
       expect(find.text('PRÉ-VISUALIZAÇÃO'), findsOneWidget);
       expect(find.byType(ProfileCustomizationPreview), findsOneWidget);
-      expect(find.text('Leonardo'), findsWidgets);
-      expect(find.text('@leonardo'), findsOneWidget);
+      expect(
+          find.textContaining('leonardo', findRichText: true), findsWidgets);
+      expect(find.text('@leonardo'), findsNothing);
       expect(find.text('Cor do nickname'), findsOneWidget);
       expect(find.text('Efeito do nickname'), findsOneWidget);
 

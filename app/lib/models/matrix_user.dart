@@ -5,8 +5,7 @@ import 'name_effect.dart';
 class MatrixUser {
   const MatrixUser({
     required this.id,
-    required this.name,
-    required this.username,
+    required this.nickname,
     this.bio = '',
     this.avatarSeed,
     this.avatarUrl,
@@ -18,8 +17,11 @@ class MatrixUser {
   });
 
   final String id;
-  final String name;
-  final String username;
+
+  /// The single visual identity of the user. Rendered everywhere as plain
+  /// text (never prefixed with '@'). Legacy name/username were merged into
+  /// this field by the identity migration.
+  final String nickname;
   final String bio;
 
   /// Seed for the deterministic gradient/initials fallback avatar.
@@ -56,8 +58,7 @@ class MatrixUser {
   CosmeticItem? cosmetic(String slot) => customization[slot];
 
   MatrixUser copyWith({
-    String? name,
-    String? username,
+    String? nickname,
     String? bio,
     String? avatarSeed,
     String? avatarUrl,
@@ -69,8 +70,7 @@ class MatrixUser {
   }) =>
       MatrixUser(
         id: id,
-        name: name ?? this.name,
-        username: username ?? this.username,
+        nickname: nickname ?? this.nickname,
         bio: bio ?? this.bio,
         avatarSeed: avatarSeed ?? this.avatarSeed,
         avatarUrl: avatarUrl ?? this.avatarUrl,
