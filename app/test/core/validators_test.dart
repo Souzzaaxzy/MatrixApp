@@ -61,7 +61,7 @@ void main() {
       expect(Validators.nickname('nick`name'), isNotNull);
       expect(Validators.nickname('nick\\name'), isNotNull);
       expect(Validators.nickname('Leo​nardo'), isNotNull); // ZWSP
-      expect(Validators.nickname('Leo‮nardo'), isNotNull); // bidi override
+      expect(Validators.nickname('Leo\u202Enardo'), isNotNull); // bidi override
     });
   });
 
