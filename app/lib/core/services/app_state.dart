@@ -12,7 +12,6 @@ import '../../models/cosmetic_item.dart';
 import '../../models/friend_request.dart';
 import '../../models/matrix_notification.dart';
 import '../../models/matrix_user.dart';
-import '../../models/name_effect.dart';
 import '../../models/post.dart';
 import '../utils/mock_data_service.dart';
 
@@ -62,12 +61,6 @@ class AppState extends ChangeNotifier {
   List<CosmeticItem> _nameColorCatalog = const [];
   bool _loadingNameColorCatalog = false;
 
-  /// Server-owned NAME_EFFECT catalog (the official effect list, with the
-  /// render config of each effect). Loaded once per session, like the
-  /// color palette.
-  List<CosmeticItem> _nameEffectCatalog = const [];
-  bool _loadingNameEffectCatalog = false;
-
   /// Posts fetched individually (detail screen) that may not be present in
   /// the feed/profile caches. Lets likes/comments work uniformly by id.
   final Map<String, Post> _postCache = {};
@@ -97,10 +90,6 @@ class AppState extends ChangeNotifier {
   /// [loadNameColorCatalog] completes.
   List<CosmeticItem> get nameColorCatalog => List.unmodifiable(_nameColorCatalog);
 
-  /// The official nickname effect catalog (server), empty until
-  /// [loadNameEffectCatalog] completes.
-  List<CosmeticItem> get nameEffectCatalog =>
-      List.unmodifiable(_nameEffectCatalog);
   List<AkameMessage> get akameMessages => List.unmodifiable(_akameMessages);
   MatrixUser? get currentUser => _currentUser;
   bool get isLoadingFeed => _loadingFeed;
@@ -214,7 +203,6 @@ class AppState extends ChangeNotifier {
     _feedCursor = null;
     _myCosmetics = const {};
     _nameColorCatalog = const [];
-    _nameEffectCatalog = const [];
     _akameMessages = MockDataService.initialAkameMessages();
   }
 
@@ -512,39 +500,16 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  /// Loads the server-owned nickname effect catalog once per session
-  /// (cached — rendering an effected nickname NEVER hits the network).
-  Future<void> loadNameEffectCatalog() async {
-    if (_loadingNameEffectCatalog || _nameEffectCatalog.isNotEmpty) return;
-    _loadingNameEffectCatalog = true;
-    try {
-      _nameEffectCatalog =
-          await _customizationRepo.catalog(type: CosmeticItem.nameEffect);
-    } catch (_) {
-      // Non-blocking: the picker retries on the next open.
-    } finally {
-      _loadingNameEffectCatalog = false;
-      notifyListeners();
-    }
-  }
-
   /// Consolidated save of the pending nickname customization in ONE server
-  /// operation: `{nameColorId, nameEffectId}` (null removes the slot). The
-  /// server validates both ids against the active catalog and persists them
-  /// atomically; the server-confirmed state is then propagated globally so
-  /// every nickname of the session user updates immediately.
-  Future<void> saveCosmetics({String? nameColorId, String? nameEffectId}) async {
-    final equipped = await _customizationRepo.saveCosmetics(
-      nameColorId: nameColorId,
-      nameEffectId: nameEffectId,
-    );
-    // The server echoes only the two consolidated slots; a slot absent from
-    // the echo means it was REMOVED (null) — not merely unchanged.
-    final next = {..._myCosmetics, ...equipped};
-    for (final slot in [CosmeticItem.nameColor, CosmeticItem.nameEffect]) {
-      if (!equipped.containsKey(slot)) next.remove(slot);
-    }
-    _myCosmetics = next;
+  /// operation: `{nameColorId}` (null removes the slot). The server
+  /// validates the id against the active catalog and persists it; the
+  /// server-confirmed equipped map is then reloaded and propagated globally
+  /// so every nickname of the session user updates immediately.
+  Future<void> saveCosmetics({String? nameColorId}) async {
+    await _customizationRepo.saveCosmetics(nameColorId: nameColorId);
+    // The server is the source of truth: reload the equipped map so the
+    // whole app reflects the confirmed state (not a local guess).
+    _myCosmetics = await _customizationRepo.equipped();
     _syncMyNameCosmetics();
     notifyListeners();
   }
@@ -554,8 +519,7 @@ class AppState extends ChangeNotifier {
   Future<void> equipCosmetic(String itemId) async {
     final item = await _customizationRepo.equip(itemId);
     _myCosmetics = {..._myCosmetics, item.slot: item};
-    if (item.slot == CosmeticItem.nameColor ||
-        item.slot == CosmeticItem.nameEffect) {
+    if (item.slot == CosmeticItem.nameColor) {
       _syncMyNameCosmetics();
     }
     notifyListeners();
@@ -565,38 +529,26 @@ class AppState extends ChangeNotifier {
   Future<void> unequipCosmetic(String slot) async {
     await _customizationRepo.unequip(slot);
     _myCosmetics = {..._myCosmetics}..remove(slot);
-    if (slot == CosmeticItem.nameColor || slot == CosmeticItem.nameEffect) {
+    if (slot == CosmeticItem.nameColor) {
       _syncMyNameCosmetics();
     }
     notifyListeners();
   }
 
-  /// Propagates the session user's equipped nickname cosmetics (color +
-  /// effect, fully independent slots) into the global state (currentUser +
-  /// the own-profile cache) so EVERY component that renders the user's
-  /// nickname reflects a change immediately — no restart, no re-login, no
-  /// screen refresh.
+  /// Propagates the session user's equipped nickname color into the global
+  /// state (currentUser + the own-profile cache) so EVERY component that
+  /// renders the user's nickname reflects a change immediately — no
+  /// restart, no re-login, no screen refresh.
   void _syncMyNameCosmetics() {
     final hex = _myCosmetics[CosmeticItem.nameColor]?.hexColor;
-    final effectItem = _myCosmetics[CosmeticItem.nameEffect];
-    final effect = effectItem == null
-        ? null
-        : NameEffect(
-            id: effectItem.id,
-            name: effectItem.name,
-            config: effectItem.config,
-          );
     final me = _currentUser;
     if (me == null) return;
-    _currentUser = me.copyWith(nameColor: () => hex, nameEffect: () => effect);
+    _currentUser = me.copyWith(nameColor: () => hex);
     final key = me.nickname.toLowerCase();
     final profile = _profiles[key];
     if (profile != null) {
       _profiles[key] = profile.copyWith(
-        user: profile.user.copyWith(
-          nameColor: () => hex,
-          nameEffect: () => effect,
-        ),
+        user: profile.user.copyWith(nameColor: () => hex),
       );
     }
   }

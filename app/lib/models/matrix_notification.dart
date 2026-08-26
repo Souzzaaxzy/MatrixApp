@@ -1,5 +1,3 @@
-import 'name_effect.dart';
-
 /// A MATRIX notification (like, comment, friend request, friend accepted).
 ///
 /// The server owns notification creation; the APK only renders them. Every
@@ -15,7 +13,6 @@ class MatrixNotification {
     required this.actorNickname,
     this.actorAvatarUrl,
     this.actorNicknameColor,
-    this.actorNicknameEffect,
     this.postId,
     this.commentId,
     this.friendRequestId,
@@ -40,10 +37,6 @@ class MatrixNotification {
   /// default color.
   final String? actorNicknameColor;
 
-  /// The ACTOR's own nickname effect (null → "Nenhum"). Independent from
-  /// [actorNicknameColor].
-  final NameEffect? actorNicknameEffect;
-
   final String? postId;
   final String? commentId;
   final String? friendRequestId;
@@ -61,7 +54,6 @@ class MatrixNotification {
         actorNickname: actorNickname,
         actorAvatarUrl: actorAvatarUrl,
         actorNicknameColor: actorNicknameColor,
-        actorNicknameEffect: actorNicknameEffect,
         postId: postId,
         commentId: commentId,
         friendRequestId: friendRequestId,

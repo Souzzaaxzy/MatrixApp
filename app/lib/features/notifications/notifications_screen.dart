@@ -250,7 +250,7 @@ class _NotificationTile extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // The actor's nickname keeps its OWN cosmetics (color +
-                // effect) via the shared NicknameRenderer — never the
+                // via the shared NicknameRenderer — never the
                 // viewer's configuration.
                 RichText(
                   text: TextSpan(
@@ -267,8 +267,6 @@ class _NotificationTile extends StatelessWidget {
                               AppTextStyles.h3.copyWith(fontSize: 14),
                           background: AppColors.cardSurface,
                           nameColor: n.actorNicknameColor,
-                          effect: n.actorNicknameEffect,
-                          lightweight: true,
                         ),
                       ),
                       TextSpan(
@@ -335,7 +333,6 @@ class _FriendRequestCard extends StatelessWidget {
             baseStyle: AppTextStyles.h2.copyWith(fontSize: 16),
             background: AppColors.cardSurface,
             nameColor: n.actorNicknameColor,
-            effect: n.actorNicknameEffect,
           ),
           const SizedBox(height: AppDimensions.spaceXs),
           Text(

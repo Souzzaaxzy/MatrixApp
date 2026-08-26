@@ -189,8 +189,6 @@ class _CommentsSheetState extends State<CommentsSheet> {
                                           baseStyle: AppTextStyles.label,
                                           background: AppColors.nightBlue,
                                           nameColor: c.authorNicknameColor,
-                                          effect: c.authorNicknameEffect,
-                                          lightweight: true,
                                         ),
                                       ),
                                       if (c.authorId.isNotEmpty &&

@@ -21,15 +21,47 @@ class Validators {
     return null;
   }
 
-  static final RegExp _nickname = RegExp(r'^[a-zA-Z0-9_.]+$');
+  // Mirrors the server rule (ServidorMtx src/utils/normalize.ts): full
+  // Unicode — letters (any case/accents), numbers, emojis, symbols and
+  // punctuation are all allowed. Blocked: '@' (identity prefix, never part
+  // of a nickname), HTML brackets/quotes (injection guard), control/format
+  // chars (invisible/zero-width payloads), max 30 chars. The nickname is
+  // rendered as plain TEXT everywhere, so escaping is never needed — this
+  // check only rejects characters with no legitimate use in a name.
+  static final RegExp _nicknameForbidden = RegExp(r'[@<>"' "'" r'`\\]');
+
+  static bool _isForbiddenCodePoint(int rune) {
+    // Cc/Cf (control/format: zero-width spaces, bidi overrides, ...) and
+    // Cn (unassigned) — everything else, including emojis and
+    // mathematical/fraktur letters, is fine.
+    if (rune < 0x20 || rune == 0x7F) return true; // Cc
+    if (rune >= 0x80 && rune <= 0x9F) return true; // C1 controls
+    const formatRanges = [
+      [0x200B, 0x200F], // ZWSP..RLM
+      [0x202A, 0x202E], // bidi embeddings/overrides
+      [0x2060, 0x2064], // word joiner, invisible operators
+      [0xFEFF, 0xFEFF], // BOM / zero-width no-break space
+    ];
+    for (final range in formatRanges) {
+      if (rune >= range[0] && rune <= range[1]) return true;
+    }
+    return false;
+  }
 
   /// The nickname is the single visual identity. Any leading '@' the user
-  /// may type is tolerated and normalized away (storage is canonical).
+  /// may type is tolerated and normalized away by the server (storage is
+  /// canonical, display preserves exactly what the user typed).
   static String? nickname(String? value) {
     final v = (value ?? '').trim().replaceAll('@', '');
     if (v.isEmpty) return 'Informe um nickname';
     if (v.length < 3) return 'Mínimo de 3 caracteres';
-    if (!_nickname.hasMatch(v)) return 'Apenas letras, números, _ e .';
+    if (v.length > 30) return 'Máximo de 30 caracteres';
+    if (_nicknameForbidden.hasMatch(v)) {
+      return 'Caracteres não permitidos: @ < > " \' ` \\';
+    }
+    if (v.runes.any(_isForbiddenCodePoint)) {
+      return 'Caracteres invisíveis não são permitidos';
+    }
     return null;
   }
 

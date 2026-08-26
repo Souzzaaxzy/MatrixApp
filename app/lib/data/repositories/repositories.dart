@@ -190,7 +190,10 @@ class UserRepository {
   Future<({MatrixUser user, List<Post> posts, Friendship? friendship})> profile(
     String nickname,
   ) async {
-    final json = await _api.get<Map<String, dynamic>>('/api/users/$nickname');
+    // Nicknames are full Unicode (emojis, spaces, symbols) — the path
+    // segment must be percent-encoded or the URL breaks.
+    final json = await _api
+        .get<Map<String, dynamic>>('/api/users/${Uri.encodeComponent(nickname)}');
     final user = PublicUserDto.fromJson(json['user'] as Map<String, dynamic>).toModel();
     final list = (json['posts'] as List).cast<Map<String, dynamic>>();
     final posts = list.map(FeedPostDto.fromJson).map((d) => d.toModel()).toList();
@@ -365,21 +368,15 @@ class CustomizationRepository {
   }
 
   /// Consolidated save: sends the WHOLE pending customization in ONE
-  /// operation — `{nameColorId, nameEffectId}` (a string equips the catalog
-  /// entry, null removes the slot). The server validates every id against
-  /// the active catalog and persists both slots in a single transaction.
-  /// Returns the server-confirmed equipped map (source of truth).
-  Future<CosmeticMap> saveCosmetics({
-    String? nameColorId,
-    String? nameEffectId,
-  }) async {
-    final json = await _api.put<Map<String, dynamic>>(
+  /// operation — `{nameColorId}` (a string equips the catalog entry, null
+  /// removes the slot). The server validates the id against the active
+  /// catalog and persists it. Callers refresh the equipped map afterwards
+  /// (`equipped()`) so the server stays the source of truth.
+  Future<void> saveCosmetics({String? nameColorId}) async {
+    await _api.put<Map<String, dynamic>>(
       '/api/customization/cosmetics',
-      data: {'nameColorId': nameColorId, 'nameEffectId': nameEffectId},
+      data: {'nameColorId': nameColorId},
     );
-    final equipped =
-        (json['equipped'] as Map?)?.cast<String, dynamic>() ?? const {};
-    return parseCustomization(equipped);
   }
 }
 

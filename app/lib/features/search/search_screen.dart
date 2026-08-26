@@ -147,8 +147,6 @@ class _SearchScreenState extends State<SearchScreen> {
                                 baseStyle: AppTextStyles.h3,
                                 background: AppColors.cardSurface,
                                 nameColor: user.nameColor,
-                                effect: user.nameEffect,
-                                lightweight: true,
                               ),
                             ],
                           ),

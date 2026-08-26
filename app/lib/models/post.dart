@@ -1,5 +1,4 @@
 import 'comment.dart';
-import 'name_effect.dart';
 
 /// A post in the MATRIX feed.
 class Post {
@@ -12,7 +11,6 @@ class Post {
     this.avatarSeed,
     this.authorAvatarUrl,
     this.authorNicknameColor,
-    this.authorNicknameEffect,
     this.imageUrl,
     this.likes = 0,
     this.liked = false,
@@ -40,11 +38,6 @@ class Post {
   /// The AUTHOR's own nickname color (hex), embedded by the server. Null →
   /// default color. Never the viewer's color.
   final String? authorNicknameColor;
-
-  /// The AUTHOR's own nickname effect (server catalog entry with its render
-  /// config). Null → "Nenhum" (plain colored nickname). Fully independent
-  /// from [authorNicknameColor].
-  final NameEffect? authorNicknameEffect;
   final String? imageUrl;
 
   int likes;
@@ -72,7 +65,6 @@ class Post {
         avatarSeed: avatarSeed,
         authorAvatarUrl: authorAvatarUrl,
         authorNicknameColor: authorNicknameColor,
-        authorNicknameEffect: authorNicknameEffect,
         imageUrl: imageUrl ?? this.imageUrl,
         likes: likes ?? this.likes,
         liked: liked ?? this.liked,

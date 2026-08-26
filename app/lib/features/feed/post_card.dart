@@ -101,8 +101,6 @@ class _PostCardState extends State<PostCard>
                         baseStyle: AppTextStyles.h3,
                         background: AppColors.cardSurface,
                         nameColor: post.authorNicknameColor,
-                        effect: post.authorNicknameEffect,
-                        lightweight: true,
                       ),
                       Text(
                         '${post.authorNickname} • ${relativeTime(post.createdAt)}',

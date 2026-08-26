@@ -295,7 +295,6 @@ class _ProfileHeader extends StatelessWidget {
             baseStyle: AppTextStyles.h2.copyWith(fontSize: 22),
             background: AppColors.absoluteBlack,
             nameColor: user.nameColor,
-            effect: user.nameEffect,
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: AppDimensions.spaceLg),

@@ -60,7 +60,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
 
     // The actor's nickname renders through the shared NicknameRenderer
-    // (color + effect of the ACTOR), so the message spans are split.
+    // (color of the ACTOR), so the message spans are split.
     expect(find.textContaining('Agora você e', findRichText: true), findsOneWidget);
     expect(find.textContaining('são amigos.', findRichText: true), findsOneWidget);
     final actor = find.byWidgetPredicate(

@@ -459,36 +459,21 @@ class _FakeCustomizationRepository implements CustomizationRepository {
     _store.equippedCosmetics.remove(slot);
   }
 
-  /// Mirrors the server: both ids are validated against the catalog (null
-  /// removes the slot) and applied atomically; the confirmed map is echoed
-  /// back exactly like GET /customization/equipped would return it.
+  /// Mirrors the server: the id is validated against the catalog (null
+  /// removes the slot) and persisted; the app then reloads `equipped()`.
   @override
-  Future<Map<String, CosmeticItem>> saveCosmetics({
-    String? nameColorId,
-    String? nameEffectId,
-  }) async {
-    void apply(String slot, String? id) {
-      if (id == null) {
-        _store.equippedCosmetics.remove(slot);
-        return;
-      }
-      final item =
-          _store.catalog.where((i) => i.id == id && i.slot == slot).firstOrNull;
-      if (item == null) {
-        throw const ApiException(statusCode: 400, message: 'Item inválido.');
-      }
-      _store.equippedCosmetics[slot] = item;
+  Future<void> saveCosmetics({String? nameColorId}) async {
+    if (nameColorId == null) {
+      _store.equippedCosmetics.remove(CosmeticItem.nameColor);
+      return;
     }
-
-    apply(CosmeticItem.nameColor, nameColorId);
-    apply(CosmeticItem.nameEffect, nameEffectId);
-    // The server echoes only the two consolidated slots (null → absent).
-    final result = <String, CosmeticItem>{};
-    for (final slot in [CosmeticItem.nameColor, CosmeticItem.nameEffect]) {
-      final item = _store.equippedCosmetics[slot];
-      if (item != null) result[slot] = item;
+    final item = _store.catalog
+        .where((i) => i.id == nameColorId && i.slot == CosmeticItem.nameColor)
+        .firstOrNull;
+    if (item == null) {
+      throw const ApiException(statusCode: 400, message: 'Item inválido.');
     }
-    return result;
+    _store.equippedCosmetics[CosmeticItem.nameColor] = item;
   }
 }
 

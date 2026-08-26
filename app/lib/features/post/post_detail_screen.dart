@@ -248,7 +248,6 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                       baseStyle: AppTextStyles.h3,
                       background: AppColors.cardSurface,
                       nameColor: post.authorNicknameColor,
-                      effect: post.authorNicknameEffect,
                     ),
                     Text(
                       '${post.authorNickname} • ${relativeTime(post.createdAt)}',

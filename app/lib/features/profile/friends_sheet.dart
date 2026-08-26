@@ -135,7 +135,7 @@ class _FriendsSheetState extends State<FriendsSheet> {
             top: BorderSide(color: AppColors.deepBlue, width: 1.5),
           ),
         ),
-        // The Material keeps ListTile ink effects legal: the decoration
+        // The Material keeps ListTile ink splashes legal: the decoration
         // above is a DecoratedBox, and ListTile needs a Material ancestor
         // between it and that box.
         child: Material(
@@ -261,8 +261,6 @@ class _FriendsSheetState extends State<FriendsSheet> {
             baseStyle: AppTextStyles.body,
             background: AppColors.nightBlue,
             nameColor: friend.nameColor,
-            effect: friend.nameEffect,
-            lightweight: true,
           ),
           trailing: Icon(
             Icons.chevron_right_rounded,

@@ -6,22 +6,24 @@ import '../../app/theme/app_text_styles.dart';
 import '../../core/utils/name_colors.dart';
 import '../../core/widgets/app_state_scope.dart';
 import '../../core/widgets/matrix_button.dart';
-import '../../core/widgets/nickname_renderer.dart';
 import '../../models/cosmetic_item.dart';
-import '../../models/name_effect.dart';
 import 'widgets/profile_customization_preview.dart';
 
 /// Profile customizations screen (Personalizações).
 ///
-/// Two INDEPENDENT categories, both from the server-owned catalog:
-///  🎨 Cor do nickname   (NAME_COLOR — solid text color)
-///  ✨ Efeito do nickname (NAME_EFFECT — visual effect + render config)
+/// The screen is a MENU OF CATEGORIES — nothing stays open all at once:
 ///
-/// Selections update the PREVIEW immediately but are NOT persisted until
-/// the user taps "SALVAR ALTERAÇÕES", which sends the whole pending
-/// configuration in ONE consolidated operation ({nameColorId, nameEffectId}).
+///   PERSONALIZAÇÕES
+///    ┌ 🎨 Cor do nickname            › ┐  → palette submenu
+///    └ 🖼️ Molduras                    › ┘  → frames submenu
+///
+/// Tapping a category opens its own section (in-place, no new route — so
+/// navigation can never break) with a clear "‹ Voltar" that returns to the
+/// category menu. Selections update the PREVIEW immediately but are NOT
+/// persisted until the user taps "SALVAR ALTERAÇÕES", which sends the whole
+/// pending configuration in ONE consolidated operation ({nameColorId}).
 /// Leaving without saving discards the pending selection (the server state
-/// is restored on the next open). "Padrão"/"Nenhum" clear their slot (null).
+/// is restored on the next open). "Padrão" clears the color (null).
 class CustomizationsScreen extends StatefulWidget {
   const CustomizationsScreen({super.key});
 
@@ -29,14 +31,18 @@ class CustomizationsScreen extends StatefulWidget {
   State<CustomizationsScreen> createState() => _CustomizationsScreenState();
 }
 
+/// Which section is visible: the category menu or one open category.
+enum _Section { menu, colors, frames }
+
 class _CustomizationsScreenState extends State<CustomizationsScreen> {
   bool _requested = false;
 
-  /// Local pending selections: catalog item ids, or null for "Padrão"/
-  /// "Nenhum". Initialized from the equipped state on first build; [_dirty]
-  /// tracks unsaved changes.
+  _Section _section = _Section.menu;
+
+  /// Local pending selection: catalog item id, or null for "Padrão".
+  /// Initialized from the equipped state on first build; [_dirty] tracks
+  /// unsaved changes.
   String? _selectedColorId;
-  String? _selectedEffectId;
   bool _selectionReady = false;
   bool _dirty = false;
   bool _saving = false;
@@ -53,7 +59,6 @@ class _CustomizationsScreenState extends State<CustomizationsScreen> {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         state.loadMyCosmetics();
         state.loadNameColorCatalog();
-        state.loadNameEffectCatalog();
       });
     }
   }
@@ -62,19 +67,11 @@ class _CustomizationsScreenState extends State<CustomizationsScreen> {
     if (_selectionReady) return;
     _selectionReady = true;
     _selectedColorId = equipped[CosmeticItem.nameColor]?.id;
-    _selectedEffectId = equipped[CosmeticItem.nameEffect]?.id;
   }
 
   void _selectColor(String? colorId) {
     setState(() {
       _selectedColorId = colorId;
-      _dirty = true;
-    });
-  }
-
-  void _selectEffect(String? effectId) {
-    setState(() {
-      _selectedEffectId = effectId;
       _dirty = true;
     });
   }
@@ -85,11 +82,8 @@ class _CustomizationsScreenState extends State<CustomizationsScreen> {
     final state = AppStateScope.of(context);
     final messenger = ScaffoldMessenger.of(context);
     try {
-      // ONE consolidated operation: color + effect together.
-      await state.saveCosmetics(
-        nameColorId: _selectedColorId,
-        nameEffectId: _selectedEffectId,
-      );
+      // ONE consolidated operation with the whole pending customization.
+      await state.saveCosmetics(nameColorId: _selectedColorId);
       if (!mounted) return;
       setState(() {
         _dirty = false;
@@ -118,8 +112,7 @@ class _CustomizationsScreenState extends State<CustomizationsScreen> {
     }
     _initSelection(state.myCosmetics);
 
-    // Preview reflects the LOCAL pending selection immediately — color and
-    // effect resolve independently (any color + any effect).
+    // Preview reflects the LOCAL pending selection immediately.
     final selectedColor = _selectedColorId == null
         ? null
         : state.nameColorCatalog
@@ -132,22 +125,13 @@ class _CustomizationsScreenState extends State<CustomizationsScreen> {
             : (selectedColor?.hexColor ??
                 state.myCosmetics[CosmeticItem.nameColor]?.hexColor ??
                 user.nameColor));
-    final selectedEffect = _selectedEffectId == null
-        ? null
-        : state.nameEffectCatalog
-            .where((e) => e.id == _selectedEffectId)
-            .firstOrNull;
-    final previewEffect = !_selectionReady
-        ? null
-        : (_selectedEffectId == null
-            ? const NameEffect(id: '') // sentinel: explicit "Nenhum"
-            : (selectedEffect == null
-                ? null
-                : NameEffect(
-                    id: selectedEffect.id,
-                    name: selectedEffect.name,
-                    config: selectedEffect.config,
-                  )));
+
+    final inMenu = _section == _Section.menu;
+    final title = switch (_section) {
+      _Section.menu => 'PERSONALIZAÇÕES',
+      _Section.colors => 'COR DO NICKNAME',
+      _Section.frames => 'MOLDURAS',
+    };
 
     return Scaffold(
       backgroundColor: AppColors.absoluteBlack,
@@ -155,39 +139,33 @@ class _CustomizationsScreenState extends State<CustomizationsScreen> {
         child: ListView(
           padding: const EdgeInsets.all(AppDimensions.spaceLg),
           children: [
-            Row(
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.arrow_back_rounded),
-                  color: AppColors.techWhite,
-                  onPressed: () => Navigator.of(context).pop(),
-                ),
-                const SizedBox(width: AppDimensions.spaceXs),
-                Text('PERSONALIZAÇÕES', style: AppTextStyles.title),
-              ],
+            _Header(
+              title: title,
+              // Inside a category "‹" returns to the menu; in the menu it
+              // pops the screen. Never a broken route either way.
+              onBack: inMenu
+                  ? () => Navigator.of(context).pop()
+                  : () => setState(() => _section = _Section.menu),
             ),
             const SizedBox(height: AppDimensions.spaceLg),
             ProfileCustomizationPreview(
               user: user,
               cosmetics: state.myCosmetics,
               nameColorOverride: previewColor,
-              nameEffectOverride: previewEffect,
             ),
             const SizedBox(height: AppDimensions.spaceLg),
-            _NameColorSection(
-              catalog: state.nameColorCatalog,
-              selectedId: _selectedColorId,
-              onSelect: _selectColor,
-            ),
-            const SizedBox(height: AppDimensions.spaceMd),
-            _NameEffectSection(
-              catalog: state.nameEffectCatalog,
-              selectedId: _selectedEffectId,
-              colorHex: previewColor == null || previewColor.isEmpty
-                  ? null
-                  : previewColor,
-              onSelect: _selectEffect,
-            ),
+            switch (_section) {
+              _Section.menu => _CategoryMenu(
+                  onOpenColors: () => setState(() => _section = _Section.colors),
+                  onOpenFrames: () => setState(() => _section = _Section.frames),
+                ),
+              _Section.colors => _NameColorSection(
+                  catalog: state.nameColorCatalog,
+                  selectedId: _selectedColorId,
+                  onSelect: _selectColor,
+                ),
+              _Section.frames => const _FramesSection(),
+            },
             if (_dirty) ...[
               const SizedBox(height: AppDimensions.spaceMd),
               MatrixButton(
@@ -198,15 +176,6 @@ class _CustomizationsScreenState extends State<CustomizationsScreen> {
                 onPressed: _saving ? null : _save,
               ),
             ],
-            const Divider(height: AppDimensions.spaceXxl),
-            const _CosmeticSection(
-              icon: Icons.crop_free_rounded,
-              title: 'Moldura',
-            ),
-            const _CosmeticSection(
-              icon: Icons.verified_user_outlined,
-              title: 'Badge',
-            ),
           ],
         ),
       ),
@@ -214,52 +183,126 @@ class _CustomizationsScreenState extends State<CustomizationsScreen> {
   }
 }
 
-/// ✨ Efeito do nickname — the server-owned effect catalog grouped by
-/// category, plus the "Nenhum" option (nameEffectId = null). Each tile
-/// renders a live mini-preview of the effect through the SAME renderer used
-/// everywhere else (NicknameRenderer), so what you see is what you get.
-class _NameEffectSection extends StatelessWidget {
-  const _NameEffectSection({
-    required this.catalog,
-    required this.selectedId,
-    required this.colorHex,
-    required this.onSelect,
-  });
+/// Screen/section header: back arrow + title. The same widget serves the
+/// menu (pops the screen) and the submenus (returns to the menu).
+class _Header extends StatelessWidget {
+  const _Header({required this.title, required this.onBack});
 
-  final List<CosmeticItem> catalog;
-  final String? selectedId;
-
-  /// The pending/equipped color, so tiles preview color + effect combined.
-  final String? colorHex;
-  final ValueChanged<String?> onSelect;
-
-  static const Map<String, String> _categoryLabels = {
-    'glow': '✨ EFEITOS DE BRILHO',
-    'animated': '⚡ EFEITOS ANIMADOS',
-    'glitch': '👾 EFEITOS GLITCH',
-    'color': '🌈 EFEITOS DE COR',
-    'elemental': '🔥 EFEITOS ELEMENTAIS',
-    'premium': '💎 EFEITOS PREMIUM',
-    'cyberpunk': '🧬 EFEITOS CYBERPUNK',
-    'dark': '🌑 EFEITOS DARK',
-    'visual': '🎭 EFEITOS VISUAIS',
-  };
+  final String title;
+  final VoidCallback onBack;
 
   @override
   Widget build(BuildContext context) {
-    final groups = <String?, List<CosmeticItem>>{};
-    for (final item in catalog) {
-      groups.putIfAbsent(item.category, () => []).add(item);
-    }
-    final orderedKeys = groups.keys.toList()
-      ..sort((a, b) {
-        if (a == null) return -1;
-        if (b == null) return 1;
-        return groups[a]!.first.sortOrder
-            .compareTo(groups[b]!.first.sortOrder);
-      });
+    return Row(
+      children: [
+        IconButton(
+          icon: const Icon(Icons.arrow_back_rounded),
+          color: AppColors.techWhite,
+          tooltip: 'Voltar',
+          onPressed: onBack,
+        ),
+        const SizedBox(width: AppDimensions.spaceXs),
+        Expanded(child: Text(title, style: AppTextStyles.title)),
+      ],
+    );
+  }
+}
 
+/// The category menu: one tappable button per customization category.
+class _CategoryMenu extends StatelessWidget {
+  const _CategoryMenu({required this.onOpenColors, required this.onOpenFrames});
+
+  final VoidCallback onOpenColors;
+  final VoidCallback onOpenFrames;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        _CategoryButton(
+          icon: Icons.palette_rounded,
+          title: 'Cor do nickname',
+          subtitle: 'Personalize a cor do seu nome',
+          onTap: onOpenColors,
+        ),
+        const SizedBox(height: AppDimensions.spaceMd),
+        _CategoryButton(
+          icon: Icons.crop_free_rounded,
+          title: 'Molduras',
+          subtitle: 'Personalize a moldura do seu perfil',
+          onTap: onOpenFrames,
+        ),
+      ],
+    );
+  }
+}
+
+/// A category button: icon + name + short description + chevron, styled
+/// like a real settings entry of the MATRIX design system.
+class _CategoryButton extends StatelessWidget {
+  const _CategoryButton({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.cardSurface,
+      borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(AppDimensions.spaceLg),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
+            border: Border.all(color: AppColors.deepBlue),
+          ),
+          child: Row(
+            children: [
+              Icon(icon, color: AppColors.electricBlue, size: 24),
+              const SizedBox(width: AppDimensions.spaceMd),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, style: AppTextStyles.h3),
+                    const SizedBox(height: 2),
+                    Text(subtitle, style: AppTextStyles.caption),
+                  ],
+                ),
+              ),
+              Icon(
+                Icons.chevron_right_rounded,
+                color: AppColors.holographicBlue,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 🖼️ Molduras — prepared section. New frames are NOT part of this change:
+/// the section exists so the frame picker can land here later. The equipped
+/// AVATAR_FRAME (if any) keeps rendering in the preview above.
+class _FramesSection extends StatelessWidget {
+  const _FramesSection();
+
+  @override
+  Widget build(BuildContext context) {
     return Container(
+      width: double.infinity,
       padding: const EdgeInsets.all(AppDimensions.spaceLg),
       decoration: BoxDecoration(
         color: AppColors.cardSurface,
@@ -267,154 +310,18 @@ class _NameEffectSection extends StatelessWidget {
         border: Border.all(color: AppColors.deepBlue),
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Icon(Icons.auto_awesome_rounded,
-                  color: AppColors.electricBlue, size: 22),
-              const SizedBox(width: AppDimensions.spaceMd),
-              Expanded(
-                child: Text('Efeito do nickname', style: AppTextStyles.h3),
-              ),
-            ],
-          ),
+          Icon(Icons.crop_free_rounded,
+              color: AppColors.holographicBlue, size: 32),
           const SizedBox(height: AppDimensions.spaceMd),
-          if (catalog.isEmpty)
-            Padding(
-              padding:
-                  const EdgeInsets.symmetric(vertical: AppDimensions.spaceLg),
-              child: Center(
-                child:
-                    Text('Carregando efeitos…', style: AppTextStyles.caption),
-              ),
-            )
-          else ...[
-            // 🚫 Nenhum — nameEffectId = null; the color keeps working.
-            _NoneEffectTile(
-              selected: selectedId == null,
-              onTap: () => onSelect(null),
-            ),
-            for (final key in orderedKeys) ...[
-              const SizedBox(height: AppDimensions.spaceMd),
-              Text(
-                _categoryLabels[key] ?? (key ?? '').toUpperCase(),
-                style: AppTextStyles.hud.copyWith(fontSize: 11),
-              ),
-              const SizedBox(height: AppDimensions.spaceSm),
-              Wrap(
-                spacing: AppDimensions.spaceSm,
-                runSpacing: AppDimensions.spaceSm,
-                children: [
-                  for (final item in groups[key]!)
-                    _EffectChip(
-                      item: item,
-                      selected: item.id == selectedId,
-                      colorHex: colorHex,
-                      onTap: () => onSelect(item.id),
-                    ),
-                ],
-              ),
-            ],
-          ],
+          Text('Molduras', style: AppTextStyles.h3),
+          const SizedBox(height: AppDimensions.spaceSm),
+          Text(
+            'Em breve você poderá escolher molduras para o seu perfil aqui.',
+            style: AppTextStyles.caption,
+            textAlign: TextAlign.center,
+          ),
         ],
-      ),
-    );
-  }
-}
-
-/// The "🚫 Nenhum" tile — clears the effect (nameEffectId = null).
-class _NoneEffectTile extends StatelessWidget {
-  const _NoneEffectTile({required this.selected, required this.onTap});
-
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
-      child: Container(
-        padding: const EdgeInsets.symmetric(
-          horizontal: AppDimensions.spaceMd,
-          vertical: AppDimensions.spaceSm,
-        ),
-        decoration: BoxDecoration(
-          color: AppColors.nightBlue,
-          borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
-          border: Border.all(
-            color: selected ? AppColors.electricBlue : AppColors.deepBlue,
-            width: selected ? 2 : 1,
-          ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.block_rounded,
-                color: AppColors.holographicBlue, size: 18),
-            const SizedBox(width: AppDimensions.spaceSm),
-            Text('Nenhum', style: AppTextStyles.body),
-            if (selected) ...[
-              const SizedBox(width: AppDimensions.spaceSm),
-              Icon(Icons.check_circle_rounded,
-                  color: AppColors.electricBlue, size: 16),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// A single effect tile with a LIVE mini-preview: the effect's own name
-/// rendered through NicknameRenderer (lightweight mode — dozens of tiles
-/// animate without hurting scroll).
-class _EffectChip extends StatelessWidget {
-  const _EffectChip({
-    required this.item,
-    required this.selected,
-    required this.colorHex,
-    required this.onTap,
-  });
-
-  final CosmeticItem item;
-  final bool selected;
-  final String? colorHex;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Tooltip(
-      message: item.name,
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(
-            horizontal: AppDimensions.spaceMd,
-            vertical: AppDimensions.spaceSm,
-          ),
-          decoration: BoxDecoration(
-            color: AppColors.nightBlue,
-            borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
-            border: Border.all(
-              color: selected ? AppColors.electricBlue : AppColors.deepBlue,
-              width: selected ? 2 : 1,
-            ),
-          ),
-          child: NicknameRenderer(
-            item.name,
-            nameColor: colorHex,
-            effect: NameEffect(
-              id: item.id,
-              name: item.name,
-              config: item.config,
-            ),
-            background: AppColors.nightBlue,
-            baseStyle: AppTextStyles.body,
-            lightweight: true,
-          ),
-        ),
       ),
     );
   }
@@ -474,17 +381,6 @@ class _NameColorSection extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Icon(Icons.palette_rounded,
-                  color: AppColors.electricBlue, size: 22),
-              const SizedBox(width: AppDimensions.spaceMd),
-              Expanded(
-                child: Text('Cor do nickname', style: AppTextStyles.h3),
-              ),
-            ],
-          ),
-          const SizedBox(height: AppDimensions.spaceMd),
           if (catalog.isEmpty)
             Padding(
               padding:
@@ -527,7 +423,7 @@ class _NameColorSection extends StatelessWidget {
   }
 }
 
-/// The "🎨 Padrão" tile — clears the name color back to the MATRIX default.
+/// The "Padrão" tile — clears the name color back to the MATRIX default.
 class _DefaultColorTile extends StatelessWidget {
   const _DefaultColorTile({required this.selected, required this.onTap});
 
@@ -606,46 +502,12 @@ class _ColorSwatch extends StatelessWidget {
               ? Icon(
                   Icons.check_rounded,
                   size: 20,
-                  // Check stays readable on any swatch without adding
-                  // effects to the nickname itself.
+                  // Check stays readable on any swatch.
                   color: color.computeLuminance() > 0.4
                       ? Colors.black
                       : Colors.white,
                 )
               : null,
-        ),
-      ),
-    );
-  }
-}
-
-/// A cosmetic category row. Placeholder ("Em breve") until the category
-/// ships; the row already knows its slot so wiring the picker later is a
-/// local change.
-class _CosmeticSection extends StatelessWidget {
-  const _CosmeticSection({required this.icon, required this.title});
-
-  final IconData icon;
-  final String title;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: AppDimensions.spaceMd),
-      child: Container(
-        padding: const EdgeInsets.all(AppDimensions.spaceLg),
-        decoration: BoxDecoration(
-          color: AppColors.cardSurface,
-          borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
-          border: Border.all(color: AppColors.deepBlue),
-        ),
-        child: Row(
-          children: [
-            Icon(icon, color: AppColors.electricBlue, size: 22),
-            const SizedBox(width: AppDimensions.spaceMd),
-            Expanded(child: Text(title, style: AppTextStyles.h3)),
-            Text('Em breve', style: AppTextStyles.caption),
-          ],
         ),
       ),
     );

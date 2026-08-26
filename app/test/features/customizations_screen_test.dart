@@ -1,19 +1,88 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:matrix_app/core/services/app_state.dart';
+import 'package:matrix_app/core/widgets/nickname_renderer.dart';
+import 'package:matrix_app/data/api_config.dart';
 import 'package:matrix_app/data/dtos/dtos.dart';
 import 'package:matrix_app/features/customizations/customizations_screen.dart';
 import 'package:matrix_app/features/customizations/widgets/profile_customization_preview.dart';
-import 'package:flutter/material.dart';
-import 'package:matrix_app/core/widgets/nickname_renderer.dart';
-import 'package:matrix_app/data/api_config.dart';
 import 'package:matrix_app/models/cosmetic_item.dart';
 
 import '../helpers/fake_repositories.dart';
 import '../helpers/test_app.dart';
 
-/// Customizations screen (Personalizações) — 🎨 Cor do nickname +
-/// ✨ Efeito do nickname as two independent categories with a live preview
-/// and ONE consolidated "SALVAR ALTERAÇÕES" operation.
+/// Customizations screen (Personalizações) — category menu (🎨 Cor do
+/// nickname + 🖼️ Molduras) opening in-place sections, a live preview and
+/// ONE consolidated "SALVAR ALTERAÇÕES" operation. Nickname effects were
+/// REMOVED: the nickname carries only a color.
+const palette = [
+
+  CosmeticItem(
+    id: 'red',
+    slot: CosmeticItem.nameColor,
+    name: 'Vermelho',
+    assetUrl: '#E53935',
+    category: 'basic',
+    sortOrder: 0,
+  ),
+  CosmeticItem(
+    id: 'blue',
+    slot: CosmeticItem.nameColor,
+    name: 'Azul',
+    assetUrl: '#1E88E5',
+    category: 'basic',
+    sortOrder: 4,
+  ),
+  CosmeticItem(
+    id: 'matrix_blue',
+    slot: CosmeticItem.nameColor,
+    name: 'Azul Matrix',
+    assetUrl: '#0066FF',
+    category: 'special',
+    sortOrder: 62,
+  ),
+];
+
+Future<AppState> stateWithCatalog({
+  Map<String, CosmeticItem> equipped = const {},
+}) async {
+  final repos = FakeRepositories(
+    seedCatalog: palette,
+    seedEquippedCosmetics: equipped,
+  );
+  final state = AppState(repositories: repos);
+  addTearDown(state.dispose);
+  await state.restoreSession();
+  await state.loadFeed();
+  return state;
+}
+
+/// The palette content may sit below the fold on the 800x600 test
+/// surface, so scroll it into view before interacting.
+Future<void> reveal(WidgetTester tester, Finder target) =>
+    tester.scrollUntilVisible(
+      target,
+      300,
+      scrollable: find.byType(Scrollable),
+    );
+
+/// The preview is at the very top; scroll back up before reading it.
+Future<NicknameRenderer> previewRenderer(WidgetTester tester) async {
+  await tester.scrollUntilVisible(
+    find.byType(ProfileCustomizationPreview),
+    -300,
+    scrollable: find.byType(Scrollable),
+  );
+  await tester.pump();
+  return tester.widget<NicknameRenderer>(
+    find.descendant(
+      of: find.byType(ProfileCustomizationPreview),
+      matching: find.byType(NicknameRenderer),
+    ),
+  );
+}
+
+
 void main() {
   group('customization DTO parsing', () {
     test('parses the profile customization map; absent/invalid → empty', () {
@@ -31,24 +100,11 @@ void main() {
       expect(parseCustomization('junk'), isEmpty);
       expect(parseCustomization({'BADGE': 'not-a-map'}), isEmpty);
     });
-
-    test('parses the embedded nameEffect payload (id + config)', () {
-      final effect = parseNameEffect({
-        'id': 'glow',
-        'name': 'Glow',
-        'config': {'animation': 'glow', 'intensity': 0.6, 'speed': 1.0},
-      });
-      expect(effect, isNotNull);
-      expect(effect!.id, 'glow');
-      expect(effect.intensity, 0.6);
-      expect(parseNameEffect(null), isNull);
-      expect(parseNameEffect({'name': 'no-id'}), isNull);
-      expect(parseNameEffect('text-shadow: 0 0 50px red'), isNull);
-    });
   });
 
-  group('CustomizationsScreen', () {
-    testWidgets('renders the live preview and the placeholder sections',
+  group('CustomizationsScreen — category menu', () {
+    testWidgets(
+        'shows the preview and the category buttons; nothing opens until tapped',
         (tester) async {
       final state = await seededAppState();
       addTearDown(state.dispose);
@@ -61,15 +117,56 @@ void main() {
       expect(
           find.textContaining('leonardo', findRichText: true), findsWidgets);
       expect(find.text('@leonardo'), findsNothing);
-      expect(find.text('Cor do nickname'), findsOneWidget);
-      expect(find.text('Efeito do nickname'), findsOneWidget);
 
-      // The placeholder sections sit below the fold on the test surface.
-      await tester.drag(find.byType(ListView), const Offset(0, -900));
-      await tester.pump();
-      expect(find.text('Moldura'), findsOneWidget);
-      expect(find.text('Badge'), findsOneWidget);
-      expect(find.text('Em breve'), findsNWidgets(2));
+      // The categories are buttons: palette stays closed until tapped.
+      expect(find.text('Cor do nickname'), findsOneWidget);
+      expect(find.text('Molduras'), findsOneWidget);
+      expect(find.text('Padrão'), findsNothing);
+      expect(find.text('CORES BÁSICAS'), findsNothing);
+      // The removed category must not exist anywhere.
+      expect(find.textContaining('Efeito'), findsNothing);
+    });
+
+    testWidgets('Cor do nickname opens the palette; Voltar returns to the menu',
+        (tester) async {
+      final state = await stateWithCatalog();
+      await pumpMatrixApp(tester, const CustomizationsScreen(), state: state);
+      await tester.pump(const Duration(milliseconds: 100));
+
+      await tester.tap(find.text('Cor do nickname'));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(find.text('COR DO NICKNAME'), findsOneWidget);
+      expect(find.text('Padrão'), findsOneWidget);
+      // The menu is gone while the category is open.
+      expect(find.text('Molduras'), findsNothing);
+
+      await tester.tap(find.byTooltip('Voltar'));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(find.text('PERSONALIZAÇÕES'), findsOneWidget);
+      expect(find.text('Cor do nickname'), findsOneWidget);
+      expect(find.text('Molduras'), findsOneWidget);
+      expect(find.text('Padrão'), findsNothing);
+    });
+
+    testWidgets('Molduras opens its prepared section without breaking',
+        (tester) async {
+      final state = await seededAppState();
+      addTearDown(state.dispose);
+      await pumpMatrixApp(tester, const CustomizationsScreen(), state: state);
+      await tester.pump(const Duration(milliseconds: 100));
+
+      await tester.tap(find.text('Molduras'));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(find.text('MOLDURAS'), findsOneWidget);
+      expect(find.textContaining('Em breve'), findsOneWidget);
+      expect(find.text('Cor do nickname'), findsNothing);
+
+      await tester.tap(find.byTooltip('Voltar'));
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(find.text('PERSONALIZAÇÕES'), findsOneWidget);
     });
 
     testWidgets('preview reflects cosmetics equipped server-side',
@@ -93,133 +190,41 @@ void main() {
     });
   });
 
-  group('nickname cosmetics (color + effect)', () {
-    const palette = [
-      CosmeticItem(
-        id: 'red',
-        slot: CosmeticItem.nameColor,
-        name: 'Vermelho',
-        assetUrl: '#E53935',
-        category: 'basic',
-        sortOrder: 0,
-      ),
-      CosmeticItem(
-        id: 'blue',
-        slot: CosmeticItem.nameColor,
-        name: 'Azul',
-        assetUrl: '#1E88E5',
-        category: 'basic',
-        sortOrder: 4,
-      ),
-      CosmeticItem(
-        id: 'matrix_blue',
-        slot: CosmeticItem.nameColor,
-        name: 'Azul Matrix',
-        assetUrl: '#0066FF',
-        category: 'special',
-        sortOrder: 62,
-      ),
-      CosmeticItem(
-        id: 'glow',
-        slot: CosmeticItem.nameEffect,
-        name: 'Glow',
-        category: 'glow',
-        sortOrder: 100,
-        config: {'animation': 'glow', 'intensity': 0.6, 'speed': 1.0},
-      ),
-      CosmeticItem(
-        id: 'glitch',
-        slot: CosmeticItem.nameEffect,
-        name: 'Glitch',
-        category: 'glitch',
-        sortOrder: 200,
-        config: {'animation': 'glitch', 'intensity': 0.8, 'speed': 1.5},
-      ),
-      CosmeticItem(
-        id: 'fire',
-        slot: CosmeticItem.nameEffect,
-        name: 'Fire',
-        category: 'elemental',
-        sortOrder: 300,
-        config: {
-          'animation': 'fire',
-          'intensity': 0.9,
-          'speed': 1.2,
-          'particles': true,
-          'colors': ['#FF5722', '#FFC107'],
-        },
-      ),
-    ];
-
-    Future<AppState> stateWithCatalog({
-      Map<String, CosmeticItem> equipped = const {},
-    }) async {
-      final repos = FakeRepositories(
-        seedCatalog: palette,
-        seedEquippedCosmetics: equipped,
-      );
-      final state = AppState(repositories: repos);
-      addTearDown(state.dispose);
-      await state.restoreSession();
-      await state.loadFeed();
-      return state;
-    }
-
-    /// The effect section sits below the fold on the 800x600 test surface,
-    /// so scroll it into view before interacting.
-    Future<void> reveal(WidgetTester tester, Finder target) =>
-        tester.scrollUntilVisible(
-          target,
-          300,
-          scrollable: find.byType(Scrollable),
-        );
-
-    /// The preview is at the very top; scroll back up before reading it.
-    Future<NicknameRenderer> previewRenderer(WidgetTester tester) async {
-      await tester.scrollUntilVisible(
-        find.byType(ProfileCustomizationPreview),
-        -300,
-        scrollable: find.byType(Scrollable),
-      );
-      await tester.pump();
-      return tester.widget<NicknameRenderer>(
-        find.descendant(
-          of: find.byType(ProfileCustomizationPreview),
-          matching: find.byType(NicknameRenderer),
-        ),
-      );
-    }
-
-    testWidgets('renders colors and effects grouped by category + Nenhum',
+    testWidgets('the palette lists the colors grouped by category',
         (tester) async {
       final state = await stateWithCatalog();
       await pumpMatrixApp(tester, const CustomizationsScreen(), state: state);
       await tester.pump(const Duration(milliseconds: 100));
 
-      expect(find.text('Cor do nickname'), findsOneWidget);
-      expect(find.text('Padrão'), findsOneWidget);
+      await tester.tap(find.text('Cor do nickname'));
+      await tester.pump(const Duration(milliseconds: 100));
 
-      await reveal(tester, find.text('Efeito do nickname'));
-      await tester.pump();
-      expect(find.text('Nenhum'), findsOneWidget);
+      expect(find.text('Padrão'), findsOneWidget);
       expect(find.text('CORES BÁSICAS'), findsOneWidget);
-      expect(find.text('✨ EFEITOS DE BRILHO'), findsOneWidget);
-      // Effect tiles render a live preview of their own name (glitch
-      // renders RGB ghost layers, hence findsWidgets).
-      expect(find.text('Glow'), findsOneWidget);
-      expect(find.text('Glitch'), findsWidgets);
-      expect(find.text('Fire'), findsOneWidget);
+      expect(find.text('TONS ESPECIAIS'), findsOneWidget);
+      expect(
+        find.byWidgetPredicate((w) => w is Tooltip && w.message == 'Vermelho'),
+        findsOneWidget,
+      );
+      expect(
+        find.byWidgetPredicate(
+            (w) => w is Tooltip && w.message == 'Azul Matrix'),
+        findsOneWidget,
+      );
     });
 
     testWidgets(
-        'selecting color + effect updates the preview immediately and '
-        'SALVAR ALTERAÇÕES persists both in ONE operation', (tester) async {
+        'selecting a color updates the preview immediately and '
+        'SALVAR ALTERAÇÕES persists it in ONE operation', (tester) async {
       final state = await stateWithCatalog();
       await pumpMatrixApp(tester, const CustomizationsScreen(), state: state);
       await tester.pump(const Duration(milliseconds: 100));
 
       // Nothing pending yet → no save button.
       expect(find.text('SALVAR ALTERAÇÕES'), findsNothing);
+
+      await tester.tap(find.text('Cor do nickname'));
+      await tester.pump(const Duration(milliseconds: 100));
 
       final swatch = find.byWidgetPredicate(
         (w) => w is Tooltip && w.message == 'Azul Matrix',
@@ -229,24 +234,13 @@ void main() {
       await tester.tap(swatch);
       await tester.pump();
 
-      final effectChip = find.byWidgetPredicate(
-        (w) => w is Tooltip && w.message == 'Glow',
-      );
-      await reveal(tester, effectChip);
-      await tester.pump();
-      await tester.tap(effectChip);
-      await tester.pump();
-
-      // The preview carries BOTH pending selections immediately (color +
-      // effect are independent), before anything hits the server.
+      // The preview carries the pending selection before saving.
       expect(find.text('SALVAR ALTERAÇÕES'), findsOneWidget);
       final preview = await previewRenderer(tester);
       expect(preview.nameColor, '#0066FF');
-      expect(preview.effect?.id, 'glow');
 
       // The server still holds the OLD state until the save.
       expect(state.myCosmetics[CosmeticItem.nameColor], isNull);
-      expect(state.myCosmetics[CosmeticItem.nameEffect], isNull);
 
       await reveal(tester, find.text('SALVAR ALTERAÇÕES'));
       await tester.pump();
@@ -254,16 +248,14 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
-      // Consolidated save confirmed: both slots equipped, global state of
+      // Consolidated save confirmed: slot equipped and the global state of
       // the session user updated immediately (no restart / re-login).
       expect(state.myCosmetics[CosmeticItem.nameColor]?.id, 'matrix_blue');
-      expect(state.myCosmetics[CosmeticItem.nameEffect]?.id, 'glow');
       expect(state.currentUser?.nameColor, '#0066FF');
-      expect(state.currentUser?.nameEffect?.id, 'glow');
       expect(find.text('Personalizações salvas.'), findsOneWidget);
     });
 
-    testWidgets('Nenhum removes only the effect; the color keeps working',
+    testWidgets('Padrão removes the color back to the default',
         (tester) async {
       final state = await stateWithCatalog(equipped: const {
         CosmeticItem.nameColor: CosmeticItem(
@@ -272,29 +264,24 @@ void main() {
           name: 'Azul Matrix',
           assetUrl: '#0066FF',
         ),
-        CosmeticItem.nameEffect: CosmeticItem(
-          id: 'glitch',
-          slot: CosmeticItem.nameEffect,
-          name: 'Glitch',
-          config: {'animation': 'glitch', 'intensity': 0.8},
-        ),
       });
       await state.loadMyCosmetics();
       expect(state.currentUser?.nameColor, '#0066FF');
-      expect(state.currentUser?.nameEffect?.id, 'glitch');
 
       await pumpMatrixApp(tester, const CustomizationsScreen(), state: state);
       await tester.pump(const Duration(milliseconds: 100));
 
-      await reveal(tester, find.text('Nenhum'));
+      await tester.tap(find.text('Cor do nickname'));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      await reveal(tester, find.text('Padrão'));
       await tester.pump();
-      await tester.tap(find.text('Nenhum'));
+      await tester.tap(find.text('Padrão'));
       await tester.pump();
 
-      // Preview: color stays, effect cleared.
+      // Preview: color cleared (default).
       final preview = await previewRenderer(tester);
-      expect(preview.nameColor, '#0066FF');
-      expect(preview.effect, isNull);
+      expect(preview.nameColor, isNull);
 
       await reveal(tester, find.text('SALVAR ALTERAÇÕES'));
       await tester.pump();
@@ -302,46 +289,35 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 100));
 
-      expect(state.myCosmetics.containsKey(CosmeticItem.nameEffect), isFalse);
-      expect(state.myCosmetics[CosmeticItem.nameColor]?.id, 'matrix_blue');
-      expect(state.currentUser?.nameColor, '#0066FF');
-      expect(state.currentUser?.nameEffect, isNull);
+      expect(state.myCosmetics.containsKey(CosmeticItem.nameColor), isFalse);
+      expect(state.currentUser?.nameColor, isNull);
     });
 
-    test('AppState syncs color and effect independently into the session user',
-        () async {
+    test('AppState syncs the color into the session user', () async {
       final state = await stateWithCatalog();
       await state.loadNameColorCatalog();
-      await state.loadNameEffectCatalog();
       expect(state.nameColorCatalog.length, 3);
-      expect(state.nameEffectCatalog.length, 3);
 
-      // Any color combines with any effect — no restrictions.
-      await state.saveCosmetics(nameColorId: 'red', nameEffectId: 'fire');
+      await state.saveCosmetics(nameColorId: 'red');
       expect(state.currentUser?.nameColor, '#E53935');
-      expect(state.currentUser?.nameEffect?.id, 'fire');
 
-      await state.saveCosmetics(nameColorId: 'matrix_blue', nameEffectId: 'glitch');
+      await state.saveCosmetics(nameColorId: 'matrix_blue');
       expect(state.currentUser?.nameColor, '#0066FF');
-      expect(state.currentUser?.nameEffect?.id, 'glitch');
 
-      // Only the effect changes; the color is untouched.
-      await state.saveCosmetics(nameColorId: 'matrix_blue', nameEffectId: null);
-      expect(state.currentUser?.nameColor, '#0066FF');
-      expect(state.currentUser?.nameEffect, isNull);
+      await state.saveCosmetics(nameColorId: null);
+      expect(state.currentUser?.nameColor, isNull);
     });
 
     test('a fresh session restores the saved configuration (persistence)',
         () async {
       // Fechar e abrir: a NEW AppState over the SAME store must restore the
-      // exact color + effect saved before — nothing lives only in memory.
+      // exact color saved before — nothing lives only in memory.
       final repos = FakeRepositories(seedCatalog: palette);
       final first = AppState(repositories: repos);
       await first.restoreSession();
       await first.loadFeed();
       await first.loadNameColorCatalog();
-      await first.loadNameEffectCatalog();
-      await first.saveCosmetics(nameColorId: 'red', nameEffectId: 'glow');
+      await first.saveCosmetics(nameColorId: 'red');
       first.dispose();
 
       final second = AppState(repositories: repos);
@@ -349,36 +325,19 @@ void main() {
       await second.restoreSession();
       await second.loadMyCosmetics();
       expect(second.myCosmetics[CosmeticItem.nameColor]?.id, 'red');
-      expect(second.myCosmetics[CosmeticItem.nameEffect]?.id, 'glow');
       expect(second.currentUser?.nameColor, '#E53935');
-      expect(second.currentUser?.nameEffect?.id, 'glow');
     });
 
-    test('the server-owned catalog rejects unknown ids (color or effect)',
-        () async {
+    test('the server-owned catalog rejects unknown ids', () async {
       final state = await stateWithCatalog();
       expect(
-        () => state.saveCosmetics(
-          nameColorId: '#123456',
-          nameEffectId: 'glow',
-        ),
+        () => state.saveCosmetics(nameColorId: '#123456'),
         throwsA(isA<ApiException>()),
       );
       expect(
-        () => state.saveCosmetics(
-          nameColorId: 'matrix_blue',
-          nameEffectId: 'text-shadow: 0 0 50px red',
-        ),
-        throwsA(isA<ApiException>()),
-      );
-      // A color id is not a valid effect and vice-versa.
-      expect(
-        () => state.saveCosmetics(
-          nameColorId: 'glow',
-          nameEffectId: 'matrix_blue',
-        ),
+        () => state.saveCosmetics(nameColorId: 'text-shadow: 0 0 50px red'),
         throwsA(isA<ApiException>()),
       );
     });
-  });
+
 }
