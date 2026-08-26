@@ -68,6 +68,8 @@ class FeedPostDto {
   final String authorNickname;
   final String? authorAvatarUrl;
   final String? authorNicknameColor;
+  final String? authorFrameId;
+  final String? authorFrameAsset;
   final int likeCount;
   final bool liked;
   final int commentCount;
@@ -81,6 +83,8 @@ class FeedPostDto {
     required this.authorNickname,
     this.authorAvatarUrl,
     this.authorNicknameColor,
+    this.authorFrameId,
+    this.authorFrameAsset,
     required this.likeCount,
     required this.liked,
     required this.commentCount,
@@ -95,6 +99,8 @@ class FeedPostDto {
         avatarSeed: authorNickname,
         authorAvatarUrl: authorAvatarUrl,
         authorNicknameColor: authorNicknameColor,
+        authorFrameId: authorFrameId,
+        authorFrameAsset: authorFrameAsset,
         imageUrl: imageUrl,
         likes: likeCount,
         liked: liked,
@@ -112,6 +118,8 @@ class FeedPostDto {
       authorNickname: author['nickname'] as String,
       authorAvatarUrl: author['avatarUrl'] as String?,
       authorNicknameColor: author['nameColor'] as String?,
+      authorFrameId: author['frameId'] as String?,
+      authorFrameAsset: author['frameAsset'] as String?,
       likeCount: (json['likeCount'] as num?)?.toInt() ?? 0,
       liked: (json['liked'] as bool?) ?? false,
       commentCount: (json['commentCount'] as num?)?.toInt() ?? 0,
@@ -127,6 +135,8 @@ class CommentDto {
   final String authorNickname;
   final String? authorAvatarUrl;
   final String? authorNicknameColor;
+  final String? authorFrameId;
+  final String? authorFrameAsset;
 
   const CommentDto({
     required this.id,
@@ -136,6 +146,8 @@ class CommentDto {
     required this.authorNickname,
     this.authorAvatarUrl,
     this.authorNicknameColor,
+    this.authorFrameId,
+    this.authorFrameAsset,
   });
 
   Comment toModel() => Comment(
@@ -144,6 +156,8 @@ class CommentDto {
         authorNickname: authorNickname,
         authorAvatarUrl: authorAvatarUrl,
         authorNicknameColor: authorNicknameColor,
+        authorFrameId: authorFrameId,
+        authorFrameAsset: authorFrameAsset,
         text: text,
         createdAt: createdAt,
       );
@@ -158,6 +172,8 @@ class CommentDto {
       authorNickname: author['nickname'] as String,
       authorAvatarUrl: author['avatarUrl'] as String?,
       authorNicknameColor: author['nameColor'] as String?,
+      authorFrameId: author['frameId'] as String?,
+      authorFrameAsset: author['frameAsset'] as String?,
     );
   }
 }
@@ -171,6 +187,8 @@ class PublicUserDto {
   final int postsCount;
   final CosmeticMap customization;
   final String? nameColor;
+  final String? frameId;
+  final String? frameAsset;
 
   const PublicUserDto({
     required this.id,
@@ -181,6 +199,8 @@ class PublicUserDto {
     this.postsCount = 0,
     this.customization = const {},
     this.nameColor,
+    this.frameId,
+    this.frameAsset,
   });
 
   MatrixUser toModel() => MatrixUser(
@@ -192,6 +212,8 @@ class PublicUserDto {
         postsCount: postsCount,
         customization: customization,
         nameColor: nameColor,
+        frameId: frameId,
+        frameAsset: frameAsset,
       );
 
   factory PublicUserDto.fromJson(Map<String, dynamic> json) => PublicUserDto(
@@ -203,6 +225,8 @@ class PublicUserDto {
         postsCount: (json['postsCount'] as num?)?.toInt() ?? 0,
         customization: parseCustomization(json['customization']),
         nameColor: json['nameColor'] as String?,
+        frameId: json['frameId'] as String?,
+        frameAsset: json['frameAsset'] as String?,
       );
 }
 
@@ -346,6 +370,8 @@ class NotificationDto {
         actorNickname: actor.nickname,
         actorAvatarUrl: actor.avatarUrl,
         actorNicknameColor: actor.nameColor,
+        actorFrameId: actor.frameId,
+        actorFrameAsset: actor.frameAsset,
         postId: postId,
         commentId: commentId,
         friendRequestId: friendRequestId,

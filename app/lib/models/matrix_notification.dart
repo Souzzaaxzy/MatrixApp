@@ -13,6 +13,8 @@ class MatrixNotification {
     required this.actorNickname,
     this.actorAvatarUrl,
     this.actorNicknameColor,
+    this.actorFrameId,
+    this.actorFrameAsset,
     this.postId,
     this.commentId,
     this.friendRequestId,
@@ -37,6 +39,11 @@ class MatrixNotification {
   /// default color.
   final String? actorNicknameColor;
 
+  /// The ACTOR's own equipped profile frame (assets key), embedded by the
+  /// server. Null → default. Never the viewer's frame.
+  final String? actorFrameId;
+  final String? actorFrameAsset;
+
   final String? postId;
   final String? commentId;
   final String? friendRequestId;
@@ -54,6 +61,8 @@ class MatrixNotification {
         actorNickname: actorNickname,
         actorAvatarUrl: actorAvatarUrl,
         actorNicknameColor: actorNicknameColor,
+        actorFrameId: actorFrameId,
+        actorFrameAsset: actorFrameAsset,
         postId: postId,
         commentId: commentId,
         friendRequestId: friendRequestId,

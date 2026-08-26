@@ -368,14 +368,18 @@ class CustomizationRepository {
   }
 
   /// Consolidated save: sends the WHOLE pending customization in ONE
-  /// operation — `{nameColorId}` (a string equips the catalog entry, null
-  /// removes the slot). The server validates the id against the active
-  /// catalog and persists it. Callers refresh the equipped map afterwards
-  /// (`equipped()`) so the server stays the source of truth.
-  Future<void> saveCosmetics({String? nameColorId}) async {
+  /// operation — `{nameColorId, frameId}`. A string value equips the catalog
+  /// entry, null removes the slot, absent leaves it untouched. The server
+  /// validates each id against the active catalog and persists it. Callers
+  /// refresh the equipped map afterwards (`equipped()`) so the server stays
+  /// the source of truth.
+  Future<void> saveCosmetics({
+    String? nameColorId,
+    String? frameId,
+  }) async {
     await _api.put<Map<String, dynamic>>(
       '/api/customization/cosmetics',
-      data: {'nameColorId': nameColorId},
+      data: {'nameColorId': nameColorId, 'frameId': frameId},
     );
   }
 }

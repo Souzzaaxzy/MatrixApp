@@ -8,10 +8,12 @@ import '../../core/utils/date_utils.dart';
 import '../../core/widgets/nickname_renderer.dart';
 import '../../core/widgets/app_state_scope.dart';
 import '../../core/widgets/empty_state.dart';
+import '../../core/widgets/framed_avatar.dart';
 import '../../core/widgets/hud_label.dart';
 import '../../core/widgets/matrix_button.dart';
 import '../../core/widgets/user_avatar.dart';
 import '../../data/api_config.dart';
+import '../../models/cosmetic_item.dart';
 import '../../models/post.dart';
 import '../feed/comments_sheet.dart';
 
@@ -233,10 +235,21 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
           const SizedBox(height: AppDimensions.spaceLg),
           Row(
             children: [
-              UserAvatar(
-                name: post.authorNickname,
-                seed: post.avatarSeed,
-                imageUrl: post.authorAvatarUrl,
+              FramedAvatar(
+                frame: post.authorFrameId == null
+                    ? null
+                    : CosmeticItem(
+                        id: post.authorFrameId!,
+                        slot: CosmeticItem.avatarFrame,
+                        name: post.authorFrameId!,
+                        assetUrl: post.authorFrameAsset ?? '',
+                      ),
+                size: 44,
+                child: UserAvatar(
+                  name: post.authorNickname,
+                  seed: post.avatarSeed,
+                  imageUrl: post.authorAvatarUrl,
+                ),
               ),
               const SizedBox(width: AppDimensions.spaceMd),
               Expanded(

@@ -8,6 +8,7 @@ import '../../app/theme/app_text_styles.dart';
 import '../../core/widgets/nickname_renderer.dart';
 import '../../core/widgets/app_state_scope.dart';
 import '../../core/widgets/empty_state.dart';
+import '../../core/widgets/framed_avatar.dart';
 import '../../core/widgets/glow_container.dart';
 import '../../core/widgets/hud_label.dart';
 import '../../core/widgets/matrix_button.dart';
@@ -279,12 +280,16 @@ class _ProfileHeader extends StatelessWidget {
             color: AppColors.glowSmall,
             background: Colors.transparent,
             borderRadius: BorderRadius.circular(999),
-            child: UserAvatar(
-              name: user.nickname,
-              seed: user.avatarSeed ?? user.nickname,
-              imageUrl: user.avatarUrl,
+            child: FramedAvatar(
+              frame: user.frame,
               size: 110,
-              ring: true,
+              child: UserAvatar(
+                name: user.nickname,
+                seed: user.avatarSeed ?? user.nickname,
+                imageUrl: user.avatarUrl,
+                size: 98,
+                ring: true,
+              ),
             ),
           ),
           const SizedBox(height: AppDimensions.spaceLg),

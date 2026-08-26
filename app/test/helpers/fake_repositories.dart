@@ -459,21 +459,27 @@ class _FakeCustomizationRepository implements CustomizationRepository {
     _store.equippedCosmetics.remove(slot);
   }
 
-  /// Mirrors the server: the id is validated against the catalog (null
-  /// removes the slot) and persisted; the app then reloads `equipped()`.
+  /// Mirrors the server: each id is validated against the catalog (null
+  /// removes the slot, absent leaves it untouched) and persisted; the app
+  /// then reloads `equipped()`.
   @override
-  Future<void> saveCosmetics({String? nameColorId}) async {
-    if (nameColorId == null) {
-      _store.equippedCosmetics.remove(CosmeticItem.nameColor);
+  Future<void> saveCosmetics({String? nameColorId, String? frameId}) async {
+    _applySlot(nameColorId, CosmeticItem.nameColor);
+    _applySlot(frameId, CosmeticItem.avatarFrame);
+  }
+
+  void _applySlot(String? id, String slot) {
+    if (id == null) {
+      _store.equippedCosmetics.remove(slot);
       return;
     }
     final item = _store.catalog
-        .where((i) => i.id == nameColorId && i.slot == CosmeticItem.nameColor)
+        .where((i) => i.id == id && i.slot == slot)
         .firstOrNull;
     if (item == null) {
       throw const ApiException(statusCode: 400, message: 'Item inválido.');
     }
-    _store.equippedCosmetics[CosmeticItem.nameColor] = item;
+    _store.equippedCosmetics[slot] = item;
   }
 }
 

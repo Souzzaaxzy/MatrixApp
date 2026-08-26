@@ -12,6 +12,8 @@ class MatrixUser {
     this.postsCount = 0,
     this.customization = const {},
     this.nameColor,
+    this.frameId,
+    this.frameAsset,
   });
 
   final String id;
@@ -47,8 +49,34 @@ class MatrixUser {
   /// to the viewer: profiles/posts/comments carry the OWNER's value.
   final String? nameColor;
 
+  /// The equipped AVATAR_FRAME catalog id (e.g. `frame_coroa`), embedded by
+  /// the server. Null → "Nenhuma" (default avatar look).
+  final String? frameId;
+
+  /// The equipped frame asset key (`frames/coroa`), embedded by the server.
+  /// Maps to the bundled sprite via [frameAssetPath]. Null → no frame.
+  final String? frameAsset;
+
   /// The equipped cosmetic for [slot], or null (default rendering).
   CosmeticItem? cosmetic(String slot) => customization[slot];
+
+  /// The equipped frame cosmetic, or null when nothing is equipped.
+  /// Prefers the rich `customization.AVATAR_FRAME` entry (profile photos
+  /// carry it); falls back to the flat `frameId`/`frameAsset` fragment that
+  /// lighter author payloads (feed, search) embed.
+  CosmeticItem? get frame =>
+      cosmetic(CosmeticItem.avatarFrame) ?? _frameFromFlat();
+
+  CosmeticItem? _frameFromFlat() {
+    final id = frameId;
+    if (id == null) return null;
+    return CosmeticItem(
+      id: id,
+      slot: CosmeticItem.avatarFrame,
+      name: id,
+      assetUrl: frameAsset ?? '',
+    );
+  }
 
   MatrixUser copyWith({
     String? nickname,
@@ -59,6 +87,8 @@ class MatrixUser {
     int? postsCount,
     CosmeticMap? customization,
     String? Function()? nameColor,
+    String? Function()? frameId,
+    String? Function()? frameAsset,
   }) =>
       MatrixUser(
         id: id,
@@ -72,5 +102,7 @@ class MatrixUser {
         // Nullable resolver so a copy can explicitly CLEAR the color
         // (back to default) — `nameColor: () => null`.
         nameColor: nameColor != null ? nameColor() : this.nameColor,
+        frameId: frameId != null ? frameId() : this.frameId,
+        frameAsset: frameAsset != null ? frameAsset() : this.frameAsset,
       );
 }

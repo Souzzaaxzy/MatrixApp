@@ -11,6 +11,8 @@ class Post {
     this.avatarSeed,
     this.authorAvatarUrl,
     this.authorNicknameColor,
+    this.authorFrameId,
+    this.authorFrameAsset,
     this.imageUrl,
     this.likes = 0,
     this.liked = false,
@@ -38,6 +40,12 @@ class Post {
   /// The AUTHOR's own nickname color (hex), embedded by the server. Null →
   /// default color. Never the viewer's color.
   final String? authorNicknameColor;
+
+  /// The AUTHOR's own equipped profile frame (assets key, e.g.
+  /// `frames/coroa`), embedded by the server with the post. Null → default.
+  /// Never the viewer's frame.
+  final String? authorFrameId;
+  final String? authorFrameAsset;
   final String? imageUrl;
 
   int likes;
@@ -65,6 +73,8 @@ class Post {
         avatarSeed: avatarSeed,
         authorAvatarUrl: authorAvatarUrl,
         authorNicknameColor: authorNicknameColor,
+        authorFrameId: authorFrameId,
+        authorFrameAsset: authorFrameAsset,
         imageUrl: imageUrl ?? this.imageUrl,
         likes: likes ?? this.likes,
         liked: liked ?? this.liked,

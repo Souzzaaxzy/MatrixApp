@@ -43,11 +43,29 @@ const palette = [
   ),
 ];
 
+/// The server-owned profile frame catalog used by the Molduras picker.
+const frames = [
+  CosmeticItem(
+    id: 'frame_coroa',
+    slot: CosmeticItem.avatarFrame,
+    name: 'Coroa de cristal',
+    assetUrl: 'frames/coroa',
+    sortOrder: 1,
+  ),
+  CosmeticItem(
+    id: 'frame_fenrir',
+    slot: CosmeticItem.avatarFrame,
+    name: 'Fenrir sombrio',
+    assetUrl: 'frames/fenrir',
+    sortOrder: 2,
+  ),
+];
+
 Future<AppState> stateWithCatalog({
   Map<String, CosmeticItem> equipped = const {},
 }) async {
   final repos = FakeRepositories(
-    seedCatalog: palette,
+    seedCatalog: [...palette, ...frames],
     seedEquippedCosmetics: equipped,
   );
   final state = AppState(repositories: repos);
@@ -58,12 +76,16 @@ Future<AppState> stateWithCatalog({
 }
 
 /// The palette content may sit below the fold on the 800x600 test
-/// surface, so scroll it into view before interacting.
+/// surface, so scroll it into view before interacting. Only the OUTER
+/// ListView scrolls (the frames grid is NeverScrollable inside it), so
+/// `.first` keeps a single controller.
+Finder get _outerScrollable => find.byType(Scrollable).first;
+
 Future<void> reveal(WidgetTester tester, Finder target) =>
     tester.scrollUntilVisible(
       target,
       300,
-      scrollable: find.byType(Scrollable),
+      scrollable: _outerScrollable,
     );
 
 /// The preview is at the very top; scroll back up before reading it.
@@ -71,7 +93,7 @@ Future<NicknameRenderer> previewRenderer(WidgetTester tester) async {
   await tester.scrollUntilVisible(
     find.byType(ProfileCustomizationPreview),
     -300,
-    scrollable: find.byType(Scrollable),
+    scrollable: _outerScrollable,
   );
   await tester.pump();
   return tester.widget<NicknameRenderer>(
@@ -150,10 +172,15 @@ void main() {
       expect(find.text('Padrão'), findsNothing);
     });
 
-    testWidgets('Molduras opens its prepared section without breaking',
+    testWidgets('Molduras opens the frame grid with names and Nenhuma',
         (tester) async {
-      final state = await seededAppState();
-      addTearDown(state.dispose);
+      // Tall surface so the whole Molduras grid (and header) stay visible
+      // without scrolling — the reveal helper only scrolls downward.
+      tester.view.physicalSize = const Size(800, 2400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final state = await stateWithCatalog();
       await pumpMatrixApp(tester, const CustomizationsScreen(), state: state);
       await tester.pump(const Duration(milliseconds: 100));
 
@@ -161,12 +188,83 @@ void main() {
       await tester.pump(const Duration(milliseconds: 100));
 
       expect(find.text('MOLDURAS'), findsOneWidget);
-      expect(find.textContaining('Em breve'), findsOneWidget);
       expect(find.text('Cor do nickname'), findsNothing);
+
+      // Every frame appears in its own box with its display name, plus the
+      // "Nenhuma" clear option.
+      expect(find.text('Coroa de cristal'), findsOneWidget);
+      expect(find.text('Fenrir sombrio'), findsOneWidget);
+      expect(find.text('Nenhuma'), findsOneWidget);
 
       await tester.tap(find.byTooltip('Voltar'));
       await tester.pump(const Duration(milliseconds: 100));
       expect(find.text('PERSONALIZAÇÕES'), findsOneWidget);
+    });
+
+    testWidgets(
+        'selecting a frame shows visual selection, saves persists it, '
+        'Nenhuma removes it', (tester) async {
+      final state = await stateWithCatalog();
+      await pumpMatrixApp(tester, const CustomizationsScreen(), state: state);
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(find.text('SALVAR ALTERAÇÕES'), findsNothing);
+
+      await tester.tap(find.text('Molduras'));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      await reveal(tester, find.text('Fenrir sombrio'));
+      await tester.pump();
+      await tester.tap(find.text('Fenrir sombrio'));
+      await tester.pump();
+
+      // Selection pending → save button appears; server not yet changed.
+      expect(find.text('SALVAR ALTERAÇÕES'), findsOneWidget);
+      expect(state.myCosmetics.containsKey(CosmeticItem.avatarFrame), isFalse);
+
+      await reveal(tester, find.text('SALVAR ALTERAÇÕES'));
+      await tester.pump();
+      await tester.tap(find.text('SALVAR ALTERAÇÕES'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      // Persisted server-side and propagated to the session user.
+      expect(state.myCosmetics[CosmeticItem.avatarFrame]?.id, 'frame_fenrir');
+      expect(state.currentUser?.frameAsset, 'frames/fenrir');
+      expect(find.text('Personalizações salvas.'), findsOneWidget);
+    });
+
+    testWidgets('Nenhuma removes the equipped frame', (tester) async {
+      final state = await stateWithCatalog(equipped: const {
+        CosmeticItem.avatarFrame: CosmeticItem(
+          id: 'frame_coroa',
+          slot: CosmeticItem.avatarFrame,
+          name: 'Coroa de cristal',
+          assetUrl: 'frames/coroa',
+        ),
+      });
+      await pumpMatrixApp(tester, const CustomizationsScreen(), state: state);
+      await tester.pump(const Duration(milliseconds: 100));
+
+      await tester.tap(find.text('Molduras'));
+      await tester.pump(const Duration(milliseconds: 100));
+
+      final nenhuma = find.text('Nenhuma');
+      await reveal(tester, nenhuma);
+      await tester.pump();
+      await tester.tap(nenhuma);
+      await tester.pump();
+
+      final save = find.text('SALVAR ALTERAÇÕES');
+      await reveal(tester, save);
+      await tester.pump();
+      await tester.tap(save);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(state.myCosmetics.containsKey(CosmeticItem.avatarFrame), isFalse);
+      expect(state.currentUser?.frameAsset, isNull);
+      expect(find.text('Personalizações salvas.'), findsOneWidget);
     });
 
     testWidgets('preview reflects cosmetics equipped server-side',
@@ -306,6 +404,40 @@ void main() {
 
       await state.saveCosmetics(nameColorId: null);
       expect(state.currentUser?.nameColor, isNull);
+    });
+
+    test('a fresh session restores the saved frame (persistence)', () async {
+      // Fechar e abrir: a NEW AppState over the SAME store restores the
+      // exact frame saved before — the server/DB is the source of truth.
+      final repos = FakeRepositories(seedCatalog: [...palette, ...frames]);
+      final first = AppState(repositories: repos);
+      await first.restoreSession();
+      await first.loadFeed();
+      await first.loadFrameCatalog();
+      await first.saveCosmetics(frameId: 'frame_coroa');
+      first.dispose();
+
+      final second = AppState(repositories: repos);
+      addTearDown(second.dispose);
+      await second.restoreSession();
+      await second.loadMyCosmetics();
+      await second.loadFrameCatalog();
+      expect(
+          second.myCosmetics[CosmeticItem.avatarFrame]?.id, 'frame_coroa');
+      expect(second.currentUser?.frameAsset, 'frames/coroa');
+    });
+
+    test('the server-owned frame catalog rejects unknown ids', () async {
+      final state = await stateWithCatalog();
+      await state.loadFrameCatalog();
+      expect(
+        () => state.saveCosmetics(frameId: '../etc/passwd'),
+        throwsA(isA<ApiException>()),
+      );
+      expect(
+        () => state.saveCosmetics(frameId: 'frames/../../secret'),
+        throwsA(isA<ApiException>()),
+      );
     });
 
     test('a fresh session restores the saved configuration (persistence)',

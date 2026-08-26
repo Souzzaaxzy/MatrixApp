@@ -1,21 +1,19 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 import '../../app/theme/app_colors.dart';
-import '../../data/api_config.dart';
+import '../../core/utils/frame_assets.dart';
 import '../../models/cosmetic_item.dart';
 
 /// Avatar with an optional equipped frame around it.
-///
-/// Structure prepared for the real cosmetic assets:
 ///
 ///   FramedAvatar            ← frame slot (AVATAR_FRAME)
 ///    └── child (UserAvatar) ← the avatar itself, never knows about frames
 ///
 /// [frame] is the equipped [CosmeticItem] for the AVATAR_FRAME slot, or
-/// null for the default look. Asset-based frames render as an overlay
-/// image; asset-less frames (catalog entries not yet shipped with art)
-/// render a neon ring placeholder so the slot already "exists" visually.
+/// null for the default look. The frame sprite is BUNDLED with the APK — the
+/// server sends a key (`frames/coroa`) and [frameAssetPath] resolves it to
+/// the local `assets/frames/coroa.png`. Rendering is fully offline: no
+/// network, no Google Drive dependency.
 class FramedAvatar extends StatelessWidget {
   const FramedAvatar({
     super.key,
@@ -33,29 +31,30 @@ class FramedAvatar extends StatelessWidget {
   /// Diameter of the avatar area. The frame adds padding around it.
   final double size;
 
-  bool get _hasRemoteAsset =>
-      frame != null &&
-      (frame!.assetUrl.startsWith('http') || frame!.assetUrl.startsWith('/'));
-
   @override
   Widget build(BuildContext context) {
+    final path = frameAssetPath(frame?.assetUrl);
     if (frame == null) {
       return SizedBox(width: size, height: size, child: child);
     }
+    final padding = size * 0.08;
     return SizedBox(
       width: size,
       height: size,
       child: Stack(
         fit: StackFit.expand,
         children: [
-          Padding(padding: const EdgeInsets.all(6), child: child),
-          if (_hasRemoteAsset)
+          Padding(padding: EdgeInsets.all(padding), child: child),
+          if (path != null)
             Positioned.fill(
-              child: CachedNetworkImage(
-                imageUrl: ApiConfig.resolveUrl(frame!.assetUrl),
-                fit: BoxFit.contain,
-                errorWidget: (_, __, ___) => const _NeonFramePlaceholder(),
-                placeholder: (_, __) => const _NeonFramePlaceholder(),
+              child: IgnorePointer(
+                child: Image.asset(
+                  path,
+                  fit: BoxFit.contain,
+                  // A missing/malformed sprite must never hide the avatar or
+                  // crash — fall back to the default look.
+                  errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                ),
               ),
             )
           else

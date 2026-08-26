@@ -28,6 +28,7 @@ flutter:
 
   assets:
     - assets/fonts/
+    - assets/frames/
 
   fonts:
     - family: Inter

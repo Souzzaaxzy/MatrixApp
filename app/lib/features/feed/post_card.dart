@@ -9,9 +9,11 @@ import '../../core/utils/date_utils.dart';
 import '../../data/api_config.dart';
 import '../../models/post.dart';
 import '../../core/widgets/app_state_scope.dart';
+import '../../core/widgets/framed_avatar.dart';
 import '../../core/widgets/matrix_card.dart';
 import '../../core/widgets/nickname_renderer.dart';
 import '../../core/widgets/user_avatar.dart';
+import '../../models/cosmetic_item.dart';
 
 /// Reusable post card for the feed.
 ///
@@ -70,6 +72,18 @@ class _PostCardState extends State<PostCard>
         .pushNamed(AppRoutes.postDetail, arguments: widget.post.id);
   }
 
+  /// Builds the author's equipped frame cosmetic from the post's embedded
+  /// frame fragment (or null → default avatar look).
+  CosmeticItem? _authorFrame(Post post) {
+    if (post.authorFrameId == null) return null;
+    return CosmeticItem(
+      id: post.authorFrameId!,
+      slot: CosmeticItem.avatarFrame,
+      name: post.authorFrameId!,
+      assetUrl: post.authorFrameAsset ?? '',
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final post = widget.post;
@@ -86,10 +100,14 @@ class _PostCardState extends State<PostCard>
           children: [
             Row(
               children: [
-                UserAvatar(
-                  name: post.authorNickname,
-                  seed: post.avatarSeed,
-                  imageUrl: post.authorAvatarUrl,
+                FramedAvatar(
+                  frame: _authorFrame(post),
+                  size: 44,
+                  child: UserAvatar(
+                    name: post.authorNickname,
+                    seed: post.avatarSeed,
+                    imageUrl: post.authorAvatarUrl,
+                  ),
                 ),
                 const SizedBox(width: AppDimensions.spaceMd),
                 Expanded(

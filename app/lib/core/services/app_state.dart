@@ -61,6 +61,12 @@ class AppState extends ChangeNotifier {
   List<CosmeticItem> _nameColorCatalog = const [];
   bool _loadingNameColorCatalog = false;
 
+  /// Server-owned AVATAR_FRAME catalog (the official MOLDURAS list). Loaded
+  /// once per session — the app never hardcodes which frames exist (the
+  /// sprite for each comes bundled, keyed by the server's assetUrl).
+  List<CosmeticItem> _frameCatalog = const [];
+  bool _loadingFrameCatalog = false;
+
   /// Posts fetched individually (detail screen) that may not be present in
   /// the feed/profile caches. Lets likes/comments work uniformly by id.
   final Map<String, Post> _postCache = {};
@@ -89,6 +95,11 @@ class AppState extends ChangeNotifier {
   /// The official nickname color palette (server catalog), empty until
   /// [loadNameColorCatalog] completes.
   List<CosmeticItem> get nameColorCatalog => List.unmodifiable(_nameColorCatalog);
+
+  /// The official profile frame catalog (server), empty until
+  /// [loadFrameCatalog] completes.
+  List<CosmeticItem> get frameCatalog => List.unmodifiable(_frameCatalog);
+  bool get isLoadingFrameCatalog => _loadingFrameCatalog;
 
   List<AkameMessage> get akameMessages => List.unmodifiable(_akameMessages);
   MatrixUser? get currentUser => _currentUser;
@@ -203,6 +214,7 @@ class AppState extends ChangeNotifier {
     _feedCursor = null;
     _myCosmetics = const {};
     _nameColorCatalog = const [];
+    _frameCatalog = const [];
     _akameMessages = MockDataService.initialAkameMessages();
   }
 
@@ -475,6 +487,7 @@ class AppState extends ChangeNotifier {
     try {
       _myCosmetics = await _customizationRepo.equipped();
       _syncMyNameCosmetics();
+      _syncMyFrame();
     } catch (_) {
       // Non-blocking: the preview simply shows defaults until a retry.
     } finally {
@@ -500,17 +513,38 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  /// Loads the server-owned profile frame catalog once per session. The
+  /// server is the source of truth for WHICH frames exist and their display
+  /// names; the sprite for each rides along bundled in the APK.
+  Future<void> loadFrameCatalog() async {
+    if (_loadingFrameCatalog || _frameCatalog.isNotEmpty) return;
+    _loadingFrameCatalog = true;
+    try {
+      _frameCatalog =
+          await _customizationRepo.catalog(type: CosmeticItem.avatarFrame);
+    } catch (_) {
+      // Non-blocking: the picker retries on the next open.
+    } finally {
+      _loadingFrameCatalog = false;
+      notifyListeners();
+    }
+  }
+
   /// Consolidated save of the pending nickname customization in ONE server
-  /// operation: `{nameColorId}` (null removes the slot). The server
-  /// validates the id against the active catalog and persists it; the
+  /// operation: `{nameColorId, frameId}` (null removes the slot). The server
+  /// validates each id against the active catalog and persists it; the
   /// server-confirmed equipped map is then reloaded and propagated globally
-  /// so every nickname of the session user updates immediately.
-  Future<void> saveCosmetics({String? nameColorId}) async {
-    await _customizationRepo.saveCosmetics(nameColorId: nameColorId);
+  /// so every nickname/avatar of the session user updates immediately.
+  Future<void> saveCosmetics({String? nameColorId, String? frameId}) async {
+    await _customizationRepo.saveCosmetics(
+      nameColorId: nameColorId,
+      frameId: frameId,
+    );
     // The server is the source of truth: reload the equipped map so the
     // whole app reflects the confirmed state (not a local guess).
     _myCosmetics = await _customizationRepo.equipped();
     _syncMyNameCosmetics();
+    _syncMyFrame();
     notifyListeners();
   }
 
@@ -549,6 +583,33 @@ class AppState extends ChangeNotifier {
     if (profile != null) {
       _profiles[key] = profile.copyWith(
         user: profile.user.copyWith(nameColor: () => hex),
+      );
+    }
+  }
+
+  /// Propagates the session user's equipped frame into the global state
+  /// (currentUser + the own-profile cache) so every avatar reflects it
+  /// immediately after a save — no restart, no re-login.
+  void _syncMyFrame() {
+    final frame = _myCosmetics[CosmeticItem.avatarFrame];
+    final me = _currentUser;
+    if (me == null) return;
+    final id = frame?.id;
+    final asset = frame?.assetUrl;
+    _currentUser = me.copyWith(
+      customization: {..._myCosmetics},
+      frameId: () => id,
+      frameAsset: () => asset,
+    );
+    final key = me.nickname.toLowerCase();
+    final profile = _profiles[key];
+    if (profile != null) {
+      _profiles[key] = profile.copyWith(
+        user: profile.user.copyWith(
+          customization: {..._myCosmetics},
+          frameId: () => id,
+          frameAsset: () => asset,
+        ),
       );
     }
   }

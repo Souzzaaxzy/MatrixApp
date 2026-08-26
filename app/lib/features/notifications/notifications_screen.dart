@@ -8,11 +8,13 @@ import '../../core/utils/date_utils.dart' as matrix;
 import '../../core/widgets/nickname_renderer.dart';
 import '../../core/widgets/app_state_scope.dart';
 import '../../core/widgets/empty_state.dart';
+import '../../core/widgets/framed_avatar.dart';
 import '../../core/widgets/hud_label.dart';
 import '../../core/widgets/matrix_button.dart';
 import '../../core/widgets/matrix_card.dart';
 import '../../core/widgets/user_avatar.dart';
 import '../../data/api_config.dart';
+import '../../models/cosmetic_item.dart';
 import '../../models/matrix_notification.dart';
 
 /// Notifications tab — persistent server-side notifications.
@@ -238,11 +240,22 @@ class _NotificationTile extends StatelessWidget {
               ),
             ),
           if (!n.read) const SizedBox(width: AppDimensions.spaceSm),
-          UserAvatar(
-            name: n.actorNickname,
-            seed: n.actorNickname,
-            imageUrl: n.actorAvatarUrl,
+          FramedAvatar(
+            frame: n.actorFrameId == null
+                ? null
+                : CosmeticItem(
+                    id: n.actorFrameId!,
+                    slot: CosmeticItem.avatarFrame,
+                    name: n.actorFrameId!,
+                    assetUrl: n.actorFrameAsset ?? '',
+                  ),
             size: 42,
+            child: UserAvatar(
+              name: n.actorNickname,
+              seed: n.actorNickname,
+              imageUrl: n.actorAvatarUrl,
+              size: 36,
+            ),
           ),
           const SizedBox(width: AppDimensions.spaceMd),
           Expanded(
@@ -320,12 +333,23 @@ class _FriendRequestCard extends StatelessWidget {
       ),
       child: Column(
         children: [
-          UserAvatar(
-            name: n.actorNickname,
-            seed: n.actorNickname,
-            imageUrl: n.actorAvatarUrl,
+          FramedAvatar(
+            frame: n.actorFrameId == null
+                ? null
+                : CosmeticItem(
+                    id: n.actorFrameId!,
+                    slot: CosmeticItem.avatarFrame,
+                    name: n.actorFrameId!,
+                    assetUrl: n.actorFrameAsset ?? '',
+                  ),
             size: 64,
-            ring: true,
+            child: UserAvatar(
+              name: n.actorNickname,
+              seed: n.actorNickname,
+              imageUrl: n.actorAvatarUrl,
+              size: 56,
+              ring: true,
+            ),
           ),
           const SizedBox(height: AppDimensions.spaceMd),
           NicknameRenderer(

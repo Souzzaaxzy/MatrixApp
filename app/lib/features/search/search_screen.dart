@@ -6,6 +6,7 @@ import '../../app/theme/app_dimensions.dart';
 import '../../app/theme/app_text_styles.dart';
 import '../../core/widgets/app_state_scope.dart';
 import '../../core/widgets/empty_state.dart';
+import '../../core/widgets/framed_avatar.dart';
 import '../../core/widgets/hud_label.dart';
 import '../../core/widgets/matrix_card.dart';
 import '../../core/widgets/matrix_text_field.dart';
@@ -131,11 +132,15 @@ class _SearchScreenState extends State<SearchScreen> {
                     onTap: () => _openUser(user),
                     child: Row(
                       children: [
-                        UserAvatar(
-                          name: user.nickname,
-                          seed: user.avatarSeed ?? user.nickname,
-                          imageUrl: user.avatarUrl,
+                        FramedAvatar(
+                          frame: user.frame,
                           size: 42,
+                          child: UserAvatar(
+                            name: user.nickname,
+                            seed: user.avatarSeed ?? user.nickname,
+                            imageUrl: user.avatarUrl,
+                            size: 36,
+                          ),
                         ),
                         const SizedBox(width: AppDimensions.spaceMd),
                         Expanded(

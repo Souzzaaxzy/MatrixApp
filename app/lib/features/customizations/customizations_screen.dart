@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_dimensions.dart';
 import '../../app/theme/app_text_styles.dart';
+import '../../core/utils/frame_assets.dart';
 import '../../core/utils/name_colors.dart';
 import '../../core/widgets/app_state_scope.dart';
 import '../../core/widgets/matrix_button.dart';
@@ -43,6 +44,9 @@ class _CustomizationsScreenState extends State<CustomizationsScreen> {
   /// Initialized from the equipped state on first build; [_dirty] tracks
   /// unsaved changes.
   String? _selectedColorId;
+
+  /// Local pending frame selection: catalog item id, or null for "Nenhuma".
+  String? _selectedFrameId;
   bool _selectionReady = false;
   bool _dirty = false;
   bool _saving = false;
@@ -59,6 +63,7 @@ class _CustomizationsScreenState extends State<CustomizationsScreen> {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         state.loadMyCosmetics();
         state.loadNameColorCatalog();
+        state.loadFrameCatalog();
       });
     }
   }
@@ -67,11 +72,19 @@ class _CustomizationsScreenState extends State<CustomizationsScreen> {
     if (_selectionReady) return;
     _selectionReady = true;
     _selectedColorId = equipped[CosmeticItem.nameColor]?.id;
+    _selectedFrameId = equipped[CosmeticItem.avatarFrame]?.id;
   }
 
   void _selectColor(String? colorId) {
     setState(() {
       _selectedColorId = colorId;
+      _dirty = true;
+    });
+  }
+
+  void _selectFrame(String? frameId) {
+    setState(() {
+      _selectedFrameId = frameId;
       _dirty = true;
     });
   }
@@ -83,7 +96,10 @@ class _CustomizationsScreenState extends State<CustomizationsScreen> {
     final messenger = ScaffoldMessenger.of(context);
     try {
       // ONE consolidated operation with the whole pending customization.
-      await state.saveCosmetics(nameColorId: _selectedColorId);
+      await state.saveCosmetics(
+        nameColorId: _selectedColorId,
+        frameId: _selectedFrameId,
+      );
       if (!mounted) return;
       setState(() {
         _dirty = false;
@@ -126,6 +142,25 @@ class _CustomizationsScreenState extends State<CustomizationsScreen> {
                 state.myCosmetics[CosmeticItem.nameColor]?.hexColor ??
                 user.nameColor));
 
+    // Preview frame: local pending selection first, then the equipped state.
+    final selectedFrame = _selectedFrameId == null
+        ? null
+        : state.frameCatalog
+            .where((f) => f.id == _selectedFrameId)
+            .firstOrNull;
+    final previewFrame = !_selectionReady
+        ? null
+        : (_selectedFrameId == null
+            ? null
+            : (selectedFrame ??
+                state.myCosmetics[CosmeticItem.avatarFrame]));
+    final previewCosmetics = {...state.myCosmetics};
+    if (previewFrame == null) {
+      previewCosmetics.remove(CosmeticItem.avatarFrame);
+    } else {
+      previewCosmetics[CosmeticItem.avatarFrame] = previewFrame;
+    }
+
     final inMenu = _section == _Section.menu;
     final title = switch (_section) {
       _Section.menu => 'PERSONALIZAÇÕES',
@@ -150,7 +185,7 @@ class _CustomizationsScreenState extends State<CustomizationsScreen> {
             const SizedBox(height: AppDimensions.spaceLg),
             ProfileCustomizationPreview(
               user: user,
-              cosmetics: state.myCosmetics,
+              cosmetics: previewCosmetics,
               nameColorOverride: previewColor,
             ),
             const SizedBox(height: AppDimensions.spaceLg),
@@ -164,7 +199,11 @@ class _CustomizationsScreenState extends State<CustomizationsScreen> {
                   selectedId: _selectedColorId,
                   onSelect: _selectColor,
                 ),
-              _Section.frames => const _FramesSection(),
+              _Section.frames => _FramesSection(
+                  catalog: state.frameCatalog,
+                  selectedId: _selectedFrameId,
+                  onSelect: _selectFrame,
+                ),
             },
             if (_dirty) ...[
               const SizedBox(height: AppDimensions.spaceMd),
@@ -293,14 +332,28 @@ class _CategoryButton extends StatelessWidget {
   }
 }
 
-/// 🖼️ Molduras — prepared section. New frames are NOT part of this change:
-/// the section exists so the frame picker can land here later. The equipped
-/// AVATAR_FRAME (if any) keeps rendering in the preview above.
+/// 🖼️ Molduras — the profile frame picker.
+///
+/// Each frame comes from the SERVER-owned AVATAR_FRAME catalog (id + display
+/// name + asset key); the sprite itself is BUNDLED with the APK. Every frame
+/// shows in its own box: [frame thumbnail] on top, name below — with a
+/// matching tessellated placeholder behind the transparent sprite so the
+/// silhouette reads on any theme. "Nenhuma" clears the frame.
 class _FramesSection extends StatelessWidget {
-  const _FramesSection();
+  const _FramesSection({
+    required this.catalog,
+    required this.selectedId,
+    required this.onSelect,
+  });
+
+  final List<CosmeticItem> catalog;
+  final String? selectedId;
+  final ValueChanged<String?> onSelect;
 
   @override
   Widget build(BuildContext context) {
+    final frames = [...catalog]
+      ..sort((a, b) => a.sortOrder.compareTo(b.sortOrder));
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(AppDimensions.spaceLg),
@@ -310,19 +363,161 @@ class _FramesSection extends StatelessWidget {
         border: Border.all(color: AppColors.deepBlue),
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.crop_free_rounded,
-              color: AppColors.holographicBlue, size: 32),
-          const SizedBox(height: AppDimensions.spaceMd),
-          Text('Molduras', style: AppTextStyles.h3),
-          const SizedBox(height: AppDimensions.spaceSm),
-          Text(
-            'Em breve você poderá escolher molduras para o seu perfil aqui.',
-            style: AppTextStyles.caption,
-            textAlign: TextAlign.center,
-          ),
+          if (catalog.isEmpty)
+            Padding(
+              padding:
+                  const EdgeInsets.symmetric(vertical: AppDimensions.spaceLg),
+              child: Center(
+                child: Text('Carregando molduras…', style: AppTextStyles.caption),
+              ),
+            )
+          else
+            // Lazy grid: only the visible sprites are decoded, so the list
+            // stays fluid no matter how many frames exist. "Nenhuma" is the
+            // FIRST cell (clears the equipped frame back to the default).
+            GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 3,
+                mainAxisSpacing: AppDimensions.spaceSm,
+                crossAxisSpacing: AppDimensions.spaceSm,
+                childAspectRatio: 0.92,
+              ),
+              itemCount: frames.length + 1,
+              itemBuilder: (context, index) {
+                if (index == 0) {
+                  return _FrameTile(
+                    label: 'Nenhuma',
+                    assetPath: null,
+                    selected: selectedId == null,
+                    onTap: () => onSelect(null),
+                  );
+                }
+                final frame = frames[index - 1];
+                return _FrameTile(
+                  label: frame.name,
+                  assetPath: frameAssetPath(frame.assetUrl),
+                  selected: frame.id == selectedId,
+                  onTap: () => onSelect(frame.id),
+                );
+              },
+            ),
         ],
       ),
+    );
+  }
+}
+
+/// A frame in its own caixinha: transparent sprite (or a "none" glyph) with
+/// the display name below. The selected tile gets an electric highlight.
+class _FrameTile extends StatelessWidget {
+  const _FrameTile({
+    required this.label,
+    required this.assetPath,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final String? assetPath;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AppDimensions.radiusSm),
+      child: Container(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppDimensions.spaceXs,
+          vertical: AppDimensions.spaceSm,
+        ),
+        decoration: BoxDecoration(
+          color: AppColors.nightBlue,
+          borderRadius: BorderRadius.circular(AppDimensions.radiusSm),
+          border: Border.all(
+            color: selected ? AppColors.electricBlue : AppColors.deepBlue,
+            width: selected ? 2 : 1,
+          ),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // The sprite box — a checkerboard behind the transparent art so
+            // the frame silhouette stays visible on any theme.
+            Expanded(
+              child: Center(
+                child: _FrameSprite(assetPath, selected: selected),
+              ),
+            ),
+            const SizedBox(height: AppDimensions.spaceXs),
+            Text(
+              label,
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: AppTextStyles.caption.copyWith(
+                color: selected ? AppColors.electricBlue : AppColors.techWhite,
+                fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The actual sprite: a local bundled `assets/frames/<key>.png` on a faint
+/// checkerboard (so the transparency is visible on both themes). Falls back
+/// to a "no frame" glyph for the "Nenhuma" option or a missing sprite.
+class _FrameSprite extends StatelessWidget {
+  const _FrameSprite(this.assetPath, {required this.selected});
+
+  final String? assetPath;
+  final bool selected;
+
+  @override
+  Widget build(BuildContext context) {
+    final Widget glyph;
+    if (assetPath != null) {
+      glyph = Image.asset(
+        assetPath!,
+        fit: BoxFit.contain,
+        errorBuilder: (_, __, ___) => Icon(
+          Icons.crop_free_rounded,
+          color: AppColors.holographicBlue,
+          size: 28,
+        ),
+      );
+    } else {
+      glyph = Icon(
+        selected
+            ? Icons.no_photography_rounded
+            : Icons.crop_free_rounded,
+        color: AppColors.holographicBlue,
+        size: 28,
+      );
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(AppDimensions.radiusSm),
+        // Subtle checkerboard shows the frame's transparency.
+        gradient: selected
+            ? null
+            : const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [Color(0xFF1A2A3A), Color(0xFF10161F)],
+              ),
+        border: Border.all(color: AppColors.deepBlue, width: 1),
+      ),
+      child: Padding(padding: const EdgeInsets.all(4), child: glyph),
     );
   }
 }

@@ -7,9 +7,11 @@ import '../../core/utils/date_utils.dart';
 import '../../core/widgets/nickname_renderer.dart';
 import '../../core/widgets/app_state_scope.dart';
 import '../../core/widgets/hud_label.dart';
+import '../../core/widgets/framed_avatar.dart';
 import '../../core/widgets/theme_watcher.dart';
 import '../../core/widgets/user_avatar.dart';
 import '../../models/comment.dart';
+import '../../models/cosmetic_item.dart';
 import '../../models/post.dart';
 
 /// Bottom sheet showing comments for a post.
@@ -171,10 +173,21 @@ class _CommentsSheetState extends State<CommentsSheet> {
                         child: Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            UserAvatar(
-                              name: c.authorNickname,
-                              imageUrl: c.authorAvatarUrl,
+                            FramedAvatar(
+                              frame: c.authorFrameId == null
+                                  ? null
+                                  : CosmeticItem(
+                                      id: c.authorFrameId!,
+                                      slot: CosmeticItem.avatarFrame,
+                                      name: c.authorFrameId!,
+                                      assetUrl: c.authorFrameAsset ?? '',
+                                    ),
                               size: 32,
+                              child: UserAvatar(
+                                name: c.authorNickname,
+                                imageUrl: c.authorAvatarUrl,
+                                size: 27,
+                              ),
                             ),
                             const SizedBox(width: AppDimensions.spaceMd),
                             Expanded(

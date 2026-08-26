@@ -6,6 +6,7 @@ import '../../app/theme/app_dimensions.dart';
 import '../../app/theme/app_text_styles.dart';
 import '../../core/services/app_state.dart';
 import '../../core/widgets/app_state_scope.dart';
+import '../../core/widgets/framed_avatar.dart';
 import '../../core/widgets/hud_label.dart';
 import '../../core/widgets/theme_watcher.dart';
 import '../../core/widgets/nickname_renderer.dart';
@@ -248,13 +249,17 @@ class _FriendsSheetState extends State<FriendsSheet> {
             horizontal: AppDimensions.spaceLg,
             vertical: 2,
           ),
-          leading: UserAvatar(
-            name: friend.nickname,
-            seed: friend.avatarSeed ?? friend.nickname,
-            imageUrl: friend.avatarUrl == null
-                ? null
-                : ApiConfig.resolveUrl(friend.avatarUrl!),
+          leading: FramedAvatar(
+            frame: friend.frame,
             size: 44,
+            child: UserAvatar(
+              name: friend.nickname,
+              seed: friend.avatarSeed ?? friend.nickname,
+              imageUrl: friend.avatarUrl == null
+                  ? null
+                  : ApiConfig.resolveUrl(friend.avatarUrl!),
+              size: 37,
+            ),
           ),
           title: NicknameRenderer(
             friend.nickname,
