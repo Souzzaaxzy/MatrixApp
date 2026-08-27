@@ -23,17 +23,17 @@ void main() {
     expect(find.text('EDITAR PERFIL'), findsOneWidget);
     // Own profile has the floating "+" and no friendship button.
     expect(find.byIcon(Icons.add_rounded), findsOneWidget);
-    expect(find.text('ADICIONAR'), findsNothing);
+    expect(find.text('SOLICITAR'), findsNothing);
     expect(find.text('SOLICITADO'), findsNothing);
     expect(find.text('AMIGOS'), findsNothing);
   });
 
-  testWidgets('other user profile: shows Adicionar, no edit, no FAB', (tester) async {
+  testWidgets('other user profile: shows Solicitado, no edit, no FAB', (tester) async {
     await pumpMatrixApp(tester, const ProfileScreen(nickname: 'joao'));
     await tester.pump(const Duration(milliseconds: 400));
 
     expect(find.textContaining('joao', findRichText: true), findsOneWidget);
-    expect(find.text('ADICIONAR'), findsOneWidget);
+    expect(find.text('SOLICITAR'), findsOneWidget);
     expect(find.text('EDITAR PERFIL'), findsNothing);
     expect(find.byIcon(Icons.add_rounded), findsNothing);
     // Their posts keep rendering on their profile — with the NEUTRAL
@@ -43,14 +43,36 @@ void main() {
     expect(find.byIcon(Icons.favorite_rounded), findsNothing);
   });
 
-  testWidgets('tapping Adicionar sends the request and shows Solicitado', (tester) async {
+  testWidgets('tapping Solicitado sends the request and shows Solicitado',
+      (tester) async {
     await pumpMatrixApp(tester, const ProfileScreen(nickname: 'joao'));
     await tester.pump(const Duration(milliseconds: 400));
 
-    await tester.tap(find.text('ADICIONAR'));
+    expect(find.text('SOLICITAR'), findsOneWidget);
+
+    await tester.tap(find.text('SOLICITAR'));
     await tester.pump(const Duration(milliseconds: 400));
 
     expect(find.text('SOLICITADO'), findsOneWidget);
+  });
+
+  testWidgets('tapping Solicitado again cancels back to Solicitado',
+      (tester) async {
+    await pumpMatrixApp(tester, const ProfileScreen(nickname: 'joao'));
+    await tester.pump(const Duration(milliseconds: 400));
+
+    // Send a request first.
+    await tester.tap(find.text('SOLICITAR'));
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.text('SOLICITADO'), findsOneWidget);
+
+    // A second tap on the same button cancels the pending request → back to
+    // SOLICITAR. The server is the source of truth (fake store deletes the
+    // pending request row).
+    await tester.tap(find.text('SOLICITADO'));
+    await tester.pump(const Duration(milliseconds: 400));
+
+    expect(find.text('SOLICITAR'), findsOneWidget);
   });
 
   testWidgets('shows current user posts in the grid', (tester) async {
@@ -145,7 +167,7 @@ void main() {
       ));
       await tester.pump(const Duration(milliseconds: 800));
       await tester.pump(const Duration(milliseconds: 800));
-      expect(find.text('ADICIONAR'), findsOneWidget);
+      expect(find.text('SOLICITAR'), findsOneWidget);
 
       // Back to the shell, then open the own profile tab.
       tester.state<NavigatorState>(find.byType(Navigator).first).pop();
@@ -283,6 +305,74 @@ void main() {
       await tester.tapAt(const Offset(5, 5));
       await tester.pumpAndSettle();
       expect(find.byType(ClipOval), findsNothing);
+    });
+  });
+
+  group('existing friendship (AMIGOS)', () {
+    // Builds an AppState where leonardo (u0) is ALREADY friends with joao
+    // (u2), so the profile button renders AMIGOS. Returns both so tests can
+    // inspect the fake server store (server is the source of truth).
+    Future<({AppState state, FakeRepositories repos})> friendsState() async {
+      final repos = FakeRepositories();
+      repos.store.friendships.add('u0|u2');
+      final state = AppState(repositories: repos);
+      await state.restoreSession();
+      await state.loadFeed();
+      return (state: state, repos: repos);
+    }
+
+    testWidgets('shows AMIGOS and confirmation modal on tap',
+        (tester) async {
+      final seeded = await friendsState();
+      await pumpMatrixApp(
+          tester, const ProfileScreen(nickname: 'joao'), state: seeded.state);
+      await tester.pump(const Duration(milliseconds: 400));
+
+      expect(find.text('AMIGOS'), findsOneWidget);
+
+      // Tapping AMIGOS opens the MATRIX-styled confirmation.
+      await tester.tap(find.text('AMIGOS'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.textContaining('Deixar de ser amigo de joao'),
+        findsOneWidget,
+      );
+      expect(find.text('NÃO'), findsOneWidget);
+      expect(find.text('SIM'), findsOneWidget);
+    });
+
+    testWidgets('NÃO keeps the friendship (no server change)', (tester) async {
+      final seeded = await friendsState();
+      await pumpMatrixApp(
+          tester, const ProfileScreen(nickname: 'joao'), state: seeded.state);
+      await tester.pump(const Duration(milliseconds: 400));
+
+      await tester.tap(find.text('AMIGOS'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('NÃO'));
+      await tester.pumpAndSettle();
+
+      // Still AMIGOS, and the fake server still holds the friendship row.
+      expect(find.text('AMIGOS'), findsOneWidget);
+      expect(seeded.repos.store.friendships.contains('u0|u2'), isTrue);
+    });
+
+    testWidgets('SIM removes the friendship → back to SOLICITAR',
+        (tester) async {
+      final seeded = await friendsState();
+      await pumpMatrixApp(
+          tester, const ProfileScreen(nickname: 'joao'), state: seeded.state);
+      await tester.pump(const Duration(milliseconds: 400));
+
+      await tester.tap(find.text('AMIGOS'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('SIM'));
+      await tester.pumpAndSettle();
+
+      // Friendship removed on the server and the button returns to SOLICITAR.
+      expect(seeded.repos.store.friendships.contains('u0|u2'), isFalse);
+      expect(find.text('SOLICITAR'), findsOneWidget);
     });
   });
 }

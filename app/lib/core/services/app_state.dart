@@ -85,6 +85,12 @@ class AppState extends ChangeNotifier {
   final _chatIncoming = StreamController<ChatMessage>.broadcast();
   Stream<ChatMessage> get onChatIncoming => _chatIncoming.stream;
 
+  /// Emits whenever a friendship relationship changes (request sent/cancelled,
+  /// removed, accepted). Screens that render the live friends list subscribe
+  /// so removal on a profile reflects immediately when they become visible.
+  final _friendsChanged = StreamController<void>.broadcast();
+  Stream<void> get onFriendsChanged => _friendsChanged.stream;
+
   List<Post> get posts => List.unmodifiable(_posts);
   bool get isLoadingProfile => _loadingProfile;
 
@@ -653,6 +659,43 @@ class AppState extends ChangeNotifier {
     _profiles.updateAll((key, profile) => profile.user.id == userId
         ? profile.copyWith(friendship: Friendship.outgoingPending)
         : profile);
+    _emitFriendsChanged();
+    notifyListeners();
+  }
+
+  /// Cancels the PENDING request the current user sent to [userId]. The
+  /// server removes the request + its notification; the profile state
+  /// returns to SOLICITAR (NONE). State is server-confirmed — a fresh
+  /// profile load after this reports NONE too.
+  Future<void> cancelFriendRequest(String userId) async {
+    await _friends.cancel(userId);
+    _profiles.updateAll((key, profile) => profile.user.id == userId
+        ? profile.copyWith(friendship: Friendship.none)
+        : profile);
+    _emitFriendsChanged();
+    notifyListeners();
+  }
+
+  /// Removes the ACCEPTED friendship between the current user and [userId].
+  /// The server validates the requester and deletes the row; the profile
+  /// state returns to SOLICITAR (NONE) and the Amigos counters of both
+  /// affected cached profiles (mine + the other user's) drop by one.
+  Future<void> removeFriend(String userId) async {
+    await _friends.removeFriend(userId);
+    final me = _currentUser?.id;
+    _profiles.updateAll((key, profile) {
+      final uid = profile.user.id;
+      final isMine = uid == me;
+      final isOther = uid == userId;
+      if (!isMine && !isOther) return profile;
+      return profile.copyWith(
+        user: profile.user.copyWith(
+          friendsCount: (profile.user.friendsCount - 1).clamp(0, 1 << 31).toInt(),
+        ),
+        friendship: Friendship.none,
+      );
+    });
+    _emitFriendsChanged();
     notifyListeners();
   }
 
@@ -681,7 +724,12 @@ class AppState extends ChangeNotifier {
         friendship: isSender ? Friendship.friends : profile.friendship,
       );
     });
+    _emitFriendsChanged();
     notifyListeners();
+  }
+
+  void _emitFriendsChanged() {
+    if (!_friendsChanged.isClosed) _friendsChanged.add(null);
   }
 
   /// Loads one page of the friends list of [userId] (own or another
@@ -951,6 +999,7 @@ class AppState extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     _chatIncoming.close();
+    _friendsChanged.close();
     super.dispose();
   }
 }

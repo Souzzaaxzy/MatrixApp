@@ -21,6 +21,7 @@ import '../../models/matrix_user.dart';
 import '../../models/post.dart';
 import '../chat/chat_navigation.dart';
 import 'friends_sheet.dart';
+import 'friendship_button.dart';
 import 'settings_sheet.dart';
 
 /// Profile screen — the server is the single source of truth.
@@ -41,7 +42,6 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   bool _requested = false;
   String? _error;
-  bool _sending = false;
 
   /// The real user id this screen is presenting (once loaded). Used to
   /// register/un-register the profile in the navigation stack and to guard
@@ -119,25 +119,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   void _openPost(Post post) {
     Navigator.of(context).pushNamed(AppRoutes.postDetail, arguments: post.id);
-  }
-
-  Future<void> _sendFriendRequest(String userId) async {
-    setState(() => _sending = true);
-    try {
-      await AppStateScope.of(context).sendFriendRequest(userId);
-    } on ApiException catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.message)),
-      );
-    } catch (_) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Erro de conexão.')),
-      );
-    } finally {
-      if (mounted) setState(() => _sending = false);
-    }
   }
 
   @override
@@ -218,9 +199,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   user: user,
                   isOwn: isOwn,
                   friendship: friendship,
-                  sending: _sending,
                   onEdit: _openEditProfile,
-                  onSend: () => _sendFriendRequest(user.id),
                   onFriendsTap: () => FriendsSheet.open(context, user),
                   onMessage: () => openChatWithUser(context, user),
                 ),
@@ -289,9 +268,7 @@ class _ProfileHeader extends StatelessWidget {
     required this.user,
     required this.isOwn,
     required this.friendship,
-    required this.sending,
     required this.onEdit,
-    required this.onSend,
     required this.onFriendsTap,
     required this.onMessage,
   });
@@ -299,9 +276,7 @@ class _ProfileHeader extends StatelessWidget {
   final MatrixUser user;
   final bool isOwn;
   final Friendship? friendship;
-  final bool sending;
   final VoidCallback onEdit;
-  final VoidCallback onSend;
   final VoidCallback onFriendsTap;
   final VoidCallback onMessage;
 
@@ -389,15 +364,15 @@ class _ProfileHeader extends StatelessWidget {
               onPressed: onEdit,
             )
           else if (friendship == Friendship.friends)
-            // Friends → two equal buttons side by side: Amigos + Mensagem.
+            // Friends → two equal buttons side by side: Amigos (tappable —
+            // opens the "deixar de ser amigo?" confirmation) + Mensagem.
             Row(
               children: [
                 Expanded(
-                  child: MatrixButton(
-                    label: 'Amigos',
-                    icon: Icons.favorite_rounded,
-                    variant: MatrixButtonVariant.outline,
-                    onPressed: null,
+                  child: FriendshipButton(
+                    userId: user.id,
+                    nickname: user.nickname,
+                    friendship: Friendship.friends,
                   ),
                 ),
                 const SizedBox(width: AppDimensions.spaceMd),
@@ -412,9 +387,9 @@ class _ProfileHeader extends StatelessWidget {
             )
           else
             FriendshipButton(
+              userId: user.id,
+              nickname: user.nickname,
               friendship: friendship,
-              sending: sending,
-              onSend: onSend,
             ),
         ],
       ),
@@ -550,52 +525,7 @@ class _StatColumn extends StatelessWidget {
 }
 
 
-/// The big friendship button with the three server-managed states:
-/// Adicionar (sends a request) / Solicitado (disabled) / Amigos (disabled).
-class FriendshipButton extends StatelessWidget {
-  const FriendshipButton({
-    super.key,
-    required this.friendship,
-    required this.sending,
-    required this.onSend,
-  });
 
-  final Friendship? friendship;
-  final bool sending;
-  final VoidCallback onSend;
-
-  @override
-  Widget build(BuildContext context) {
-    final state = friendship ?? Friendship.none;
-    switch (state) {
-      case Friendship.friends:
-        return const MatrixButton(
-          label: 'Amigos',
-          icon: Icons.favorite_rounded,
-          variant: MatrixButtonVariant.outline,
-          expanded: true,
-          onPressed: null,
-        );
-      case Friendship.outgoingPending:
-      case Friendship.incomingPending:
-        return const MatrixButton(
-          label: 'Solicitado',
-          icon: Icons.watch_later_rounded,
-          variant: MatrixButtonVariant.outline,
-          expanded: true,
-          onPressed: null,
-        );
-      case Friendship.none:
-        return MatrixButton(
-          label: 'Adicionar',
-          icon: Icons.person_add_rounded,
-          expanded: true,
-          isLoading: sending,
-          onPressed: onSend,
-        );
-    }
-  }
-}
 
 /// The floating "+" button — only rendered on the own profile. Reuses the
 /// existing create-post flow (same target the old menu entry used).

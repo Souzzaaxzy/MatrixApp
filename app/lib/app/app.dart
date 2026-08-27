@@ -62,7 +62,8 @@ class _MatrixAppState extends State<MatrixApp> {
           navigator.pushNamed(AppRoutes.postDetail, arguments: postId);
         }
       case 'FRIEND_REQUEST':
-        navigator.pushNamed(AppRoutes.home, arguments: 4);
+        // Atividades tab (index 3 — Akame is no longer a bottom-bar entry).
+        navigator.pushNamed(AppRoutes.home, arguments: 3);
       case 'FRIEND_ACCEPTED':
         final nickname = data['actorNickname'] as String?;
         if (nickname != null && nickname.isNotEmpty) {

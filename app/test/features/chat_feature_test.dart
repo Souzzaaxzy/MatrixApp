@@ -16,11 +16,13 @@ void main() {
   Future<AppState> seededChat({
     List<String> messages = const [],
     bool withFriend = true,
+    bool withConversation = true,
   }) async {
     final repos = FakeRepositories();
     final store = repos.store;
     if (withFriend) store.friendships.add('u0|u2');
     store.chatMessagesByPair['u0|u2'] = [];
+    if (!withConversation) store.chatMessagesByPair.remove('u0|u2');
     for (var i = 0; i < messages.length; i++) {
       store.chatMessagesByPair['u0|u2']!.add(ChatMessage(
         id: 'm$i',
@@ -67,6 +69,24 @@ void main() {
       await pumpMatrixApp(tester, const ChatScreen(), state: state);
       await tester.pump();
       expect(find.text('joao'), findsWidgets);
+    });
+
+    testWidgets('removing a friend clears the friends row', (tester) async {
+      final state = await seededChat(withFriend: true);
+      await pumpMatrixApp(tester, const ChatScreen(), state: state);
+      await tester.pumpAndSettle();
+      // Friend row is populated (empty-friends hint is absent).
+      expect(find.text('Você ainda não possui amigos.'), findsNothing);
+
+      // Remove the friendship server-side (source of truth) and let the
+      // onFriendsChanged stream re-sync the row.
+      await state.removeFriend('u2');
+      await tester.pumpAndSettle();
+
+      // The friends row is now empty → the hint appears. (The persisted
+      // conversation tile with joao may remain — that is correct: chat
+      // history survives friendship removal.)
+      expect(find.text('Você ainda não possui amigos.'), findsOneWidget);
     });
   });
 

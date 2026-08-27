@@ -255,6 +255,20 @@ class FriendRepository {
     await _api.post('/api/friend-requests/$requestId/reject');
   }
 
+  /// Cancels the PENDING request the CURRENT user sent to [userId]. The
+  /// server removes the request + its notification; the relationship
+  /// returns to NONE (SOLICITAR).
+  Future<void> cancel(String userId) async {
+    await _api.delete('/api/friend-requests/$userId');
+  }
+
+  /// Removes the ACCEPTED friendship between the CURRENT user and [userId].
+  /// The server validates the requester (only one side of the friendship
+  /// may remove it) and deletes the row; the relationship returns to NONE.
+  Future<void> removeFriend(String userId) async {
+    await _api.delete('/api/users/$userId/friends');
+  }
+
   /// Current friendship state with another user, per the server.
   Future<Friendship> state(String userId) async {
     final json = await _api.get<Map<String, dynamic>>('/api/users/$userId/friendship');

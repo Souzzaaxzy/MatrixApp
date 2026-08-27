@@ -9,6 +9,7 @@ import '../../core/services/app_state.dart';
 import '../../core/widgets/app_state_scope.dart';
 import '../../core/widgets/empty_state.dart';
 import '../../core/widgets/framed_avatar.dart';
+import '../../core/widgets/glow_container.dart';
 import '../../core/widgets/hud_label.dart';
 import '../../core/widgets/matrix_card.dart';
 import '../../core/widgets/matrix_text_field.dart';
@@ -21,12 +22,20 @@ import 'chat_navigation.dart';
 
 /// The "💬 Chat" tab — private conversations.
 ///
-/// Layout: user search bar → 👥 AMIGOS (horizontal row) → 💬 CONVERSAS (one
-/// card per conversation with photo, nickname, last message + time). All
-/// data comes from existing systems (users/friends/conversations); tapping
-/// any entry opens the SAME [ConversationScreen].
+/// Layout: user search bar → AKAME (fixed permanent first entry) + 👥 AMIGOS
+/// (horizontal row) → 💬 CONVERSAS (one card per conversation with photo,
+/// nickname, last message + time). Akame is a special, fixed entry that
+/// always leads the friends row — it is never treated as a friend. Tapping
+/// it opens the full Akame chat through [onOpenAkame]; all data comes from
+/// existing systems (users/friends/conversations); tapping any other entry
+/// opens the SAME [ConversationScreen].
 class ChatScreen extends StatefulWidget {
-  const ChatScreen({super.key});
+  const ChatScreen({super.key, this.onOpenAkame});
+
+  /// Invoked when the user taps the fixed Akame card — the caller (Home
+  /// shell) raises the standalone Akame overlay. Null renders the card
+  /// without an action (e.g. standalone tests).
+  final VoidCallback? onOpenAkame;
 
   @override
   State<ChatScreen> createState() => _ChatScreenState();
@@ -38,7 +47,6 @@ class _ChatScreenState extends State<ChatScreen> {
   List<MatrixUser> _friends = const [];
   bool _searching = false;
   bool _searched = false;
-  bool _loadingFriends = false;
   StreamSubscription<ChatMessage>? _chatSub;
 
   @override
@@ -50,16 +58,25 @@ class _ChatScreenState extends State<ChatScreen> {
     // synchronously, which is not allowed during the build phase.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      _chatSub = AppStateScope.maybeOf(context)?.onChatIncoming.listen((_) => _onRealtime());
+      final state = AppStateScope.maybeOf(context);
+      if (state == null) return;
+      _chatSub = state.onChatIncoming.listen((_) => _onRealtime());
+      // Re-sync the friends row when a friendship changes elsewhere (e.g. a
+      // friend removed from their profile) so the list never shows stale rows.
+      _friendsChangedSub = state.onFriendsChanged.listen((_) {
+        if (mounted) _loadFriends(state);
+      });
       _refresh();
     });
   }
 
   bool _primed = false;
+  StreamSubscription<void>? _friendsChangedSub;
 
   @override
   void dispose() {
     _chatSub?.cancel();
+    _friendsChangedSub?.cancel();
     _search.dispose();
     super.dispose();
   }
@@ -78,15 +95,12 @@ class _ChatScreenState extends State<ChatScreen> {
   Future<void> _loadFriends(AppState state) async {
     final current = state.currentUser;
     if (current == null) return;
-    setState(() => _loadingFriends = true);
     try {
       final page = await state.loadFriends(current.id, pageSize: 30);
       if (!mounted) return;
       setState(() => _friends = page.friends);
     } catch (_) {
       // Friends list best-effort; conversations still render.
-    } finally {
-      if (mounted) setState(() => _loadingFriends = false);
     }
   }
 
@@ -238,7 +252,11 @@ class _ChatScreenState extends State<ChatScreen> {
                 ),
               ),
           ] else ...[
-            // ── AMIGOS row ──
+            // ── AKAME + AMIGOS ──
+            // One shared horizontal row: Akame is the FIXED permanent first
+            // entry (special chat, never a friend), followed by the friends.
+            // Akame stays first no matter how the friend list changes. The
+            // section title stays "AMIGOS" (Akame is the special lead-in).
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.only(
@@ -248,7 +266,19 @@ class _ChatScreenState extends State<ChatScreen> {
                 child: HudLabel(text: '👥 AMIGOS'),
               ),
             ),
-            _friendsBody(),
+            _akameFriendsBody(),
+            if (_friends.isEmpty)
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: AppDimensions.spaceLg),
+                  child: Text(
+                    'Você ainda não possui amigos.',
+                    style: AppTextStyles.bodyMuted,
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              ),
             const SliverToBoxAdapter(
               child: SizedBox(height: AppDimensions.spaceMd),
             ),
@@ -269,37 +299,26 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  Widget _friendsBody() {
-    if (_loadingFriends && _friends.isEmpty) {
-      return const SliverToBoxAdapter(
-        child: Padding(
-          padding: EdgeInsets.all(AppDimensions.spaceLg),
-          child: Center(child: HudLabel(text: 'CARREGANDO...', dot: true)),
-        ),
-      );
-    }
-    if (_friends.isEmpty) {
-      return SliverToBoxAdapter(
-        child: Padding(
-          padding: const EdgeInsets.all(AppDimensions.spaceMd),
-          child: Text(
-            'Você ainda não possui amigos.',
-            style: AppTextStyles.bodyMuted,
-            textAlign: TextAlign.center,
-          ),
-        ),
-      );
-    }
+  /// The horizontal AKAME + AMIGOS row. Akame is ALWAYS the first item,
+  /// independent of the friends list contents or loading state — it is a
+  /// permanent, special entry of the conversations area, never a friend.
+  Widget _akameFriendsBody() {
     return SliverToBoxAdapter(
       child: SizedBox(
         height: 92,
         child: ListView.separated(
           scrollDirection: Axis.horizontal,
+          physics: const BouncingScrollPhysics(),
           padding: const EdgeInsets.symmetric(horizontal: AppDimensions.spaceLg),
-          itemCount: _friends.length,
+          itemCount: _friends.length + 1,
           separatorBuilder: (_, __) => const SizedBox(width: AppDimensions.spaceMd),
           itemBuilder: (context, i) {
-            final friend = _friends[i];
+            if (i == 0) {
+              return _AkameCard(
+                onTap: widget.onOpenAkame,
+              );
+            }
+            final friend = _friends[i - 1];
             return GestureDetector(
               onTap: () => _openSearchResult(friend),
               child: Column(
@@ -475,6 +494,92 @@ class _UnreadDot extends StatelessWidget {
           fontWeight: FontWeight.w800,
         ),
       ),
+    );
+  }
+}
+
+/// The fixed, permanent AKAME card of the conversations area. Visually a
+/// little chat tile consistent with the friends row (same width/height),
+/// reusing the SAME auto-awesome symbol Akame uses across the app. The INSIDE
+/// reads IA / Akame under the symbol. It is deliberately distinct from a
+/// friend tile — a special chat, not a user. Adapts to the active theme via
+/// [AppColors].
+class _AkameCard extends StatelessWidget {
+  const _AkameCard({this.onTap});
+
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final pressed = ValueNotifier(false);
+    return ValueListenableBuilder<bool>(
+      valueListenable: pressed,
+      builder: (context, isPressed, _) {
+        return GestureDetector(
+          onTapDown: (_) => pressed.value = true,
+          onTapUp: (_) => pressed.value = false,
+          onTapCancel: () => pressed.value = false,
+          onTap: onTap,
+          child: AnimatedScale(
+            scale: isPressed ? 0.94 : 1.0,
+            duration: const Duration(milliseconds: 120),
+            curve: Curves.easeOut,
+            child: SizedBox(
+              width: 64,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  GlowContainer(
+                    glow: Glow.medium,
+                    color: AppColors.glowMedium,
+                    background: AppColors.nightBlue,
+                    borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
+                    border: Border.all(
+                      color: AppColors.primaryBlue.withValues(alpha: 0.7),
+                      width: 1.2,
+                    ),
+                    child: const SizedBox(
+                      width: 52,
+                      height: 52,
+                      child: Center(
+                        child: Icon(Icons.auto_awesome_rounded,
+                            color: AppColors.electricBlue, size: 26),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: AppDimensions.spaceXs),
+                  SizedBox(
+                    width: 64,
+                    child: Column(
+                      children: [
+                        Text(
+                          'IA',
+                          textAlign: TextAlign.center,
+                          maxLines: 1,
+                          style: AppTextStyles.hud.copyWith(
+                            fontSize: 9,
+                            color: AppColors.electricBlue,
+                            letterSpacing: 1,
+                          ),
+                        ),
+                        const SizedBox(height: 1),
+                        Text(
+                          'Akame',
+                          textAlign: TextAlign.center,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style:
+                              AppTextStyles.caption.copyWith(fontSize: 11),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

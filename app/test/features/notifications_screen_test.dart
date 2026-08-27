@@ -74,7 +74,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 800));
 
     // Opens the friend's profile (respecting currentUser ≠ viewedUser).
-    expect(find.text('ADICIONAR'), findsOneWidget);
+    expect(find.text('SOLICITAR'), findsOneWidget);
     expect(find.textContaining('joao', findRichText: true), findsWidgets);
   });
 

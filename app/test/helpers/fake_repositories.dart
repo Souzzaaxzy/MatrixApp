@@ -546,6 +546,19 @@ class _FakeFriendRepository implements FriendRepository {
   }
 
   @override
+  Future<void> cancel(String userId) async {
+    _store.friendRequests.removeWhere((key, r) =>
+        r.status == 'PENDING' && r.sender.id == _store.currentUserId && r.receiverId == userId);
+  }
+
+  @override
+  Future<void> removeFriend(String userId) async {
+    final me = _store.currentUserId;
+    final pair = _store._pairKey(me!, userId);
+    _store.friendships.remove(pair);
+  }
+
+  @override
   Future<Friendship> state(String userId) async =>
       _store.friendshipState(userId);
 

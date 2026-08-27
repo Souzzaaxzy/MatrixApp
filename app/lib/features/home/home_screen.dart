@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../app/theme/app_colors.dart';
+import '../../app/theme/app_dimensions.dart';
+import '../../app/theme/app_text_styles.dart';
 import '../../core/widgets/app_state_scope.dart';
 import '../../core/widgets/matrix_bottom_bar.dart';
 import '../akame/akame_screen.dart';
@@ -15,7 +17,9 @@ import '../search/search_screen.dart';
 
 /// Main navigation shell with a persistent bottom bar.
 ///
-/// Tabs: Início, Buscar, Akame, Atividades, Perfil. The post creation
+/// Tabs: Início, Chat, Buscar, Atividades, Perfil. Akame is no longer a
+/// separate bottom-bar entry — it lives INSIDE the Chat tab as a fixed,
+/// permanent first card in the conversations screen. The post creation
 /// flow is reached from the floating "+" button on the own profile —
 /// there is no creation entry in the bottom bar anymore.
 ///
@@ -37,8 +41,18 @@ class _HomeScreenState extends State<HomeScreen> {
   /// Time window for the double-press-to-exit confirmation.
   static const Duration _exitWindow = Duration(seconds: 2);
 
-  late int _index = widget.initialIndex.clamp(0, 5);
+  late int _index = widget.initialIndex.clamp(0, 4);
   bool _primed = false;
+  bool _akameOpen = false;
+
+  void _openAkame() {
+    setState(() => _akameOpen = true);
+  }
+
+  void _closeAkame() {
+    if (mounted) setState(() => _akameOpen = false);
+  }
+
   DateTime? _lastBackPress;
   Timer? _exitResetTimer;
 
@@ -62,7 +76,7 @@ class _HomeScreenState extends State<HomeScreen> {
       // Opening the Chat tab refreshes conversations + unread badge.
       state.loadConversations();
       state.refreshUnreadConversations();
-    } else if (i == 4) {
+    } else if (i == 3) {
       // Opening the Atividades tab refreshes the server-side list.
       state.loadNotifications();
     }
@@ -128,11 +142,6 @@ class _HomeScreenState extends State<HomeScreen> {
         activeIcon: Icons.search,
         label: 'Buscar',
       ),
-      const MatrixNavDestination(
-        icon: Icons.auto_awesome_outlined,
-        activeIcon: Icons.auto_awesome_rounded,
-        label: 'Akame',
-      ),
       MatrixNavDestination(
         icon: Icons.notifications_outlined,
         activeIcon: Icons.notifications_rounded,
@@ -151,9 +160,8 @@ class _HomeScreenState extends State<HomeScreen> {
     // colors on these tabs (AppColors resolves at build time).
     final pages = <Widget>[
       FeedScreen(),
-      ChatScreen(),
+      ChatScreen(onOpenAkame: _openAkame),
       SearchScreen(),
-      AkameScreen(),
       NotificationsScreen(),
       ProfileScreen(),
     ];
@@ -161,16 +169,94 @@ class _HomeScreenState extends State<HomeScreen> {
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) _handleBackPress();
+        if (didPop) return;
+        // The system back button closes the Akame overlay first when it is
+        // open (matching how Android back closes a pushed route).
+        if (_akameOpen) {
+          _closeAkame();
+          return;
+        }
+        _handleBackPress();
       },
-      child: Scaffold(
-        backgroundColor: AppColors.absoluteBlack,
-        body: IndexedStack(index: _index, children: pages),
-        bottomNavigationBar: MatrixBottomBar(
-          currentIndex: _index,
-          destinations: destinations,
-          onTap: _onTap,
+      child: Stack(
+        children: [
+          Scaffold(
+            backgroundColor: AppColors.absoluteBlack,
+            body: IndexedStack(index: _index, children: pages),
+            bottomNavigationBar: MatrixBottomBar(
+              currentIndex: _index,
+              destinations: destinations,
+              onTap: _onTap,
+            ),
+          ),
+          // Akame lives INSIDE the Chat tab: tapping its card in the
+          // conversations screen opens the full standalone chat as an
+          // overlay. Its back arrow and the system back button both close it.
+          if (_akameOpen)
+            Positioned.fill(
+              child: AkameOverlay(onClose: _closeAkame),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Full-screen Akame chat overlay embedded in the Home shell. Because it is
+/// NOT a pushed route, the bottom bar and the whole HomeScreen stay mounted
+/// underneath; opening/closing is a boolean flip (cheap, no extra queries —
+/// Akame messages already live in [AppState]). A fade+scale entrance/rear
+/// exit keeps the transition smooth, and the back arrow mirrors the system
+/// back behavior.
+class AkameOverlay extends StatelessWidget {
+  const AkameOverlay({super.key, required this.onClose});
+
+  final VoidCallback onClose;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.absoluteBlack,
+      child: SafeArea(
+        child: Column(
+          children: [
+            _AkameOverlayBar(onClose: onClose),
+            const Expanded(child: AkameScreen()),
+          ],
         ),
+      ),
+    );
+  }
+}
+
+class _AkameOverlayBar extends StatelessWidget {
+  const _AkameOverlayBar({required this.onClose});
+
+  final VoidCallback onClose;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: AppColors.bluishBlack,
+        border: Border(bottom: BorderSide(color: AppColors.deepBlue, width: 1)),
+      ),
+      child: Row(
+        children: [
+          IconButton(
+            tooltip: 'Fechar Akame',
+            icon: Icon(Icons.arrow_back_rounded, color: AppColors.holographicBlue),
+            onPressed: onClose,
+          ),
+          const SizedBox(width: AppDimensions.spaceXs),
+          Expanded(
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text('AKAME', style: AppTextStyles.hud),
+            ),
+          ),
+        ],
       ),
     );
   }

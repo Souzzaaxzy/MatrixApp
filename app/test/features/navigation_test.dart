@@ -8,17 +8,24 @@ void main() {
     await pumpMatrixApp(tester, const HomeScreen());
 
     expect(find.text('Início'), findsOneWidget);
+    expect(find.text('Chat'), findsOneWidget);
     expect(find.text('Buscar'), findsOneWidget);
-    expect(find.text('Akame'), findsOneWidget);
     expect(find.text('Atividades'), findsOneWidget);
     expect(find.text('Perfil'), findsOneWidget);
   });
 
-  testWidgets('starts on the feed and switches to Akame on tap', (tester) async {
+  testWidgets('starts on the feed and opens Akame from the Chat tab',
+      (tester) async {
     await pumpMatrixApp(tester, const HomeScreen());
 
     // Feed is the initial tab.
     expect(find.text('MATRIX'), findsOneWidget);
+
+    // Akame is no longer a bottom-bar entry — open the Chat tab, then the
+    // fixed Akame card that leads the conversations row.
+    await tester.tap(find.text('Chat'));
+    await tester.pumpAndSettle();
+    expect(find.text('Akame'), findsOneWidget);
 
     await tester.tap(find.text('Akame'));
     await tester.pumpAndSettle();
