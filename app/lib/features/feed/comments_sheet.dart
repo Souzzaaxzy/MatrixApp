@@ -150,6 +150,24 @@ class _CommentsSheetState extends State<CommentsSheet>
     setState(() {
       list.removeWhere((r) => r.id == replyId);
     });
+    // Keep the parent's replyCount in sync so "ver respostas" disappears when
+    // the LAST reply is deleted (the list is the source of truth here).
+    _updateParentReplyCount(parentId);
+  }
+
+  /// Recomputes [Comment.replyCount] on [parentId] from the loaded reply tree
+  /// so the toggle reflects the real state after add/delete without a reload.
+  void _updateParentReplyCount(String parentId) {
+    final current = _comments;
+    if (current == null) return;
+    final idx = current.indexWhere((c) => c.id == parentId);
+    if (idx < 0) return;
+    final count = _replies[parentId]?.length ?? 0;
+    final updated = current[idx].copyWith(replyCount: count);
+    if (!mounted) return;
+    setState(() {
+      current[idx] = updated;
+    });
   }
 
   /// User-followed delete of a comment (allowed for the comment author or the
@@ -316,6 +334,7 @@ class _CommentsSheetState extends State<CommentsSheet>
         setState(() {
           _repliesOf(replyTo).add(reply);
         });
+        _updateParentReplyCount(replyTo);
       }
     } catch (_) {
       if (!mounted) return;
@@ -594,10 +613,17 @@ class _CommentTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final replyCount = replies?.length ?? 0;
+    final loaded = replies != null;
     final hasReplies = replyCount > 0;
     final visibleReplies =
         expanded ? replyCount : (replyCount > _maxVisibleReplies ? _maxVisibleReplies : replyCount);
     final hiddenCount = replyCount - _maxVisibleReplies;
+
+    // "Ver respostas" renders ONLY when this comment actually HAS replies.
+    // Before the tree is loaded we rely on the server's efficient
+    // [Comment.replyCount] (a comment without replies must show nothing);
+    // once loaded we use the real list length. Failures show a retry line.
+    final showRepliesToggle = !loaded && (repliesError || comment.replyCount > 0);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -612,7 +638,7 @@ class _CommentTile extends StatelessWidget {
           onReply: onReply,
         ),
         // Lazy "responses" toggle — loads the reply tree on first tap.
-        if (replies == null)
+        if (showRepliesToggle)
           Padding(
             padding: const EdgeInsets.only(left: 44, top: 4),
             child: repliesError

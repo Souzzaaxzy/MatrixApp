@@ -3,6 +3,9 @@
     <!-- Android 13+ runtime permission for native notifications. Asked
          once at startup; the app keeps working if the user denies it. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <!-- Microphone access for the voice-message recorder. Runtime-granted
+         (never auto-granted); the recorder asks before the first capture. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32"/>

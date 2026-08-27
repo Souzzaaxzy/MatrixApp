@@ -267,4 +267,116 @@ void main() {
     expect(find.text('Resposta 6'), findsOneWidget);
     expect(find.text('mais comentários...'), findsNothing);
   });
+
+  testWidgets('does NOT show "Ver respostas" for a comment without replies',
+      (tester) async {
+    final state = await stateWithComments(); // sc1/sc2 have no replies
+    final post = state.posts.firstWhere((p) => p.id == 'p1');
+
+    await pumpMatrixApp(tester, Scaffold(body: CommentsSheet(post: post)), state: state);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Ver respostas'), findsNothing);
+  });
+
+  testWidgets('shows "Ver respostas" only when the comment has replies',
+      (tester) async {
+    final state = AppState(
+      repositories: FakeRepositories(
+        seedComments: {
+          'p1': [
+            Comment(
+              id: 'noReplies',
+              authorId: 'u2',
+              authorNickname: 'sem_resp',
+              text: 'sem respostas',
+              createdAt: DateTime(2024, 1, 1, 9),
+            ),
+            Comment(
+              id: 'hasReplies',
+              authorId: 'u2',
+              authorNickname: 'com_resp',
+              text: 'com respostas',
+              createdAt: DateTime(2024, 1, 1, 10),
+            ),
+          ],
+        },
+        seedReplies: {
+          'hasReplies': [
+            Comment(
+              id: 'r1',
+              authorId: 'u2',
+              authorNickname: 'maria',
+              text: 'Resposta única',
+              createdAt: DateTime(2024, 1, 1, 10, 5),
+              parentCommentId: 'hasReplies',
+            ),
+          ],
+        },
+      ),
+    );
+    await state.restoreSession();
+    await state.loadFeed();
+    final post = state.posts.firstWhere((p) => p.id == 'p1');
+
+    await pumpMatrixApp(tester, Scaffold(body: CommentsSheet(post: post)), state: state);
+    await tester.pumpAndSettle();
+
+    // Only the comment WITH a reply shows the toggle.
+    expect(find.text('Ver respostas'), findsOneWidget);
+  });
+
+  testWidgets('deleting the last reply hides "Ver respostas"', (tester) async {
+    final state = AppState(
+      repositories: FakeRepositories(
+        seedComments: {
+          'p1': [
+            Comment(
+              id: 'hasOne',
+              authorId: 'u2',
+              authorNickname: 'joao',
+              text: 'com uma resposta',
+              createdAt: DateTime(2024, 1, 1, 9),
+            ),
+          ],
+        },
+        seedReplies: {
+          'hasOne': [
+            Comment(
+              id: 'onlyReply',
+              authorId: 'u2',
+              authorNickname: 'maria',
+              text: 'única resposta',
+              createdAt: DateTime(2024, 1, 1, 9, 30),
+              parentCommentId: 'hasOne',
+            ),
+          ],
+        },
+      ),
+    );
+    await state.restoreSession();
+    await state.loadFeed();
+    final post = state.posts.firstWhere((p) => p.id == 'p1');
+
+    await pumpMatrixApp(tester, Scaffold(body: CommentsSheet(post: post)), state: state);
+    await tester.pumpAndSettle();
+
+    // Has one reply → toggle + reply both visible.
+    expect(find.text('Ver respostas'), findsOneWidget);
+    await tester.tap(find.text('Ver respostas'));
+    await tester.pumpAndSettle();
+    expect(find.text('única resposta'), findsOneWidget);
+
+    // Delete the single reply (session user is the post author → allowed).
+    // The reply row shows an "Excluir" affordance → confirm dialog → Excluir.
+    await tester.ensureVisible(find.text('Excluir').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Excluir').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Excluir').last);
+    await tester.pumpAndSettle();
+
+    expect(find.text('única resposta'), findsNothing);
+    expect(find.text('Ver respostas'), findsNothing);
+  });
 }

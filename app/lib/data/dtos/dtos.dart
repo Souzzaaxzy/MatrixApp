@@ -141,6 +141,7 @@ class CommentDto {
   final String? parentCommentId;
   final int likeCount;
   final bool liked;
+  final int replyCount;
 
   const CommentDto({
     required this.id,
@@ -155,6 +156,7 @@ class CommentDto {
     this.parentCommentId,
     this.likeCount = 0,
     this.liked = false,
+    this.replyCount = 0,
   });
 
   Comment toModel() => Comment(
@@ -170,6 +172,7 @@ class CommentDto {
         parentCommentId: parentCommentId,
         likeCount: likeCount,
         liked: liked,
+        replyCount: replyCount,
       );
 
   factory CommentDto.fromJson(Map<String, dynamic> json) {
@@ -187,6 +190,7 @@ class CommentDto {
       parentCommentId: json['parentCommentId'] as String?,
       likeCount: (json['likeCount'] as num?)?.toInt() ?? 0,
       liked: (json['liked'] as bool?) ?? false,
+      replyCount: (json['replyCount'] as num?)?.toInt() ?? 0,
     );
   }
 }
@@ -529,6 +533,9 @@ class ChatMessageDto {
   final bool mine;
   final DateTime? readAt;
   final ReplyInfoDto? replyTo;
+  final String type;
+  final String? audioUrl;
+  final int? durationMs;
 
   const ChatMessageDto({
     required this.id,
@@ -539,6 +546,9 @@ class ChatMessageDto {
     required this.mine,
     this.readAt,
     this.replyTo,
+    this.type = 'text',
+    this.audioUrl,
+    this.durationMs,
   });
 
   ChatMessage toModel() => ChatMessage(
@@ -550,6 +560,9 @@ class ChatMessageDto {
         mine: mine,
         readAt: readAt,
         replyTo: replyTo?.toModel(),
+        type: type == 'voice' ? 'voice' : 'text',
+        audioUrl: audioUrl,
+        durationMs: durationMs,
       );
 
   factory ChatMessageDto.fromJson(Map<String, dynamic> json) {
@@ -566,6 +579,9 @@ class ChatMessageDto {
       replyTo: replyRaw is Map<String, dynamic>
           ? ReplyInfoDto.fromJson(replyRaw)
           : null,
+      type: (json['type'] as String?) ?? 'text',
+      audioUrl: json['audioUrl'] as String?,
+      durationMs: (json['durationMs'] as num?)?.toInt(),
     );
   }
 }

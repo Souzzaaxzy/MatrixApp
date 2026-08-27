@@ -942,6 +942,21 @@ class AppState extends ChangeNotifier {
     return message;
   }
 
+  /// Sends a recorded VOICE message and (like [sendChatMessage]) updates the
+  /// cached conversation's last-message slot with the server's authoritative
+  /// response so the list preview ("🎤 Áudio") updates immediately.
+  Future<ChatMessage> sendVoiceMessage(
+    String conversationId,
+    File audioFile, {
+    required int durationMs,
+    ChatUser? otherUser,
+  }) async {
+    final message = await _chat.sendVoice(conversationId, audioFile,
+        durationMs: durationMs);
+    _applyChatMessage(message, otherUser: otherUser ?? _peerOf(conversationId));
+    return message;
+  }
+
   /// Signals the peer that the session user is (or stopped) typing. Ephemeral
   /// and best-effort — the UI calls it from the composer's onChange.
   void sendTyping(String conversationId, bool typing) {
@@ -1098,12 +1113,20 @@ class AppState extends ChangeNotifier {
   /// conversation we have cached, update that conversation (last message +
   /// unread badge); the peer (needed for the preview) is the message sender
   /// when we don't already know it.
+  ///
+  /// Routes the message into the cached conversation preview so the
+  /// conversations list updates immediately. When the conversation isn't
+  /// cached yet, [peer] (the sender's ChatUser from the realtime payload)
+  /// lets us synthesize a coherent entry with the sender's real avatar —
+  /// otherwise the list refreshes on focus anyway.
   /// Emits on [onChatIncoming] for open conversation screens.
-  void handleIncomingChatMessage(ChatMessage message) {
+void handleIncomingChatMessage(ChatMessage message, {ChatUser? peer}) {
     if (_disposed) return;
     final cached = _conversations.indexWhere((c) => c.id == message.conversationId);
     if (cached != -1) {
-      final peer = _peerOf(message.conversationId);
+      final other = peer ?? _peerOf(message.conversationId);
+      _applyChatMessage(message, otherUser: other, selfMade: false);
+    } else if (peer != null) {
       _applyChatMessage(message, otherUser: peer, selfMade: false);
     }
     if (!_chatIncoming.isClosed) _chatIncoming.add(message);

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
@@ -61,6 +62,14 @@ class PushService {
 
   static const _channelId = 'matrix_notifications';
   static const _channelName = 'MATRIX';
+  static const _chatChannelId = 'matrix_chat_messages';
+  static const _chatChannelName = 'Mensagens';
+
+  /// The id of the chat conversation that is currently on screen. When a
+  /// realtime chat message arrives for this conversation we do NOT show a
+  /// native notification (the user is already reading it) — the rule is
+  /// driven by the real conversation state (see Part 4.5).
+  String? activeConversationId;
 
   String? _deviceToken;
   WebSocketChannel? _channel;
@@ -90,6 +99,16 @@ class PushService {
         _channelName,
         description: 'Atividades do MATRIX',
         importance: Importance.high,
+      ),
+    );
+    // Separate low-key channel for incoming DM's voice/text pushes.
+    await android?.createNotificationChannel(
+      const AndroidNotificationChannel(
+        _chatChannelId,
+        _chatChannelName,
+        description: 'Novas mensagens',
+        importance: Importance.high,
+        playSound: true,
       ),
     );
     await android?.requestNotificationsPermission();
@@ -179,12 +198,17 @@ class PushService {
       return;
     }
     // Real-time chat message (private DM). Forward the whole payload to the
-    // chat layer — never rendered as a native push here (no noise for every
-    // message). Dedupe happens at the chat layer by message id.
+    // chat layer AND (unless the user is already looking at that exact
+    // conversation) surface a native notification so an incoming message is
+    // seen even when MATRIX is in the background. Dedupe happens at the chat
+    // layer by message id; native pushes dedupe via the converation id.
     if (message['kind'] == 'chat_message') {
       final data =
           (message['data'] as Map?)?.cast<String, dynamic>() ?? const {};
       onChatMessage?.call(data);
+      if (data['conversationId'] != activeConversationId) {
+        await _showChatNotification(data);
+      }
       return;
     }
     if (message['kind'] == 'chat_typing') {
@@ -234,6 +258,94 @@ class PushService {
       ),
       payload: jsonEncode(data),
     );
+  }
+
+  /// Renders a native DM notification: sender's photo (left), real nickname
+  /// (bold, above the message), and the message body. Reuses the same
+  /// notification id per conversation so rapid incoming messages group into
+  /// a single, auto-collapsed notification instead of a flood of bubbles.
+  /// The body shows the latest message; tapping deep-links to that DM.
+  Future<void> _showChatNotification(Map<String, dynamic> data) async {
+    final message = (data['message'] as Map?)?.cast<String, dynamic>() ?? const {};
+    final peer = (data['peer'] as Map?)?.cast<String, dynamic>() ?? const {};
+    final conversationId =
+        (data['conversationId'] ?? message['conversationId']) as String? ?? '';
+    if (conversationId.isEmpty) return;
+
+    final nickname =
+        (peer['nickname'] ?? message['senderNickname']) as String? ?? 'MATRIX';
+    final avatarUrl = peer['avatarUrl'] as String?;
+    final type = (message['type'] as String?) ?? 'text';
+    final content = (message['content'] as String?) ?? '';
+
+    // Wait for the avatar bytes (small, local-ish). Best-effort: on failure
+    // we simply fall back to the MATRIX glyph.
+    Uint8List? avatars;
+    if (avatarUrl != null && avatarUrl.isNotEmpty) {
+      try {
+        final client = HttpClient();
+        final uri = _resolveAssetUrl(ApiConfig.baseUrl, avatarUrl);
+        final req = await client.getUrl(uri);
+        final res = await req.close();
+        avatars = await consolidateHttpClientResponseBytes(res, onBytesReceived: (total, _) { if (total > 200000) throw const FormatException(); });
+        client.close();
+      } catch (_) {
+        avatars = null;
+      }
+    }
+
+    final body = (type == 'voice' ? '🎤 Áudio' : content);
+    // Android automatically shows `largeIcon` on the LEFT as the app's photo
+    // and the persona avatar in the messaging style — giving the MATRIX look:
+    // [foto] nickname (bold) + message below.
+    await _plugin.show(
+      conversationId.hashCode,
+      nickname,
+      body,
+      NotificationDetails(
+        android: AndroidNotificationDetails(
+          _chatChannelId,
+          _chatChannelName,
+          channelDescription: 'Novas mensagens',
+          importance: Importance.high,
+          priority: Priority.high,
+          color: const Color(0xFF00B4FF),
+          largeIcon: avatars != null
+              ? ByteArrayAndroidBitmap(avatars)
+              : null,
+          styleInformation: avatars != null
+              ? MessagingStyleInformation(
+                  Person(name: nickname),
+                  conversationTitle: nickname,
+                  groupConversation: false,
+                  messages: [
+                    Message(body, DateTime.now(), Person(name: nickname)),
+                  ],
+                )
+              : BigTextStyleInformation(
+                  body,
+                  contentTitle: nickname,
+                  summaryText: _chatChannelName,
+                ),
+        ),
+      ),
+      payload: jsonEncode({
+        'route': 'conversation',
+        'conversationId': conversationId,
+        'otherNickname': nickname,
+        'otherAvatarUrl': avatarUrl,
+        'otherUserId': peer['id'] ?? '',
+      }),
+    );
+  }
+
+  /// Resolves a server-relative or absolute avatar URL against the API base.
+  Uri _resolveAssetUrl(String base, String url) {
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      return Uri.parse(url);
+    }
+    final b = Uri.parse(base);
+    return b.replace(path: url);
   }
 
   void _onTap(NotificationResponse response) {

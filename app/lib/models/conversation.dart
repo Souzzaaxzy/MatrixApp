@@ -96,6 +96,9 @@ class ChatMessage {
     required this.mine,
     this.readAt,
     this.replyTo,
+    this.type = 'text',
+    this.audioUrl,
+    this.durationMs,
   });
 
   final String id;
@@ -114,7 +117,26 @@ class ChatMessage {
   /// deleted (renders a graceful placeholder instead of breaking).
   final ReplyInfo? replyTo;
 
-  ChatMessage copyWith({DateTime? readAt, ReplyInfo? replyTo}) => ChatMessage(
+  /// "text" (default) | "voice". Voice messages render the inline player
+  /// via [audioUrl]/[durationMs] instead of plain content.
+  final String type;
+
+  /// Absolute URL of the persisted voice-message audio file (voice only).
+  final String? audioUrl;
+
+  /// Recorded length in milliseconds (voice only).
+  final int? durationMs;
+
+  bool get isVoice => type == 'voice';
+
+  ChatMessage copyWith({
+    DateTime? readAt,
+    ReplyInfo? replyTo,
+    String? type,
+    String? audioUrl,
+    int? durationMs,
+  }) =>
+      ChatMessage(
         id: id,
         conversationId: conversationId,
         senderId: senderId,
@@ -123,6 +145,9 @@ class ChatMessage {
         mine: mine,
         readAt: readAt ?? this.readAt,
         replyTo: replyTo ?? this.replyTo,
+        type: type ?? this.type,
+        audioUrl: audioUrl ?? this.audioUrl,
+        durationMs: durationMs ?? this.durationMs,
       );
 }
 

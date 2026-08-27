@@ -432,6 +432,24 @@ class ChatRepository {
         .toModel();
   }
 
+  /// Sends a VOICE message (AAC/m4a recorded locally) for [conversationId].
+  /// [durationMs] is the recorded length (3–60s, validated server-side). The
+  /// audio file rides as multipart; the duration is a query param. Returns
+  /// the persisted voice message (type === 'voice').
+  Future<ChatMessage> sendVoice(
+    String conversationId,
+    File audioFile, {
+    required int durationMs,
+  }) async {
+    final multipart = await MultipartFile.fromFile(audioFile.path);
+    final json = await _api.upload<Map<String, dynamic>>(
+      '/api/conversations/$conversationId/voice?durationMs=$durationMs',
+      file: multipart,
+    );
+    return ChatMessageDto.fromJson(json['message'] as Map<String, dynamic>)
+        .toModel();
+  }
+
   /// Marks all messages FROM THE OTHER SIDE as read (clears the unread badge).
   Future<void> markRead(String conversationId) async {
     await _api.post('/api/conversations/$conversationId/read');

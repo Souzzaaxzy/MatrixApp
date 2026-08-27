@@ -15,6 +15,7 @@ class Comment {
     this.parentCommentId,
     this.likeCount = 0,
     this.liked = false,
+    this.replyCount = 0,
   });
 
   /// Placeholder used when only the comment *count* is known (e.g. in feed
@@ -32,7 +33,8 @@ class Comment {
         createdAt = null,
         parentCommentId = null,
         likeCount = 0,
-        liked = false;
+        liked = false,
+        replyCount = 0;
 
   final String id;
 
@@ -69,10 +71,16 @@ class Comment {
   /// Whether the CURRENT session user already liked this comment.
   final bool liked;
 
+  /// Number of non-deleted replies on this comment (from the server's
+  /// efficient `_count` — never a per-comment query). The "ver respostas"
+  /// affordance shows ONLY when this is > 0.
+  final int replyCount;
+
   Comment copyWith({
     String? text,
     int? likeCount,
     bool? liked,
+    int? replyCount,
   }) {
     return Comment(
       id: id,
@@ -87,6 +95,7 @@ class Comment {
       parentCommentId: parentCommentId,
       likeCount: likeCount ?? this.likeCount,
       liked: liked ?? this.liked,
+      replyCount: replyCount ?? this.replyCount,
     );
   }
 }

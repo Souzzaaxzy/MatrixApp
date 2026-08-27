@@ -228,6 +228,18 @@ void main() {
       ));
       await tester.pump();
       expect(find.text('não sei.'), findsOneWidget);
+
+      // mine=false renders on the LEFT (recipient's view), mine=true on the
+      // RIGHT — the realtime balloon regression guard.
+      final leftMessage = tester.getCenter(find.text('não sei.'));
+      final rightMessage = tester.getCenter(find.text('Oi!'));
+      expect(leftMessage.dx, lessThan(rightMessage.dx));
+      expect(
+        leftMessage.dx,
+        lessThan(tester.view.physicalSize.width /
+            tester.view.devicePixelRatio /
+            2),
+      );
     });
 
     testWidgets('swiping a message activates the reply composer', (tester) async {

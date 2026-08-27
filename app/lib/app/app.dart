@@ -5,6 +5,8 @@ import '../core/services/theme_controller.dart';
 import '../core/widgets/app_state_scope.dart';
 import '../data/dtos/dtos.dart';
 import '../data/services.dart';
+import '../features/chat/chat_navigation.dart';
+import '../models/conversation.dart';
 import 'routes.dart';
 import 'theme/app_colors.dart';
 import 'theme/app_palette.dart';
@@ -76,7 +78,24 @@ class _MatrixAppState extends State<MatrixApp> {
     if (rawMessage is! Map<String, dynamic>) return;
     try {
       final message = ChatMessageDto.fromJson(rawMessage).toModel();
-      state.handleIncomingChatMessage(message);
+      // The realtime payload carries the SENDER's identity (id, nickname,
+      // avatarUrl, cosmetics…) so the app can build a real preview bubble
+      // and avatar for an inbox conversation it hasn't loaded yet.
+      final rawPeer = data['peer'];
+      ChatUser? peer;
+      if (rawPeer is Map<String, dynamic>) {
+        peer = ChatUser(
+          id: (rawPeer['id'] as String?) ?? message.senderId,
+          nickname:
+              (rawPeer['nickname'] as String?) ?? 'desconhecido',
+          avatarUrl: rawPeer['avatarUrl'] as String?,
+          nameColor: rawPeer['nameColor'] as String?,
+          frameId: (rawPeer['frameId'] as String?) ??
+              (rawPeer['frameAsset'] as String?),
+          frameAsset: rawPeer['frameAsset'] as String?,
+        );
+      }
+      state.handleIncomingChatMessage(message, peer: peer);
     } catch (_) {
       // Malformed chat payload: ignore (the list refreshes on focus anyway).
     }
@@ -114,6 +133,24 @@ class _MatrixAppState extends State<MatrixApp> {
   void _onPushNavigate(Map<String, dynamic> data) {
     final navigator = _navigatorKey.currentState;
     if (navigator == null) return;
+    // Native DM notification → open the matching conversation directly.
+    if (data['route'] == 'conversation') {
+      final conversationId = data['conversationId'] as String? ?? '';
+      final otherUserId = data['otherUserId'] as String? ?? '';
+      final nickname = (data['otherNickname'] as String?) ?? otherUserId;
+      if (conversationId.isNotEmpty) {
+        navigator.pushNamed(
+          AppRoutes.conversation,
+          arguments: ConversationRouteArgs(
+            conversationId: conversationId,
+            otherUserId: otherUserId,
+            otherNickname: nickname,
+            otherAvatarUrl: data['otherAvatarUrl'] as String?,
+          ),
+        );
+      }
+      return;
+    }
     switch (data['type']) {
       case 'LIKE':
       case 'COMMENT':

@@ -360,7 +360,15 @@ class _FakeCommentRepository implements CommentRepository {
 
   @override
   Future<List<Comment>> list(String postId) async {
-    return List.of(_store.commentsByPost[postId] ?? const []);
+    // Mirror the server: top-level comments carry their (server-computed)
+    // reply count so "ver respostas" appears only when replies exist.
+    return List<Comment>.of(
+      (List.of(_store.commentsByPost[postId] ?? const [])).map((c) {
+        final replies = _store.repliesByParent[c.id];
+        if (replies == null || replies.isEmpty) return c;
+        return c.copyWith(replyCount: replies.length);
+      }),
+    );
   }
 
   @override
@@ -879,6 +887,28 @@ class _FakeChatRepository implements ChatRepository {
       createdAt: DateTime.now(),
       mine: true,
       replyTo: replyTo,
+    );
+    _store.chatMessagesByPair.putIfAbsent(conversationId, () => []).add(message);
+    return message;
+  }
+
+  @override
+  Future<ChatMessage> sendVoice(
+    String conversationId,
+    File audioFile, {
+    required int durationMs,
+  }) async {
+    final me = _store.currentUserId;
+    final message = ChatMessage(
+      id: 'v${DateTime.now().microsecondsSinceEpoch}',
+      conversationId: conversationId,
+      senderId: me!,
+      content: '🎤 Áudio',
+      createdAt: DateTime.now(),
+      mine: true,
+      type: 'voice',
+      audioUrl: 'memory://voice-${DateTime.now().microsecondsSinceEpoch}.m4a',
+      durationMs: durationMs,
     );
     _store.chatMessagesByPair.putIfAbsent(conversationId, () => []).add(message);
     return message;
