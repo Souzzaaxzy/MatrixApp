@@ -1,3 +1,4 @@
+import 'conversation.dart';
 import 'cosmetic_item.dart';
 
 /// A MATRIX network user.
@@ -77,6 +78,17 @@ class MatrixUser {
       assetUrl: frameAsset ?? '',
     );
   }
+
+  /// A lightweight [ChatUser] reference (same identity, nickname cosmetics)
+  /// used to open conversations from search results/friends/profile.
+  ChatUser toChatUser() => ChatUser(
+        id: id,
+        nickname: nickname,
+        avatarUrl: avatarUrl,
+        nameColor: nameColor,
+        frameId: frameId,
+        frameAsset: frameAsset,
+      );
 
   MatrixUser copyWith({
     String? nickname,

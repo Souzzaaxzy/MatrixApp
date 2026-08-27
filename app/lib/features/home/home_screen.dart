@@ -7,6 +7,7 @@ import '../../app/theme/app_colors.dart';
 import '../../core/widgets/app_state_scope.dart';
 import '../../core/widgets/matrix_bottom_bar.dart';
 import '../akame/akame_screen.dart';
+import '../chat/chat_screen.dart';
 import '../feed/feed_screen.dart';
 import '../notifications/notifications_screen.dart';
 import '../profile/profile_screen.dart';
@@ -36,7 +37,7 @@ class _HomeScreenState extends State<HomeScreen> {
   /// Time window for the double-press-to-exit confirmation.
   static const Duration _exitWindow = Duration(seconds: 2);
 
-  late int _index = widget.initialIndex.clamp(0, 4);
+  late int _index = widget.initialIndex.clamp(0, 5);
   bool _primed = false;
   DateTime? _lastBackPress;
   Timer? _exitResetTimer;
@@ -56,9 +57,14 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _onTap(int i) {
     setState(() => _index = i);
-    if (i == 3) {
-      // Opening the tab refreshes the server-side list.
-      AppStateScope.of(context).loadNotifications();
+    final state = AppStateScope.of(context);
+    if (i == 1) {
+      // Opening the Chat tab refreshes conversations + unread badge.
+      state.loadConversations();
+      state.refreshUnreadConversations();
+    } else if (i == 4) {
+      // Opening the Atividades tab refreshes the server-side list.
+      state.loadNotifications();
     }
   }
 
@@ -111,6 +117,12 @@ class _HomeScreenState extends State<HomeScreen> {
         activeIcon: Icons.home_rounded,
         label: 'Início',
       ),
+      MatrixNavDestination(
+        icon: Icons.chat_bubble_outline_rounded,
+        activeIcon: Icons.chat_bubble_rounded,
+        label: 'Chat',
+        badgeCount: state.unreadConversations,
+      ),
       const MatrixNavDestination(
         icon: Icons.search_rounded,
         activeIcon: Icons.search,
@@ -139,6 +151,7 @@ class _HomeScreenState extends State<HomeScreen> {
     // colors on these tabs (AppColors resolves at build time).
     final pages = <Widget>[
       FeedScreen(),
+      ChatScreen(),
       SearchScreen(),
       AkameScreen(),
       NotificationsScreen(),

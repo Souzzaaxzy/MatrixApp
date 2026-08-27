@@ -8,9 +8,12 @@ import '../features/create_post/create_post_screen.dart';
 import '../features/customizations/customizations_screen.dart';
 import '../features/home/home_screen.dart';
 import '../features/post/post_detail_screen.dart';
+import '../features/chat/chat_screen.dart';
+import '../features/chat/conversation_screen.dart';
 import '../features/profile/edit_profile_screen.dart';
 import '../features/profile/profile_screen.dart';
 import '../features/splash/splash_screen.dart';
+import '../features/chat/chat_navigation.dart';
 
 /// Named routes for the MATRIX app.
 class AppRoutes {
@@ -33,6 +36,15 @@ class AppRoutes {
   /// Profile of another user. Argument: the nickname (String). A null/
   /// empty argument means the session user's own profile.
   static const String profile = '/home/profile';
+
+  /// Private chat — the "💬 Chat" tab content (top-level; reached by the
+  /// bottom navigation bar, not a pushed route).
+  static const String chat = '/home/chat';
+
+  /// A private conversation. Argument: [ConversationRouteArgs] (the
+  /// conversation id, the OTHER user's id, nickname + cosmetics). Pushed
+  /// from Chat search/friends/conversations and from a profile "Mensagem".
+  static const String conversation = '/home/chat/conversation';
 }
 
 /// Single route generator for the entire app. Every route resolves to a
@@ -79,8 +91,22 @@ Widget _buildPage(RouteSettings settings) {
     AppRoutes.customizations => CustomizationsScreen(),
     AppRoutes.postDetail => _postDetail(settings.arguments as String?),
     AppRoutes.profile => ProfileScreen(nickname: _nicknameArg(settings.arguments)),
+    AppRoutes.chat => const ChatScreen(),
+    AppRoutes.conversation =>
+      ConversationScreen(args: _conversationArgs(settings.arguments)),
     _ => HomeScreen(), // defensive fallback — never a 404 page
   };
+}
+
+ConversationRouteArgs _conversationArgs(Object? arg) {
+  if (arg is ConversationRouteArgs) return arg;
+  // Missing/malformed argument: render an empty safe fallback (the screen
+  // shows a deterministic error instead of "Rota não encontrada").
+  return ConversationRouteArgs(
+    conversationId: '',
+    otherUserId: '',
+    otherNickname: '',
+  );
 }
 
 Widget _postDetail(String? postId) {

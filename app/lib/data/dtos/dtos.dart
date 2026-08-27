@@ -1,4 +1,5 @@
 import '../../models/comment.dart';
+import '../../models/conversation.dart';
 import '../../models/cosmetic_item.dart';
 import '../../models/friend_request.dart';
 import '../../models/matrix_notification.dart';
@@ -392,4 +393,169 @@ class NotificationDto {
       friendRequestStatus: json['friendRequestStatus'] as String?,
     );
   }
+}
+
+/// The chat counterpart of a user shown inside conversation payloads. Rides
+/// the same author fragment (id, nickname, avatar + the OWNER's name
+/// color/frame) so chat renders every nickname with the user's real look.
+class ChatUserDto {
+  final String id;
+  final String nickname;
+  final String? avatarUrl;
+  final String? nameColor;
+  final String? frameId;
+  final String? frameAsset;
+
+  const ChatUserDto({
+    required this.id,
+    required this.nickname,
+    this.avatarUrl,
+    this.nameColor,
+    this.frameId,
+    this.frameAsset,
+  });
+
+  ChatUser toModel() => ChatUser(
+        id: id,
+        nickname: nickname,
+        avatarUrl: avatarUrl,
+        nameColor: nameColor,
+        frameId: frameId,
+        frameAsset: frameAsset,
+      );
+
+  factory ChatUserDto.fromJson(Map<String, dynamic> json) => ChatUserDto(
+        id: json['id'] as String,
+        nickname: json['nickname'] as String,
+        avatarUrl: json['avatarUrl'] as String?,
+        nameColor: json['nameColor'] as String?,
+        frameId: json['frameId'] as String?,
+        frameAsset: json['frameAsset'] as String?,
+      );
+}
+
+/// A private conversation (list item / get-or-create response).
+class ConversationDto {
+  final String id;
+  final ChatUserDto otherUser;
+  final ConversationLastMessageDto? lastMessage;
+  final bool lastMine;
+  final int unreadCount;
+  final DateTime updatedAt;
+
+  const ConversationDto({
+    required this.id,
+    required this.otherUser,
+    this.lastMessage,
+    required this.lastMine,
+    required this.unreadCount,
+    required this.updatedAt,
+  });
+
+  Conversation toModel() => Conversation(
+        id: id,
+        otherUser: otherUser.toModel(),
+        lastMessage: lastMessage?.toModel(),
+        lastMine: lastMine,
+        unreadCount: unreadCount,
+        updatedAt: updatedAt,
+      );
+
+  factory ConversationDto.fromJson(Map<String, dynamic> json) {
+    final last = json['lastMessage'];
+    return ConversationDto(
+      id: json['id'] as String,
+      otherUser: ChatUserDto.fromJson(json['otherUser'] as Map<String, dynamic>),
+      lastMessage: last is Map<String, dynamic>
+          ? ConversationLastMessageDto.fromJson(last)
+          : null,
+      lastMine: (json['lastMine'] as bool?) ?? false,
+      unreadCount: (json['unreadCount'] as num?)?.toInt() ?? 0,
+      updatedAt: DateTime.parse(json['updatedAt'] as String),
+    );
+  }
+}
+
+class ConversationLastMessageDto {
+  final String id;
+  final String content;
+  final String senderId;
+  final DateTime createdAt;
+
+  const ConversationLastMessageDto({
+    required this.id,
+    required this.content,
+    required this.senderId,
+    required this.createdAt,
+  });
+
+  ConversationLastMessage toModel() => ConversationLastMessage(
+        id: id,
+        content: content,
+        senderId: senderId,
+        createdAt: createdAt,
+      );
+
+  factory ConversationLastMessageDto.fromJson(Map<String, dynamic> json) =>
+      ConversationLastMessageDto(
+        id: json['id'] as String,
+        content: json['content'] as String,
+        senderId: json['senderId'] as String,
+        createdAt: DateTime.parse(json['createdAt'] as String),
+      );
+}
+
+/// A single private chat message.
+class ChatMessageDto {
+  final String id;
+  final String conversationId;
+  final String senderId;
+  final String content;
+  final DateTime createdAt;
+  final bool mine;
+
+  const ChatMessageDto({
+    required this.id,
+    required this.conversationId,
+    required this.senderId,
+    required this.content,
+    required this.createdAt,
+    required this.mine,
+  });
+
+  ChatMessage toModel() => ChatMessage(
+        id: id,
+        conversationId: conversationId,
+        senderId: senderId,
+        content: content,
+        createdAt: createdAt,
+        mine: mine,
+      );
+
+  factory ChatMessageDto.fromJson(Map<String, dynamic> json) => ChatMessageDto(
+        id: json['id'] as String,
+        conversationId: json['conversationId'] as String,
+        senderId: json['senderId'] as String,
+        content: json['content'] as String,
+        createdAt: DateTime.parse(json['createdAt'] as String),
+        mine: (json['mine'] as bool?) ?? false,
+      );
+}
+
+/// A paginated messages page: the chronological batch plus whether older
+/// messages exist to paginate into (`before`).
+class MessagePageDto {
+  final List<ChatMessage> messages;
+  final bool hasMore;
+
+  const MessagePageDto({required this.messages, required this.hasMore});
+
+  factory MessagePageDto.fromJson(Map<String, dynamic> json) => MessagePageDto(
+        messages: (json['messages'] as List)
+            .cast<Map<String, dynamic>>()
+            .map(ChatMessageDto.fromJson)
+            .map((d) => d.toModel())
+            .toList(),
+        hasMore: (json['hasMore'] as bool?) ?? false,
+      );
 }

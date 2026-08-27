@@ -6,6 +6,9 @@ import 'package:matrix_app/core/services/app_state.dart';
 import 'package:matrix_app/core/widgets/app_state_scope.dart';
 import 'package:matrix_app/features/auth/login/login_screen.dart';
 import 'package:matrix_app/features/auth/register/register_screen.dart';
+import 'package:matrix_app/features/chat/chat_navigation.dart';
+import 'package:matrix_app/features/chat/chat_screen.dart';
+import 'package:matrix_app/features/chat/conversation_screen.dart';
 import 'package:matrix_app/features/create_post/create_post_screen.dart';
 import 'package:matrix_app/features/customizations/customizations_screen.dart';
 import 'package:matrix_app/features/home/home_screen.dart';
@@ -53,6 +56,11 @@ Future<void> pumpMatrixApp(
               nickname:
                   (nickname != null && nickname.isNotEmpty) ? nickname : null,
             );
+          },
+          AppRoutes.conversation: (context) {
+            final args = ModalRoute.of(context)!.settings.arguments;
+            if (args is ConversationRouteArgs) return ConversationScreen(args: args);
+            return const ChatScreen();
           },
         },
       ),

@@ -19,4 +19,16 @@ class AppStateScope extends InheritedNotifier<AppState> {
     assert(scope != null, 'AppStateScope not found in widget tree');
     return scope!.state;
   }
+
+  /// Reads the [AppState] from the nearest [AppStateScope], or null when the
+  /// widget is built outside one (defensive for tests/edge contexts).
+  static AppState? maybeOf(BuildContext context) {
+    // `dependOnInheritedWidgetOfExactType` throws when no scope is present;
+    // generic type lookup (`getElementForInheritedWidgetOfExactType`) lets us
+    // answer null instead, so screens can degrade gracefully.
+    final element = context
+        .getElementForInheritedWidgetOfExactType<AppStateScope>();
+    if (element == null) return null;
+    return (element.widget as AppStateScope).state;
+  }
 }

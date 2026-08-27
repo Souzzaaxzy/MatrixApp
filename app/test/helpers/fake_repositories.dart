@@ -4,6 +4,7 @@ import 'package:matrix_app/data/api_config.dart';
 import 'package:matrix_app/data/dtos/dtos.dart';
 import 'package:matrix_app/data/repositories/repositories.dart';
 import 'package:matrix_app/models/comment.dart';
+import 'package:matrix_app/models/conversation.dart';
 import 'package:matrix_app/models/cosmetic_item.dart';
 import 'package:matrix_app/models/friend_request.dart';
 import 'package:matrix_app/models/matrix_notification.dart';
@@ -28,6 +29,7 @@ class FakeRepositories extends Repositories {
     required super.notifications,
     required super.uploads,
     required super.customization,
+    required super.chat,
   }) : _store = store;
 
   factory FakeRepositories({
@@ -55,6 +57,7 @@ class FakeRepositories extends Repositories {
       notifications: _FakeNotificationRepository(store),
       uploads: const _FakeUploadRepository(),
       customization: _FakeCustomizationRepository(store),
+      chat: _FakeChatRepository(store),
     );
   }
 
@@ -117,6 +120,7 @@ class FakeStore {
     notifications = <MatrixNotification>[];
     friendRequests = <String, FriendRequest>{};
     friendships = <String>{};
+    chatMessagesByPair = <String, List<ChatMessage>>{};
   }
 
   late final Map<String, MatrixUser> users;
@@ -135,6 +139,9 @@ class FakeStore {
   /// Friendship pairs stored as `a|b` with ids sorted — one row per
   /// friendship, no duplicates, just like the SQLite schema.
   late final Set<String> friendships;
+
+  /// Private chat messages by conversation (pair key `a|b`), in order.
+  late final Map<String, List<ChatMessage>> chatMessagesByPair;
 
   /// Cosmetics equipped by the session user, keyed by slot.
   final Map<String, CosmeticItem> equippedCosmetics = {};
@@ -595,5 +602,129 @@ class _FakeNotificationRepository implements NotificationRepository {
       }
     }
   }
+}
+
+/// In-memory chat: conversations (friend-only, one per pair) and messages
+/// persisted per conversation, mirroring the SQLite schema. Enforces
+/// friendship the same way the real server does.
+class _FakeChatRepository implements ChatRepository {
+  _FakeChatRepository(this._store);
+
+  final FakeStore _store;
+
+  String _pairKey(String a, String b) =>
+      a.compareTo(b) < 0 ? '$a|$b' : '$b|$a';
+
+  List<ChatMessage> _messagesOf(String pair) =>
+      List.of(_store.chatMessagesByPair[pair] ?? const []);
+
+  @override
+  Future<List<Conversation>> conversations() async {
+    final me = _store.currentUserId;
+    final result = <Conversation>[];
+    for (final pair in _store.friendships) {
+      final parts = pair.split('|');
+      if (!parts.contains(me)) continue;
+      final otherId = parts.firstWhere((id) => id != me);
+      final other = _store.users[otherId];
+      if (other == null) continue;
+      final messages = _messagesOf(pair);
+      final last = messages.isNotEmpty ? messages.last : null;
+      result.add(Conversation(
+        id: pair,
+        otherUser: other.toChatUser(),
+        lastMessage: last == null
+            ? null
+            : ConversationLastMessage(
+                id: last.id,
+                content: last.content,
+                senderId: last.senderId,
+                createdAt: last.createdAt,
+              ),
+        lastMine: last?.senderId == me,
+        unreadCount: 0,
+        updatedAt: last?.createdAt ?? DateTime(2024),
+      ));
+    }
+    result.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+    return result;
+  }
+
+  @override
+  Future<int> unreadCount() async => 0;
+
+  @override
+  Future<Conversation> getOrCreate(String otherUserId) async {
+    final me = _store.currentUserId;
+    if (me == null || me == otherUserId) {
+      throw const ApiException(statusCode: 403, message: 'Conversa inválida.');
+    }
+    if (!_store.friendships.contains(_pairKey(me, otherUserId))) {
+      throw const ApiException(
+        statusCode: 403,
+        message: 'Vocês precisam ser amigos para iniciar uma conversa.',
+      );
+    }
+    final other = _store.users[otherUserId];
+    if (other == null) {
+      throw const ApiException(statusCode: 404, message: 'Usuário não encontrado.');
+    }
+    final pair = _pairKey(me, otherUserId);
+    final messages = _messagesOf(pair);
+    final last = messages.isNotEmpty ? messages.last : null;
+    return Conversation(
+      id: pair,
+      otherUser: other.toChatUser(),
+      lastMessage: last == null
+          ? null
+          : ConversationLastMessage(
+              id: last.id,
+              content: last.content,
+              senderId: last.senderId,
+              createdAt: last.createdAt,
+            ),
+      lastMine: last?.senderId == me,
+      unreadCount: 0,
+      updatedAt: last?.createdAt ?? DateTime(2024),
+    );
+  }
+
+  @override
+  Future<({List<ChatMessage> messages, bool hasMore})> messages(
+    String conversationId, {
+    String? before,
+    int limit = 30,
+  }) async {
+    final all = _messagesOf(conversationId);
+    // `before` references a message id → return the messages OLDER than it.
+    if (before != null) {
+      final index = all.indexWhere((m) => m.id == before);
+      final from = index == -1 ? all.length : index;
+      final older = all.sublist(0, from);
+      final start = older.length > limit ? older.length - limit : 0;
+      return (messages: older.sublist(start), hasMore: start > 0);
+    }
+    // Latest page: the newest `limit` messages.
+    final start = all.length > limit ? all.length - limit : 0;
+    return (messages: all.sublist(start), hasMore: start > 0);
+  }
+
+  @override
+  Future<ChatMessage> send(String conversationId, String content) async {
+    final me = _store.currentUserId;
+    final message = ChatMessage(
+      id: 'm${DateTime.now().microsecondsSinceEpoch}',
+      conversationId: conversationId,
+      senderId: me!,
+      content: content,
+      createdAt: DateTime.now(),
+      mine: true,
+    );
+    _store.chatMessagesByPair.putIfAbsent(conversationId, () => []).add(message);
+    return message;
+  }
+
+  @override
+  Future<void> markRead(String conversationId) async {}
 }
 

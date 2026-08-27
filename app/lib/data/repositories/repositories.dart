@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 
 import '../../models/comment.dart';
+import '../../models/conversation.dart';
 import '../../models/cosmetic_item.dart';
 import '../../models/friend_request.dart';
 import '../../models/matrix_notification.dart';
@@ -309,6 +310,75 @@ class NotificationRepository {
   }
 }
 
+/// Private chat repository — conversations, messages and unread badge.
+/// All authorization is enforced by the server (friend-only messaging,
+/// membership on every load); the client never sends a senderId.
+class ChatRepository {
+  ChatRepository(this._api);
+
+  final ApiClient _api;
+
+  /// The authenticated user's conversations, newest activity first, each
+  /// with the OTHER participant embedded.
+  Future<List<Conversation>> conversations() async {
+    final json = await _api.get<Map<String, dynamic>>('/api/conversations');
+    return (json['conversations'] as List)
+        .cast<Map<String, dynamic>>()
+        .map(ConversationDto.fromJson)
+        .map((d) => d.toModel())
+        .toList();
+  }
+
+  /// Unread conversations counter for the Chat tab badge.
+  Future<int> unreadCount() async {
+    final json =
+        await _api.get<Map<String, dynamic>>('/api/conversations/unread-count');
+    return (json['unreadCount'] as num?)?.toInt() ?? 0;
+  }
+
+  /// Returns the ONE conversation with [otherUserId], creating it when none
+  /// exists yet (friends only — the server enforces this).
+  Future<Conversation> getOrCreate(String otherUserId) async {
+    final json = await _api
+        .post<Map<String, dynamic>>('/api/conversations/$otherUserId');
+    return ConversationDto.fromJson(json['conversation'] as Map<String, dynamic>)
+        .toModel();
+  }
+
+  /// Latest messages of a conversation. Pass [before] (the id of the oldest
+  /// currently-loaded message) to fetch the OLDER page.
+  Future<({List<ChatMessage> messages, bool hasMore})> messages(
+    String conversationId, {
+    String? before,
+    int limit = 30,
+  }) async {
+    final query = <String, dynamic>{'limit': limit};
+    if (before != null) query['before'] = before;
+    final json = await _api.get<Map<String, dynamic>>(
+      '/api/conversations/$conversationId/messages',
+      queryParameters: query,
+    );
+    final page = MessagePageDto.fromJson(json);
+    return (messages: page.messages, hasMore: page.hasMore);
+  }
+
+  /// Sends a chat message. Returns the persisted message (auth-derived
+  /// sender). Throws [ApiException] with a friendly message on rejection.
+  Future<ChatMessage> send(String conversationId, String content) async {
+    final json = await _api.post<Map<String, dynamic>>(
+      '/api/conversations/$conversationId/messages',
+      data: {'content': content},
+    );
+    return ChatMessageDto.fromJson(json['message'] as Map<String, dynamic>)
+        .toModel();
+  }
+
+  /// Marks all messages FROM THE OTHER SIDE as read (clears the unread badge).
+  Future<void> markRead(String conversationId) async {
+    await _api.post('/api/conversations/$conversationId/read');
+  }
+}
+
 /// Profile customization (cosmetics): catalog, inventory and equipped
 /// items. All state is server-owned — the server validates ownership on
 /// equip, so a crafted client request can never unlock an item.
@@ -414,6 +484,7 @@ class Repositories {
     required this.notifications,
     required this.uploads,
     required this.customization,
+    required this.chat,
   });
 
   final AuthRepository auth;
@@ -425,4 +496,5 @@ class Repositories {
   final NotificationRepository notifications;
   final UploadRepository uploads;
   final CustomizationRepository customization;
+  final ChatRepository chat;
 }

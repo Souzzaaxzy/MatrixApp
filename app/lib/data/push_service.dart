@@ -35,6 +35,12 @@ class PushService {
   /// payload (type / actorNickname / postId / commentId / friendRequestId).
   void Function(Map<String, dynamic> data)? onNavigate;
 
+  /// Called when a real-time chat message arrives (kind `chat_message`).
+  /// Receives the parsed `{ conversationId, message }` payload so the chat
+  /// layer can update an open DM / the conversations list live. Best-effort:
+  /// setting this is optional (the list also refreshes on focus).
+  void Function(Map<String, dynamic> data)? onChatMessage;
+
   static const _channelId = 'matrix_notifications';
   static const _channelName = 'MATRIX';
 
@@ -152,6 +158,15 @@ class PushService {
     try {
       message = jsonDecode(raw as String) as Map<String, dynamic>;
     } catch (_) {
+      return;
+    }
+    // Real-time chat message (private DM). Forward the whole payload to the
+    // chat layer — never rendered as a native push here (no noise for every
+    // message). Dedupe happens at the chat layer by message id.
+    if (message['kind'] == 'chat_message') {
+      final data =
+          (message['data'] as Map?)?.cast<String, dynamic>() ?? const {};
+      onChatMessage?.call(data);
       return;
     }
     if (message['kind'] != 'notification') return;

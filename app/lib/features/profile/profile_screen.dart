@@ -19,6 +19,7 @@ import '../../data/api_config.dart';
 import '../../models/friend_request.dart';
 import '../../models/matrix_user.dart';
 import '../../models/post.dart';
+import '../chat/chat_navigation.dart';
 import 'friends_sheet.dart';
 import 'settings_sheet.dart';
 
@@ -221,6 +222,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   onEdit: _openEditProfile,
                   onSend: () => _sendFriendRequest(user.id),
                   onFriendsTap: () => FriendsSheet.open(context, user),
+                  onMessage: () => openChatWithUser(context, user),
                 ),
               ),
               SliverToBoxAdapter(
@@ -291,6 +293,7 @@ class _ProfileHeader extends StatelessWidget {
     required this.onEdit,
     required this.onSend,
     required this.onFriendsTap,
+    required this.onMessage,
   });
 
   final MatrixUser user;
@@ -300,6 +303,7 @@ class _ProfileHeader extends StatelessWidget {
   final VoidCallback onEdit;
   final VoidCallback onSend;
   final VoidCallback onFriendsTap;
+  final VoidCallback onMessage;
 
   @override
   Widget build(BuildContext context) {
@@ -383,6 +387,28 @@ class _ProfileHeader extends StatelessWidget {
               variant: MatrixButtonVariant.outline,
               expanded: true,
               onPressed: onEdit,
+            )
+          else if (friendship == Friendship.friends)
+            // Friends → two equal buttons side by side: Amigos + Mensagem.
+            Row(
+              children: [
+                Expanded(
+                  child: MatrixButton(
+                    label: 'Amigos',
+                    icon: Icons.favorite_rounded,
+                    variant: MatrixButtonVariant.outline,
+                    onPressed: null,
+                  ),
+                ),
+                const SizedBox(width: AppDimensions.spaceMd),
+                Expanded(
+                  child: MatrixButton(
+                    label: 'Mensagem',
+                    icon: Icons.chat_bubble_rounded,
+                    onPressed: onMessage,
+                  ),
+                ),
+              ],
             )
           else
             FriendshipButton(

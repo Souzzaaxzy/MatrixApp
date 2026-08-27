@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../core/services/app_state.dart';
 import '../core/services/theme_controller.dart';
 import '../core/widgets/app_state_scope.dart';
+import '../data/dtos/dtos.dart';
 import '../data/services.dart';
 import 'routes.dart';
 import 'theme/app_colors.dart';
@@ -28,6 +29,25 @@ class _MatrixAppState extends State<MatrixApp> {
     // FRIEND_ACCEPTED → the friend's profile.
     if (Services.isInitialized) {
       Services.instance.push.onNavigate = _onPushNavigate;
+      Services.instance.push.onChatMessage = _onChatMessage;
+    }
+  }
+
+  /// A real-time private message arrived on the WebSocket. Route it into the
+  /// app state so an open DM / the conversations list updates live.
+  /// Deduping happens by message id in the chat layer.
+  void _onChatMessage(Map<String, dynamic> data) {
+    final state = _navigatorKey.currentContext == null
+        ? null
+        : AppStateScope.maybeOf(_navigatorKey.currentContext!);
+    if (state == null) return;
+    final rawMessage = data['message'];
+    if (rawMessage is! Map<String, dynamic>) return;
+    try {
+      final message = ChatMessageDto.fromJson(rawMessage).toModel();
+      state.handleIncomingChatMessage(message);
+    } catch (_) {
+      // Malformed chat payload: ignore (the list refreshes on focus anyway).
     }
   }
 
@@ -42,7 +62,7 @@ class _MatrixAppState extends State<MatrixApp> {
           navigator.pushNamed(AppRoutes.postDetail, arguments: postId);
         }
       case 'FRIEND_REQUEST':
-        navigator.pushNamed(AppRoutes.home, arguments: 3);
+        navigator.pushNamed(AppRoutes.home, arguments: 4);
       case 'FRIEND_ACCEPTED':
         final nickname = data['actorNickname'] as String?;
         if (nickname != null && nickname.isNotEmpty) {

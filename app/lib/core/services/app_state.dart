@@ -8,6 +8,7 @@ import '../../data/repositories/repositories.dart';
 import '../../data/services.dart';
 import '../../models/akame_message.dart';
 import '../../models/comment.dart';
+import '../../models/conversation.dart';
 import '../../models/cosmetic_item.dart';
 import '../../models/friend_request.dart';
 import '../../models/matrix_notification.dart';
@@ -71,6 +72,19 @@ class AppState extends ChangeNotifier {
   /// the feed/profile caches. Lets likes/comments work uniformly by id.
   final Map<String, Post> _postCache = {};
 
+  /// Private chat: the authenticated user's conversations (Chat tab).
+  final List<Conversation> _conversations = [];
+  bool _loadingConversations = false;
+
+  /// Total unread conversations, shown as a badge on the 💬 Chat tab.
+  int _unreadConversations = 0;
+
+  /// Real-time incoming chat messages (from the shared WebSocket). The
+  /// conversation screen listens so an open DM updates live; the Chat tab
+  /// listens (while open) to refresh the list/unread badge.
+  final _chatIncoming = StreamController<ChatMessage>.broadcast();
+  Stream<ChatMessage> get onChatIncoming => _chatIncoming.stream;
+
   List<Post> get posts => List.unmodifiable(_posts);
   bool get isLoadingProfile => _loadingProfile;
 
@@ -86,6 +100,11 @@ class AppState extends ChangeNotifier {
   List<MatrixNotification> get notifications => List.unmodifiable(_notifications);
   int get unreadNotifications => _notifications.where((n) => !n.read).length;
   bool get isLoadingNotifications => _loadingNotifications;
+
+  /// Private chat getters.
+  List<Conversation> get conversations => List.unmodifiable(_conversations);
+  bool get isLoadingConversations => _loadingConversations;
+  int get unreadConversations => _unreadConversations;
 
   /// Cosmetics equipped by the session user (slot → item). Empty means
   /// "all defaults" — the spec's "Nenhuma" state.
@@ -117,6 +136,7 @@ class AppState extends ChangeNotifier {
       _repos?.notifications ?? Services.instance.notifications;
   CustomizationRepository get _customizationRepo =>
       _repos?.customization ?? Services.instance.customization;
+  ChatRepository get _chat => _repos?.chat ?? Services.instance.chat;
 
   /// Restores the session from a stored refresh token. Called at startup.
   /// Returns true when the user is authenticated afterwards.
@@ -216,6 +236,7 @@ class AppState extends ChangeNotifier {
     _nameColorCatalog = const [];
     _frameCatalog = const [];
     _akameMessages = MockDataService.initialAkameMessages();
+    _clearConversations();
   }
 
   /// Loads the first page of the feed (replaces existing posts).
@@ -754,9 +775,182 @@ class AppState extends ChangeNotifier {
     return _users.search(query);
   }
 
+  // ── Private chat ───────────────────────────────────────────
+
+  /// Loads the authenticated user's conversations into state. Called when
+  /// the Chat tab opens and after logout/login to refresh the cache.
+  Future<void> loadConversations() async {
+    _loadingConversations = true;
+    notifyListeners();
+    try {
+      final list = await _chat.conversations();
+      _conversations
+        ..clear()
+        ..addAll(list);
+    } finally {
+      _loadingConversations = false;
+      notifyListeners();
+    }
+  }
+
+  /// Refreshes just the unread conversations badge (light — used after a
+  /// real-time message arrives or the tab reopens).
+  Future<void> refreshUnreadConversations() async {
+    try {
+      _unreadConversations = await _chat.unreadCount();
+    } catch (_) {
+      // Best-effort: keep the last known badge on failure.
+    }
+    notifyListeners();
+  }
+
+  /// Opens (or creates) the single conversation with [otherUserId] and
+  /// returns it. The server enforces the friends-only rule.
+  Future<Conversation> getOrCreateConversation(String otherUserId) {
+    return _chat.getOrCreate(otherUserId);
+  }
+
+  /// Latest messages of a conversation (newest batch, chronological).
+  Future<({List<ChatMessage> messages, bool hasMore})> loadMessages(
+    String conversationId, {
+    String? before,
+    int limit = 30,
+  }) {
+    return _chat.messages(conversationId, before: before, limit: limit);
+  }
+
+  /// Sends a chat message and, on success, optimistically records it in the
+  /// cached conversation's last-message slot (the server response is
+  /// authoritative and returned for the screen to append).
+  Future<ChatMessage> sendChatMessage(
+    String conversationId,
+    String content, {
+    ChatUser? otherUser,
+  }) async {
+    final message = await _chat.send(conversationId, content);
+    _applyChatMessage(message, otherUser: otherUser ?? _peerOf(conversationId));
+    return message;
+  }
+
+  /// Marks a conversation as read by the session user and clears its unread
+  /// badge from the local cache.
+  Future<void> markConversationRead(String conversationId) async {
+    try {
+      await _chat.markRead(conversationId);
+    } catch (_) {
+      // Best-effort: reading is not fatal.
+    }
+    var modified = false;
+    for (var i = 0; i < _conversations.length; i++) {
+      if (_conversations[i].id == conversationId &&
+          _conversations[i].unreadCount > 0) {
+        final c = _conversations[i];
+        _conversations[i] = c.copyWith(unreadCount: 0);
+        modified = true;
+      }
+    }
+    if (modified) _recomputeUnreadBadge();
+    notifyListeners();
+  }
+
+  /// A real-time chat message arrived on the WebSocket. If it belongs to a
+  /// conversation we have cached, update that conversation (last message +
+  /// unread badge); the peer (needed for the preview) is the message sender
+  /// when we don't already know it.
+  /// Emits on [onChatIncoming] for open conversation screens.
+  void handleIncomingChatMessage(ChatMessage message) {
+    if (_disposed) return;
+    final cached = _conversations.indexWhere((c) => c.id == message.conversationId);
+    if (cached != -1) {
+      final peer = _peerOf(message.conversationId);
+      _applyChatMessage(message, otherUser: peer, selfMade: false);
+    }
+    if (!_chatIncoming.isClosed) _chatIncoming.add(message);
+    notifyListeners();
+  }
+
+  ChatUser? _peerOf(String conversationId) {
+    for (final c in _conversations) {
+      if (c.id == conversationId) return c.otherUser;
+    }
+    return null;
+  }
+
+  /// Applies a chat message to the cached conversation last-message slot.
+  /// [selfMade] keeps the unread badge untouched for our own sends (incoming
+  /// messages may bump the unread counter of the OTHER side's cached slot —
+  /// but this user's own badge only counts the OTHER side's messages sent to
+  /// them, so incoming self messages can never add to the session user's
+  /// badge; the flag just makes the intent explicit).
+  void _applyChatMessage(
+    ChatMessage message, {
+    ChatUser? otherUser,
+    bool selfMade = true,
+  }) {
+    for (var i = 0; i < _conversations.length; i++) {
+      final c = _conversations[i];
+      if (c.id != message.conversationId) continue;
+      final last = ConversationLastMessage(
+        id: message.id,
+        content: message.content,
+        senderId: message.senderId,
+        createdAt: message.createdAt,
+      );
+      _conversations.removeAt(i);
+      _conversations.insert(
+        0,
+        c.copyWith(
+          lastMessage: last,
+          lastMine: selfMade || message.mine,
+          updatedAt: message.createdAt,
+        ),
+      );
+      if (!selfMade && !message.mine) {
+        // Incoming message from the other side → mark this conversation unread.
+        _conversations[0] =
+            _conversations[0].copyWith(unreadCount: c.unreadCount + 1);
+      }
+      return;
+    }
+    // Conversation not cached yet: if we know the peer, synthesize a preview
+    // entry so the list is immediately coherent (the screen refreshes on
+    // focus anyway).
+    if (otherUser != null) {
+      _conversations.insert(
+        0,
+        Conversation(
+          id: message.conversationId,
+          otherUser: otherUser,
+          lastMessage: ConversationLastMessage(
+            id: message.id,
+            content: message.content,
+            senderId: message.senderId,
+            createdAt: message.createdAt,
+          ),
+          lastMine: message.mine,
+          unreadCount: selfMade ? 0 : 1,
+          updatedAt: message.createdAt,
+        ),
+      );
+    }
+  }
+
+  /// Recomputes [_unreadConversations] from the cached conversations.
+  void _recomputeUnreadBadge() {
+    _unreadConversations =
+        _conversations.where((c) => c.unreadCount > 0).length;
+  }
+
+  /// Clears the local conversation cache (called on logout).
+  void _clearConversations() {
+    _conversations.clear();
+    _unreadConversations = 0;
+  }
+
   @override
   void dispose() {
     _disposed = true;
+    _chatIncoming.close();
     super.dispose();
   }
 }
