@@ -6,6 +6,7 @@ import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_dimensions.dart';
 import '../../app/theme/app_text_styles.dart';
 import '../../core/utils/date_utils.dart';
+import '../../core/utils/profile_navigation.dart';
 import '../../data/api_config.dart';
 import '../../models/post.dart';
 import '../../core/widgets/app_state_scope.dart';
@@ -98,36 +99,47 @@ class _PostCardState extends State<PostCard>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                FramedAvatar(
-                  frame: _authorFrame(post),
-                  size: 44,
-                  child: UserAvatar(
-                    name: post.authorNickname,
-                    seed: post.avatarSeed,
-                    imageUrl: post.authorAvatarUrl,
+            // Tapping the author's photo OR nickname opens THAT user's
+            // profile (by real id), never the session user's. The GestureDetector
+            // wins this region's taps over the card's own open-detail InkWell.
+            GestureDetector(
+              onTap: () => openProfileById(
+                context,
+                id: post.authorId ?? '',
+                nickname: post.authorNickname,
+              ),
+              behavior: HitTestBehavior.opaque,
+              child: Row(
+                children: [
+                  FramedAvatar(
+                    frame: _authorFrame(post),
+                    size: 44,
+                    child: UserAvatar(
+                      name: post.authorNickname,
+                      seed: post.avatarSeed,
+                      imageUrl: post.authorAvatarUrl,
+                    ),
                   ),
-                ),
-                const SizedBox(width: AppDimensions.spaceMd),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      NicknameRenderer(
-                        post.authorNickname,
-                        baseStyle: AppTextStyles.h3,
-                        background: AppColors.cardSurface,
-                        nameColor: post.authorNicknameColor,
-                      ),
-                      Text(
-                        '${post.authorNickname} • ${relativeTime(post.createdAt)}',
-                        style: AppTextStyles.caption,
-                      ),
-                    ],
+                  const SizedBox(width: AppDimensions.spaceMd),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        NicknameRenderer(
+                          post.authorNickname,
+                          baseStyle: AppTextStyles.h3,
+                          background: AppColors.cardSurface,
+                          nameColor: post.authorNicknameColor,
+                        ),
+                        Text(
+                          '${post.authorNickname} • ${relativeTime(post.createdAt)}',
+                          style: AppTextStyles.caption,
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
             if (post.text.isNotEmpty) ...[
               const SizedBox(height: AppDimensions.spaceLg),

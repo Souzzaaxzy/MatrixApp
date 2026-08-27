@@ -22,7 +22,7 @@ class MockDataService {
     return [
       Post(
         id: 'p1',
-        authorNickname: 'Leonardo',
+        authorNickname: 'user',
         text: 'Finalmente terminei isso! 🚀',
         createdAt: now.subtract(const Duration(minutes: 2)),
         avatarSeed: 'leonardo',
@@ -129,7 +129,7 @@ class MockDataService {
     return [
       AkameMessage(
         id: 'a1',
-        text: 'Olá, Leonardo.\nComo posso ajudar?',
+        text: 'Olá, user.\nComo posso ajudar?',
         fromUser: false,
         createdAt: now.subtract(const Duration(minutes: 2)),
       ),

@@ -108,7 +108,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   delay: const Duration(milliseconds: 250),
                   child: MatrixTextField(
                     label: 'Nickname',
-                    hint: 'Leonardo',
+                    hint: 'user',
                     controller: _nicknameController,
                     keyboardType: TextInputType.text,
                     textInputAction: TextInputAction.next,

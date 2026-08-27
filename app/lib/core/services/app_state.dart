@@ -284,6 +284,12 @@ class AppState extends ChangeNotifier {
       final result = await _likes.toggle(postId);
       post.liked = result.liked;
       post.likes = result.likeCount;
+      // Propagate the confirmed state to every cached copy of the same post
+      // (feed ↔ every viewed-profile cache ↔ detail cache). The SAME post
+      // must show the SAME heart everywhere — a like made on a profile's
+      // post is reflected in the feed and vice-versa. [post] itself is
+      // already updated above, so skip it inside _syncPost.
+      _syncPost(post, skip: post);
       notifyListeners();
       return true;
     } catch (_) {
@@ -369,11 +375,16 @@ class AppState extends ChangeNotifier {
   }
 
   /// Copies the mutable engagement state (likes/liked/comment count) of
-  /// [updated] into every cached copy of the same post, so a like made on
-  /// the detail screen is reflected in the feed and the profile grid.
-  void syncPost(Post updated) {
+  /// [updated] into every OTHER cached copy of the same post, so a like made
+  /// on the detail screen is reflected in the feed and the profile grid —
+  /// the SAME post always shows the SAME engagement state everywhere.
+  void syncPost(Post updated, {Post? skip}) {
+    _syncPost(updated, skip: skip ?? updated);
+  }
+
+  void _syncPost(Post updated, {required Post skip}) {
     for (final p in _posts) {
-      if (p.id == updated.id && !identical(p, updated)) {
+      if (p.id == updated.id && !identical(p, skip)) {
         p.liked = updated.liked;
         p.likes = updated.likes;
         p.commentCount = updated.commentCount;
@@ -381,7 +392,7 @@ class AppState extends ChangeNotifier {
     }
     for (final profile in _profiles.values) {
       for (final p in profile.posts) {
-        if (p.id == updated.id && !identical(p, updated)) {
+        if (p.id == updated.id && !identical(p, skip)) {
           p.liked = updated.liked;
           p.likes = updated.likes;
           p.commentCount = updated.commentCount;
@@ -389,12 +400,11 @@ class AppState extends ChangeNotifier {
       }
     }
     final cached = _postCache[updated.id];
-    if (cached != null && !identical(cached, updated)) {
+    if (cached != null && !identical(cached, skip)) {
       cached.liked = updated.liked;
       cached.likes = updated.likes;
       cached.commentCount = updated.commentCount;
     }
-    notifyListeners();
   }
 
   /// Loads a profile (user + their posts + friendship state) from the

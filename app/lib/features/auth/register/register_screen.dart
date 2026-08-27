@@ -148,7 +148,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   delay: const Duration(milliseconds: 120),
                   child: MatrixTextField(
                     label: 'Nickname',
-                    hint: 'Leonardo',
+                    hint: 'user',
                     controller: _nicknameController,
                     textInputAction: TextInputAction.next,
                     validator: Validators.nickname,

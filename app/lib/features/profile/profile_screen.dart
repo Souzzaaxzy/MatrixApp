@@ -1,10 +1,12 @@
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/gestures.dart' show LongPressGestureRecognizer;
 import 'package:flutter/material.dart';
 
 import '../../app/routes.dart';
 import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_dimensions.dart';
 import '../../app/theme/app_text_styles.dart';
+import '../../core/utils/profile_navigation.dart';
 import '../../core/widgets/nickname_renderer.dart';
 import '../../core/widgets/app_state_scope.dart';
 import '../../core/widgets/empty_state.dart';
@@ -40,6 +42,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
   String? _error;
   bool _sending = false;
 
+  /// The real user id this screen is presenting (once loaded). Used to
+  /// register/un-register the profile in the navigation stack and to guard
+  /// the photo long-press "view only on another user's profile".
+  String? _shownUserId;
+
+  /// The own-profile tab (nickname == null) lives inside a persistent
+  /// IndexedStack tab — it must stay registered as open and never un-register
+  /// on dispose. A pushed ProfileScreen (nickname != null) pops and un-registers.
+  bool get _isTab => widget.nickname == null;
+
   bool get _isOwn {
     final state = AppStateScope.of(context);
     return widget.nickname == null ||
@@ -58,6 +70,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  @override
+  void dispose() {
+    // A pushed profile route pops and must release its slot so the same
+    // profile can be opened again later. The persistent own-profile tab
+    // stays registered for the app lifetime.
+    if (!_isTab) {
+      final id = _shownUserId;
+      if (id != null) closeProfile(id);
+    }
+    super.dispose();
+  }
+
   Future<void> _load() async {
     final state = AppStateScope.of(context);
     final nickname = widget.nickname ?? state.currentUser?.nickname;
@@ -65,6 +89,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
     setState(() => _error = null);
     try {
       await state.loadProfile(nickname);
+      if (!mounted) return;
+      // Register the profile by its REAL id once it resolves. Called both on
+      // the first load and on refresh — re-adding the same id is a no-op.
+      final loaded = state.profileFor(widget.nickname)?.user;
+      if (loaded != null) {
+        _shownUserId = loaded.id;
+        markProfileOpen(loaded.id);
+      }
     } on ApiException catch (e) {
       if (!mounted) return;
       setState(() => _error = e.message);
@@ -271,26 +303,56 @@ class _ProfileHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final avatar = GlowContainer(
+      glow: Glow.medium,
+      color: AppColors.glowSmall,
+      background: Colors.transparent,
+      borderRadius: BorderRadius.circular(999),
+      child: FramedAvatar(
+        frame: user.frame,
+        size: 110,
+        child: UserAvatar(
+          name: user.nickname,
+          seed: user.avatarSeed ?? user.nickname,
+          imageUrl: user.avatarUrl,
+          size: 98,
+          ring: true,
+        ),
+      ),
+    );
+
     return Padding(
       padding: const EdgeInsets.all(AppDimensions.spaceXl),
       child: Column(
         children: [
-          GlowContainer(
-            glow: Glow.medium,
-            color: AppColors.glowSmall,
-            background: Colors.transparent,
-            borderRadius: BorderRadius.circular(999),
-            child: FramedAvatar(
-              frame: user.frame,
-              size: 110,
-              child: UserAvatar(
-                name: user.nickname,
-                seed: user.avatarSeed ?? user.nickname,
-                imageUrl: user.avatarUrl,
-                size: 98,
-                ring: true,
+          // Long-press (≈2s) on ANOTHER user's profile enlarges their photo
+          // (view-only, circular, dismiss on outside tap). This behavior is
+          // LOCAL to the profile screen — it never activates in the feed,
+          // comments, search, friends or any other list. A simple tap does
+          // nothing here (the photo is not a navigation element on its own
+          // profile).
+          RawGestureDetector(
+            // Long press must be held ~2 seconds before it fires — a plain
+            // tap never opens the enlarged photo.
+            gestures: {
+              LongPressGestureRecognizer:
+                  GestureRecognizerFactoryWithHandlers<LongPressGestureRecognizer>(
+                () => LongPressGestureRecognizer(
+                  duration: const Duration(seconds: 2),
+                ),
+                (instance) {
+                  if (!isOwn) {
+                    instance.onLongPress = () => _showProfilePhotoZoom(
+                          context,
+                          user: user,
+                          enabled: true,
+                        );
+                  }
+                },
               ),
-            ),
+            },
+            behavior: HitTestBehavior.opaque,
+            child: avatar,
           ),
           const SizedBox(height: AppDimensions.spaceLg),
           // The nickname rendered plain (never '@') — the single visual
@@ -332,6 +394,68 @@ class _ProfileHeader extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Shows a large, centered, circular view of another user's profile photo
+/// over the current interface. It is intentionally VIEW-ONLY: it never edits
+/// the photo, never opens an image picker and never navigates. Tapping
+/// OUTSIDE the circle closes it; tapping inside does nothing (avoids
+/// accidental dismissal and conflicts with tap/long-press/navigation).
+///
+/// This is invoked ONLY from the profile screen's header when viewing
+/// someone else's profile — it is not reachable from the feed, comments,
+/// search, friends or any other surface.
+void _showProfilePhotoZoom(
+  BuildContext context, {
+  required MatrixUser user,
+  required bool enabled,
+}) {
+  if (!enabled) return;
+  showDialog<void>(
+    context: context,
+    barrierColor: Colors.black87,
+    barrierDismissible: true,
+    builder: (dialogContext) {
+      final screen = MediaQuery.sizeOf(dialogContext);
+      final diameter = screen.shortestSide * 0.72;
+      return GestureDetector(
+        // Tapping the dark outside area closes it (the dialog barrier also
+        // dismisses, but the explicit GestureDetector makes "tap outside the
+        // circle" deterministic on every surface).
+        onTap: () => Navigator.of(dialogContext).pop(),
+        behavior: HitTestBehavior.opaque,
+        child: Dialog(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          insetPadding: EdgeInsets.zero,
+          child: Center(
+            child: GestureDetector(
+              // Tapping INSIDE the photo does nothing — no accidental close.
+              onTap: () {},
+              child: SizedBox(
+                width: diameter,
+                height: diameter,
+                child: ClipOval(
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      UserAvatar(
+                        name: user.nickname,
+                        seed: user.avatarSeed ?? user.nickname,
+                        imageUrl: user.avatarUrl,
+                        size: diameter,
+                        ring: true,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    },
+  );
 }
 
 /// Real counters row — Amigos (tappable → friends bottom sheet) and Posts.
@@ -515,12 +639,20 @@ class _ProfilePostTile extends StatelessWidget {
                   ),
                   child: Row(
                     children: [
-                      // Counter indicator only — never a filled heart here:
-                      // a filled heart means "I liked it" and this tile must
-                      // not imply the viewer liked the post (that's the
-                      // detail screen's job, driven by post.liked).
-                      Icon(Icons.favorite_border_rounded,
-                          color: AppColors.holographicBlue, size: 14),
+                      // The heart reflects the REAL like state, the same
+                      // everywhere (feed, detail, profile): filled when the
+                      // authenticated user liked the post, empty otherwise —
+                      // driven by post.liked, which the server computes from
+                      // the AUTHENTICATED token user.
+                      Icon(
+                        post.liked
+                            ? Icons.favorite_rounded
+                            : Icons.favorite_border_rounded,
+                        color: post.liked
+                            ? AppColors.error
+                            : AppColors.holographicBlue,
+                        size: 14,
+                      ),
                       const SizedBox(width: AppDimensions.spaceXs),
                       Text('${post.likes}', style: AppTextStyles.caption),
                       const SizedBox(width: AppDimensions.spaceMd),

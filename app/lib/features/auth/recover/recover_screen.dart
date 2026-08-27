@@ -118,7 +118,7 @@ class _RecoverScreenState extends State<RecoverScreen> {
             delay: const Duration(milliseconds: 120),
             child: MatrixTextField(
               label: 'Nickname',
-              hint: 'Leonardo',
+              hint: 'user',
               controller: _identifierController,
               textInputAction: TextInputAction.next,
               validator: (v) => Validators.required(v, label: 'Informe seu nickname'),

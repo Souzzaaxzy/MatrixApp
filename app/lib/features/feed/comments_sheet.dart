@@ -4,6 +4,7 @@ import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_dimensions.dart';
 import '../../app/theme/app_text_styles.dart';
 import '../../core/utils/date_utils.dart';
+import '../../core/utils/profile_navigation.dart';
 import '../../core/widgets/nickname_renderer.dart';
 import '../../core/widgets/app_state_scope.dart';
 import '../../core/widgets/hud_label.dart';
@@ -26,7 +27,8 @@ class CommentsSheet extends StatefulWidget {
     return showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: AppColors.nightBlue,
+      backgroundColor: Colors.transparent,
+      useSafeArea: false,
       barrierColor: Colors.black.withValues(alpha: 0.7),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(
@@ -36,12 +38,7 @@ class CommentsSheet extends StatefulWidget {
       // ThemeWatcher keeps the sheet on the active palette when the theme
       // flips while it is open.
       builder: (_) => ThemeWatcher(
-        builder: (_) => Padding(
-          padding: EdgeInsets.only(
-            bottom: MediaQuery.viewInsetsOf(context).bottom,
-          ),
-          child: CommentsSheet(post: post),
-        ),
+        builder: (_) => CommentsSheet(post: post),
       ),
     );
   }
@@ -116,22 +113,39 @@ class _CommentsSheetState extends State<CommentsSheet> {
   Widget build(BuildContext context) {
     final comments = _comments ?? <Comment>[];
 
-    return SizedBox(
-      height: MediaQuery.sizeOf(context).height * 0.7,
-      child: Column(
-        children: [
-          Container(
-            width: 40,
-            height: 4,
-            margin: const EdgeInsets.symmetric(vertical: AppDimensions.spaceMd),
-            decoration: BoxDecoration(
-              color: AppColors.deepBlue,
-              borderRadius: BorderRadius.circular(2),
+    // Respect the Android system navigation bar (gesture/nav-bar inset) AND
+    // the IME (keyboard) inset so the input bar is never hidden behind either
+    // of them. No fixed margins/paddings: both insets come from the platform.
+    final viewInsets = MediaQuery.viewInsetsOf(context);
+    final viewPadding = MediaQuery.viewPaddingOf(context);
+    final bottomInset = viewInsets.bottom > 0
+        ? viewInsets.bottom
+        : viewPadding.bottom;
+    final viewportHeight = MediaQuery.sizeOf(context).height;
+
+    return AnimatedPadding(
+      duration: const Duration(milliseconds: 150),
+      curve: Curves.easeOut,
+      padding: EdgeInsets.only(bottom: bottomInset),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxHeight: viewportHeight * 0.8),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 40,
+              height: 4,
+              margin:
+                  const EdgeInsets.symmetric(vertical: AppDimensions.spaceMd),
+              decoration: BoxDecoration(
+                color: AppColors.deepBlue,
+                borderRadius: BorderRadius.circular(2),
+              ),
             ),
-          ),
-          const HudLabel(text: 'COMMENTS'),
-          Divider(color: AppColors.deepBlue, height: AppDimensions.spaceXl),
-          Expanded(
+            const HudLabel(text: 'COMMENTS'),
+            Divider(
+                color: AppColors.deepBlue, height: AppDimensions.spaceXl),
+            Flexible(
             child: _loading
                 ? const Center(
                     child: HudLabel(text: 'LOADING...', dot: true),
@@ -166,6 +180,9 @@ class _CommentsSheetState extends State<CommentsSheet> {
                         Divider(color: AppColors.deepBlue, height: 1),
                     itemBuilder: (context, i) {
                       final c = comments[i];
+                      // Tapping the COMMENT AUTHOR's photo or nickname opens
+                      // THEIR profile (by real id), never the session user's
+                      // and never the post author's by mistake.
                       return Padding(
                         padding: const EdgeInsets.symmetric(
                           vertical: AppDimensions.spaceMd,
@@ -173,20 +190,28 @@ class _CommentsSheetState extends State<CommentsSheet> {
                         child: Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            FramedAvatar(
-                              frame: c.authorFrameId == null
-                                  ? null
-                                  : CosmeticItem(
-                                      id: c.authorFrameId!,
-                                      slot: CosmeticItem.avatarFrame,
-                                      name: c.authorFrameId!,
-                                      assetUrl: c.authorFrameAsset ?? '',
-                                    ),
-                              size: 32,
-                              child: UserAvatar(
-                                name: c.authorNickname,
-                                imageUrl: c.authorAvatarUrl,
-                                size: 27,
+                            GestureDetector(
+                              onTap: () => openProfileById(
+                                context,
+                                id: c.authorId,
+                                nickname: c.authorNickname,
+                              ),
+                              behavior: HitTestBehavior.opaque,
+                              child: FramedAvatar(
+                                frame: c.authorFrameId == null
+                                    ? null
+                                    : CosmeticItem(
+                                        id: c.authorFrameId!,
+                                        slot: CosmeticItem.avatarFrame,
+                                        name: c.authorFrameId!,
+                                        assetUrl: c.authorFrameAsset ?? '',
+                                      ),
+                                size: 32,
+                                child: UserAvatar(
+                                  name: c.authorNickname,
+                                  imageUrl: c.authorAvatarUrl,
+                                  size: 27,
+                                ),
                               ),
                             ),
                             const SizedBox(width: AppDimensions.spaceMd),
@@ -197,11 +222,19 @@ class _CommentsSheetState extends State<CommentsSheet> {
                                   Row(
                                     children: [
                                       Flexible(
-                                        child: NicknameRenderer(
-                                          c.authorNickname,
-                                          baseStyle: AppTextStyles.label,
-                                          background: AppColors.nightBlue,
-                                          nameColor: c.authorNicknameColor,
+                                        child: GestureDetector(
+                                          onTap: () => openProfileById(
+                                            context,
+                                            id: c.authorId,
+                                            nickname: c.authorNickname,
+                                          ),
+                                          behavior: HitTestBehavior.opaque,
+                                          child: NicknameRenderer(
+                                            c.authorNickname,
+                                            baseStyle: AppTextStyles.label,
+                                            background: AppColors.nightBlue,
+                                            nameColor: c.authorNicknameColor,
+                                          ),
                                         ),
                                       ),
                                       if (c.authorId.isNotEmpty &&
@@ -228,43 +261,44 @@ class _CommentsSheetState extends State<CommentsSheet> {
                       );
                     },
                   ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppDimensions.spaceLg,
-              vertical: AppDimensions.spaceSm,
             ),
-            decoration: BoxDecoration(
-              color: AppColors.bluishBlack,
-              border: Border(
-                top: BorderSide(color: AppColors.deepBlue, width: 1),
+            Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppDimensions.spaceLg,
+                vertical: AppDimensions.spaceSm,
               ),
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _controller,
-                    style: AppTextStyles.body,
-                    textCapitalization: TextCapitalization.sentences,
-                    textInputAction: TextInputAction.send,
-                    onSubmitted: (_) => _send(),
-                    decoration: InputDecoration(
-                      hintText: 'Escreva um comentário...',
-                      hintStyle: AppTextStyles.bodyMuted,
-                      border: InputBorder.none,
+              decoration: BoxDecoration(
+                color: AppColors.bluishBlack,
+                border: Border(
+                  top: BorderSide(color: AppColors.deepBlue, width: 1),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _controller,
+                      style: AppTextStyles.body,
+                      textCapitalization: TextCapitalization.sentences,
+                      textInputAction: TextInputAction.send,
+                      onSubmitted: (_) => _send(),
+                      decoration: InputDecoration(
+                        hintText: 'Escreva um comentário...',
+                        hintStyle: AppTextStyles.bodyMuted,
+                        border: InputBorder.none,
+                      ),
                     ),
                   ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.send_rounded,
-                      color: AppColors.electricBlue),
-                  onPressed: _send,
-                ),
-              ],
+                  IconButton(
+                    icon: const Icon(Icons.send_rounded,
+                        color: AppColors.electricBlue),
+                    onPressed: _send,
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

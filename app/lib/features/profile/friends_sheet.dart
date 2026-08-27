@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 
-import '../../app/routes.dart';
 import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_dimensions.dart';
 import '../../app/theme/app_text_styles.dart';
 import '../../core/services/app_state.dart';
+import '../../core/utils/profile_navigation.dart';
 import '../../core/widgets/app_state_scope.dart';
 import '../../core/widgets/framed_avatar.dart';
 import '../../core/widgets/hud_label.dart';
@@ -112,10 +112,7 @@ class _FriendsSheetState extends State<FriendsSheet> {
     // Close the sheet first, then open the friend's profile. The new
     // profile screen loads ITS OWN keyed slot — currentUser is untouched.
     Navigator.of(context).pop();
-    Navigator.of(context).pushNamed(
-      AppRoutes.profile,
-      arguments: friend.nickname,
-    );
+    openUserProfile(context, friend);
   }
 
   @override

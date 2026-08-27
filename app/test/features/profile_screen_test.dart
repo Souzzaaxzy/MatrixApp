@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:matrix_app/core/services/app_state.dart';
+import 'package:matrix_app/core/utils/profile_navigation.dart';
 import 'package:matrix_app/core/widgets/matrix_card.dart';
+import 'package:matrix_app/core/widgets/user_avatar.dart';
 import 'package:matrix_app/features/home/home_screen.dart';
 import 'package:matrix_app/features/profile/edit_profile_screen.dart';
 import 'package:matrix_app/features/profile/friends_sheet.dart';
 import 'package:matrix_app/features/profile/profile_screen.dart';
+import 'package:matrix_app/models/post.dart';
 
 import '../helpers/fake_repositories.dart';
 import '../helpers/test_app.dart';
@@ -193,6 +196,93 @@ void main() {
 
       expect(state.currentUser!.nickname, 'Neo');
       expect(state.currentUser!.bio, 'The one');
+    });
+  });
+
+  group('profile grid like state', () {
+    testWidgets(
+        'grid shows a FILLED heart when the current user liked the post',
+        (tester) async {
+      // Seed a post authored by joao that leonardo (the session user) liked.
+      final repos = FakeRepositories();
+      repos.store.posts.add(Post(
+        id: 'p9',
+        authorId: 'u2',
+        authorNickname: 'joao',
+        text: 'Post curtido pelo viewer',
+        createdAt: DateTime(2024, 1, 5),
+        liked: true,
+        likes: 1,
+      ));
+      repos.store.likedPostIds.add('p9');
+      final state = AppState(repositories: repos);
+      await pumpMatrixApp(
+        tester,
+        const ProfileScreen(nickname: 'joao'),
+        state: state,
+      );
+      await tester.pump(const Duration(milliseconds: 400));
+
+      // The heart the viewer liked is filled; the unliked one is empty.
+      expect(find.byIcon(Icons.favorite_rounded), findsWidgets);
+      expect(find.byIcon(Icons.favorite_border_rounded), findsWidgets);
+    });
+  });
+
+  group('profile photo long press', () {
+    setUp(() => resetProfileTracking());
+
+    testWidgets('long-press on ANOTHER user avatar opens the zoom dialog',
+        (tester) async {
+      await pumpMatrixApp(tester, const ProfileScreen(nickname: 'joao'));
+      await tester.pump(const Duration(milliseconds: 400));
+
+      // Press and hold ~2s to trigger the zoom, then release.
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.byType(UserAvatar).first),
+      );
+      await tester.pump(const Duration(seconds: 2));
+      await gesture.up();
+      await tester.pumpAndSettle();
+
+      // The enlarged, circular view-only dialog is shown.
+      expect(find.byType(ClipOval), findsWidgets);
+    });
+
+    testWidgets('long-press on OWN avatar does nothing (no zoom)',
+        (tester) async {
+      await pumpMatrixApp(tester, const ProfileScreen());
+      await tester.pump(const Duration(milliseconds: 400));
+
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.byType(UserAvatar).first),
+      );
+      await tester.pump(const Duration(seconds: 2));
+      await gesture.up();
+      await tester.pumpAndSettle();
+
+      // No enlarged photo dialog opens on the own profile.
+      expect(find.byType(UserAvatar), findsOneWidget);
+      expect(find.byType(ClipOval), findsNothing);
+    });
+
+    testWidgets('tapping OUTSIDE the enlarged photo closes the zoom dialog',
+        (tester) async {
+      await pumpMatrixApp(tester, const ProfileScreen(nickname: 'joao'));
+      await tester.pump(const Duration(milliseconds: 400));
+
+      final gesture = await tester.startGesture(
+        tester.getCenter(find.byType(UserAvatar).first),
+      );
+      await tester.pump(const Duration(seconds: 2));
+      await gesture.up();
+      await tester.pumpAndSettle();
+      expect(find.byType(ClipOval), findsWidgets);
+
+      // Tap the barrier (outside the circle) → closes.
+      await tester.tapAt(const Offset(5, 5));
+      await tester.pumpAndSettle();
+      expect(find.byType(ClipOval), findsNothing);
     });
   });
 }

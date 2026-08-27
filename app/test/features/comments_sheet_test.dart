@@ -85,4 +85,30 @@ void main() {
     // The current user IS the author of p1 in the fake store.
     expect(find.text('AUTOR'), findsOneWidget);
   });
+
+  testWidgets(
+      'input bar stays on screen and send button stays visible when the '
+      'keyboard (IME inset) is open', (tester) async {
+    final state = await stateWithComments();
+    final post = state.posts.firstWhere((p) => p.id == 'p1');
+
+    await pumpMatrixApp(tester, Scaffold(body: CommentsSheet(post: post)), state: state);
+    await tester.pumpAndSettle();
+
+    // Simulate the Android soft keyboard raising the bottom IME inset.
+    tester.view.viewInsets = const FakeViewPadding(bottom: 320);
+    addTearDown(tester.view.reset);
+    await tester.pump();
+
+    // The text field and the send button remain within the screen bounds —
+    // they are never pushed under the nav bar / behind the keyboard.
+    final sendIcon = find.byIcon(Icons.send_rounded);
+    expect(sendIcon, findsOneWidget);
+    final field = find.byType(TextField);
+    expect(field, findsOneWidget);
+
+    final sendRect = tester.getRect(sendIcon);
+    final screenSize = tester.view.physicalSize / tester.view.devicePixelRatio;
+    expect(sendRect.bottom, lessThanOrEqualTo(screenSize.height));
+  });
 }

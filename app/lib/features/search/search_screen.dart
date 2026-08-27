@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 
-import '../../app/routes.dart';
 import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_dimensions.dart';
 import '../../app/theme/app_text_styles.dart';
+import '../../core/utils/profile_navigation.dart';
 import '../../core/widgets/app_state_scope.dart';
 import '../../core/widgets/empty_state.dart';
 import '../../core/widgets/framed_avatar.dart';
@@ -63,7 +63,7 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   void _openUser(MatrixUser user) {
-    Navigator.of(context).pushNamed(AppRoutes.profile, arguments: user.nickname);
+    openUserProfile(context, user);
   }
 
   @override

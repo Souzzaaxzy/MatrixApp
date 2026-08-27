@@ -5,6 +5,7 @@ import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_dimensions.dart';
 import '../../app/theme/app_text_styles.dart';
 import '../../core/utils/date_utils.dart' as matrix;
+import '../../core/utils/profile_navigation.dart';
 import '../../core/widgets/nickname_renderer.dart';
 import '../../core/widgets/app_state_scope.dart';
 import '../../core/widgets/empty_state.dart';
@@ -83,9 +84,23 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       Navigator.of(context)
           .pushNamed(AppRoutes.postDetail, arguments: notification.postId);
     } else {
-      Navigator.of(context)
-          .pushNamed(AppRoutes.profile, arguments: notification.actorNickname);
+      openProfileById(
+        context,
+        id: notification.actorId,
+        nickname: notification.actorNickname,
+      );
     }
+  }
+
+  /// Tapping the ACTOR's photo or nickname on a notification opens THEIR
+  /// profile (by real id) — the same no-op guard if already open.
+  void _openActor(MatrixNotification notification) {
+    AppStateScope.of(context).markNotificationRead(notification.id);
+    openProfileById(
+      context,
+      id: notification.actorId,
+      nickname: notification.actorNickname,
+    );
   }
 
   @override
@@ -172,6 +187,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                     return _NotificationTile(
                       notification: n,
                       onTap: () => _open(n),
+                      onActorTap: () => _openActor(n),
                     );
                   },
                 ),
@@ -189,10 +205,15 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 /// Regular notification row: avatar, actor, description, relative time and
 /// an unread glow dot.
 class _NotificationTile extends StatelessWidget {
-  const _NotificationTile({required this.notification, required this.onTap});
+  const _NotificationTile({
+    required this.notification,
+    required this.onTap,
+    required this.onActorTap,
+  });
 
   final MatrixNotification notification;
   final VoidCallback onTap;
+  final VoidCallback onActorTap;
 
   static String description(MatrixNotification n) {
     switch (n.type) {
@@ -240,21 +261,26 @@ class _NotificationTile extends StatelessWidget {
               ),
             ),
           if (!n.read) const SizedBox(width: AppDimensions.spaceSm),
-          FramedAvatar(
-            frame: n.actorFrameId == null
-                ? null
-                : CosmeticItem(
-                    id: n.actorFrameId!,
-                    slot: CosmeticItem.avatarFrame,
-                    name: n.actorFrameId!,
-                    assetUrl: n.actorFrameAsset ?? '',
-                  ),
-            size: 42,
-            child: UserAvatar(
-              name: n.actorNickname,
-              seed: n.actorNickname,
-              imageUrl: n.actorAvatarUrl,
-              size: 36,
+          // The ACTOR's photo opens THEIR profile (by real id).
+          GestureDetector(
+            onTap: onActorTap,
+            behavior: HitTestBehavior.opaque,
+            child: FramedAvatar(
+              frame: n.actorFrameId == null
+                  ? null
+                  : CosmeticItem(
+                      id: n.actorFrameId!,
+                      slot: CosmeticItem.avatarFrame,
+                      name: n.actorFrameId!,
+                      assetUrl: n.actorFrameAsset ?? '',
+                    ),
+              size: 42,
+              child: UserAvatar(
+                name: n.actorNickname,
+                seed: n.actorNickname,
+                imageUrl: n.actorAvatarUrl,
+                size: 36,
+              ),
             ),
           ),
           const SizedBox(width: AppDimensions.spaceMd),
@@ -274,12 +300,17 @@ class _NotificationTile extends StatelessWidget {
                       WidgetSpan(
                         alignment: PlaceholderAlignment.baseline,
                         baseline: TextBaseline.alphabetic,
-                        child: NicknameRenderer(
-                          n.actorNickname,
-                          baseStyle:
-                              AppTextStyles.h3.copyWith(fontSize: 14),
-                          background: AppColors.cardSurface,
-                          nameColor: n.actorNicknameColor,
+                        // The actor's nickname opens THEIR profile.
+                        child: GestureDetector(
+                          onTap: onActorTap,
+                          behavior: HitTestBehavior.opaque,
+                          child: NicknameRenderer(
+                            n.actorNickname,
+                            baseStyle:
+                                AppTextStyles.h3.copyWith(fontSize: 14),
+                            background: AppColors.cardSurface,
+                            nameColor: n.actorNicknameColor,
+                          ),
                         ),
                       ),
                       TextSpan(
