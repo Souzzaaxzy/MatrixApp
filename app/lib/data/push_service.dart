@@ -41,6 +41,16 @@ class PushService {
   /// setting this is optional (the list also refreshes on focus).
   void Function(Map<String, dynamic> data)? onChatMessage;
 
+  /// Called when a real-time TYPING frame arrives (kind `chat_typing`).
+  /// Receives `{ conversationId, typing }`. Drives the "digitando..." hint
+  /// below the peer's nickname in an open conversation.
+  void Function(Map<String, dynamic> data)? onChatTyping;
+
+  /// Called when the peer READ this conversation (kind `chat_read`). Receives
+  /// `{ conversationId }` — lets the sender flip its "enviado" → "visto
+  /// agora" hint in real time.
+  void Function(Map<String, dynamic> data)? onChatRead;
+
   static const _channelId = 'matrix_notifications';
   static const _channelName = 'MATRIX';
 
@@ -167,6 +177,18 @@ class PushService {
       final data =
           (message['data'] as Map?)?.cast<String, dynamic>() ?? const {};
       onChatMessage?.call(data);
+      return;
+    }
+    if (message['kind'] == 'chat_typing') {
+      final data =
+          (message['data'] as Map?)?.cast<String, dynamic>() ?? const {};
+      onChatTyping?.call(data);
+      return;
+    }
+    if (message['kind'] == 'chat_read') {
+      final data =
+          (message['data'] as Map?)?.cast<String, dynamic>() ?? const {};
+      onChatRead?.call(data);
       return;
     }
     if (message['kind'] != 'notification') return;

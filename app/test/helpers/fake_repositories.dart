@@ -776,8 +776,42 @@ class _FakeChatRepository implements ChatRepository {
   }
 
   @override
-  Future<ChatMessage> send(String conversationId, String content) async {
+  Future<ChatMessage> send(
+    String conversationId,
+    String content, {
+    String? replyToMessageId,
+  }) async {
     final me = _store.currentUserId;
+    // The fake mirrors the server's reply resolution: resolve the ORIGINAL
+    // message's preview (nickname + content) unless it was deleted.
+    ReplyInfo? replyTo;
+    if (replyToMessageId != null) {
+      final all = _messagesOf(conversationId);
+      ChatMessage? target;
+      for (final m in all) {
+        if (m.id == replyToMessageId) {
+          target = m;
+          break;
+        }
+      }
+      replyTo = target == null
+          ? ReplyInfo(
+              id: replyToMessageId,
+              senderId: '',
+              senderNickname: '',
+              content: '',
+              exists: false,
+            )
+          : ReplyInfo(
+              id: target.id,
+              senderId: target.senderId,
+              senderNickname: target.senderId == me
+                  ? _store.users[me]?.nickname ?? 'Você'
+                  : _store.users[target.senderId]?.nickname ?? '',
+              content: target.content,
+              exists: true,
+            );
+    }
     final message = ChatMessage(
       id: 'm${DateTime.now().microsecondsSinceEpoch}',
       conversationId: conversationId,
@@ -785,6 +819,7 @@ class _FakeChatRepository implements ChatRepository {
       content: content,
       createdAt: DateTime.now(),
       mine: true,
+      replyTo: replyTo,
     );
     _store.chatMessagesByPair.putIfAbsent(conversationId, () => []).add(message);
     return message;
@@ -792,5 +827,8 @@ class _FakeChatRepository implements ChatRepository {
 
   @override
   Future<void> markRead(String conversationId) async {}
+
+  @override
+  void setTyping(String conversationId, bool typing) {}
 }
 

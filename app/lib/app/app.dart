@@ -30,6 +30,8 @@ class _MatrixAppState extends State<MatrixApp> {
     if (Services.isInitialized) {
       Services.instance.push.onNavigate = _onPushNavigate;
       Services.instance.push.onChatMessage = _onChatMessage;
+      Services.instance.push.onChatTyping = _onChatTyping;
+      Services.instance.push.onChatRead = _onChatRead;
     }
   }
 
@@ -37,9 +39,7 @@ class _MatrixAppState extends State<MatrixApp> {
   /// app state so an open DM / the conversations list updates live.
   /// Deduping happens by message id in the chat layer.
   void _onChatMessage(Map<String, dynamic> data) {
-    final state = _navigatorKey.currentContext == null
-        ? null
-        : AppStateScope.maybeOf(_navigatorKey.currentContext!);
+    final state = _state;
     if (state == null) return;
     final rawMessage = data['message'];
     if (rawMessage is! Map<String, dynamic>) return;
@@ -49,6 +49,35 @@ class _MatrixAppState extends State<MatrixApp> {
     } catch (_) {
       // Malformed chat payload: ignore (the list refreshes on focus anyway).
     }
+  }
+
+  /// A real-time typing signal arrived (peer started/stopped typing).
+  void _onChatTyping(Map<String, dynamic> data) {
+    final state = _state;
+    if (state == null) return;
+    final conversationId = data['conversationId'] as String? ?? '';
+    if (conversationId.isEmpty) return;
+    state.handleIncomingChatTyping(ChatTypingEvent(
+      conversationId: conversationId,
+      typing: (data['typing'] as bool?) ?? false,
+    ));
+  }
+
+  /// The peer read one of my messages in a conversation (realtime read
+  /// receipt for the "visto agora" hint).
+  void _onChatRead(Map<String, dynamic> data) {
+    final state = _state;
+    if (state == null) return;
+    final conversationId = data['conversationId'] as String? ?? '';
+    if (conversationId.isEmpty) return;
+    state.handleIncomingChatRead(ChatReadEvent(conversationId: conversationId));
+  }
+
+  /// Resolves the AppState from the navigator context whenever available.
+  AppState? get _state {
+    final context = _navigatorKey.currentContext;
+    if (context == null) return null;
+    return AppStateScope.maybeOf(context);
   }
 
   void _onPushNavigate(Map<String, dynamic> data) {

@@ -85,6 +85,15 @@ class AppState extends ChangeNotifier {
   final _chatIncoming = StreamController<ChatMessage>.broadcast();
   Stream<ChatMessage> get onChatIncoming => _chatIncoming.stream;
 
+  /// Real-time peer typing signal (started/stopped) for an open conversation.
+  final _chatTyping = StreamController<ChatTypingEvent>.broadcast();
+  Stream<ChatTypingEvent> get onChatTyping => _chatTyping.stream;
+
+  /// Emits when the PEER read one of my messages (lets my last bubble flip
+  /// "enviado" → "visto agora" live, no reload).
+  final _chatRead = StreamController<ChatReadEvent>.broadcast();
+  Stream<ChatReadEvent> get onChatRead => _chatRead.stream;
+
   /// Emits whenever a friendship relationship changes (request sent/cancelled,
   /// removed, accepted). Screens that render the live friends list subscribe
   /// so removal on a profile reflects immediately when they become visible.
@@ -908,15 +917,38 @@ class AppState extends ChangeNotifier {
 
   /// Sends a chat message and, on success, optimistically records it in the
   /// cached conversation's last-message slot (the server response is
-  /// authoritative and returned for the screen to append).
+  /// authoritative and returned for the screen to append). [replyToMessageId]
+  /// (optional) makes it a reply to an existing message of the conversation.
   Future<ChatMessage> sendChatMessage(
     String conversationId,
     String content, {
     ChatUser? otherUser,
+    String? replyToMessageId,
   }) async {
-    final message = await _chat.send(conversationId, content);
+    final message = await _chat.send(conversationId, content,
+        replyToMessageId: replyToMessageId);
     _applyChatMessage(message, otherUser: otherUser ?? _peerOf(conversationId));
     return message;
+  }
+
+  /// Signals the peer that the session user is (or stopped) typing. Ephemeral
+  /// and best-effort — the UI calls it from the composer's onChange.
+  void sendTyping(String conversationId, bool typing) {
+    _chat.setTyping(conversationId, typing);
+  }
+
+  /// A real-time `chat_typing` frame arrived → forward to open conversations.
+  void handleIncomingChatTyping(ChatTypingEvent event) {
+    if (_disposed) return;
+    if (!_chatTyping.isClosed) _chatTyping.add(event);
+  }
+
+  /// A real-time `chat_read` frame arrived → the peer read my messages. Flip
+  /// readAt on MY last sent message in that conversation (local cache +
+  /// open screens) so "enviado" → "visto agora" updates live.
+  void handleIncomingChatRead(ChatReadEvent event) {
+    if (_disposed) return;
+    if (!_chatRead.isClosed) _chatRead.add(event);
   }
 
   /// Marks a conversation as read by the session user and clears its unread
@@ -1038,9 +1070,24 @@ class AppState extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     _chatIncoming.close();
+    _chatTyping.close();
+    _chatRead.close();
     _friendsChanged.close();
     super.dispose();
   }
+}
+
+/// A realtime peer-typing signal for a conversation.
+class ChatTypingEvent {
+  const ChatTypingEvent({required this.conversationId, required this.typing});
+  final String conversationId;
+  final bool typing;
+}
+
+/// A realtime signal that the PEER read this conversation's messages.
+class ChatReadEvent {
+  const ChatReadEvent({required this.conversationId});
+  final String conversationId;
 }
 
 /// Immutable snapshot of a viewed profile: the viewed user, their posts

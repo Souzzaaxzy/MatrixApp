@@ -136,6 +136,195 @@ void main() {
       final field = tester.widget<TextField>(find.byType(TextField).last);
       expect(field.controller!.text, isEmpty);
     });
+
+    testWidgets('realtime typing shows "digitando..." below the nickname',
+        (tester) async {
+      final state = await seededChat(messages: const []);
+      await pumpMatrixApp(
+        tester,
+        ConversationScreen(
+          args: const ConversationRouteArgs(
+            conversationId: 'u0|u2',
+            otherUserId: 'u2',
+            otherNickname: 'joao',
+          ),
+        ),
+        state: state,
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('digitando...'), findsNothing);
+
+      // The peer (joao) starts typing (AnimatedSwitcher ~200ms to settle).
+      state.handleIncomingChatTyping(
+          const ChatTypingEvent(conversationId: 'u0|u2', typing: true));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.text('digitando...'), findsOneWidget);
+
+      // Peer stops → indicator disappears.
+      state.handleIncomingChatTyping(
+          const ChatTypingEvent(conversationId: 'u0|u2', typing: false));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.text('digitando...'), findsNothing);
+    });
+
+    testWidgets('typing auto-hides after the timeout even without a stop frame',
+        (tester) async {
+      final state = await seededChat(messages: const []);
+      await pumpMatrixApp(
+        tester,
+        ConversationScreen(
+          args: const ConversationRouteArgs(
+            conversationId: 'u0|u2',
+            otherUserId: 'u2',
+            otherNickname: 'joao',
+          ),
+        ),
+        state: state,
+      );
+      await tester.pumpAndSettle();
+      state.handleIncomingChatTyping(
+          const ChatTypingEvent(conversationId: 'u0|u2', typing: true));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.text('digitando...'), findsOneWidget);
+      // Advance past the 4s auto-clear (the peer never sent stop).
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.text('digitando...'), findsNothing);
+    });
+
+    testWidgets('watches realtime incoming messages and appends to the right',
+        (tester) async {
+      final state = await seededChat(messages: ['Oi!']); // m0 = mine
+      await pumpMatrixApp(
+        tester,
+        ConversationScreen(
+          args: const ConversationRouteArgs(
+            conversationId: 'u0|u2',
+            otherUserId: 'u2',
+            otherNickname: 'joao',
+          ),
+        ),
+        state: state,
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Oi!'), findsOneWidget);
+
+      // A realtime message from joao arrives → appears.
+      state.handleIncomingChatMessage(ChatMessage(
+        id: 'rx1',
+        conversationId: 'u0|u2',
+        senderId: 'u2',
+        content: 'não sei.',
+        createdAt: DateTime(2024, 1, 1, 22, 0),
+        mine: false,
+      ));
+      await tester.pump();
+      expect(find.text('não sei.'), findsOneWidget);
+    });
+
+    testWidgets('swiping a message activates the reply composer', (tester) async {
+      final state = await seededChat(messages: ['Olá!', 'Oi!']); // m0 mine, m1 theirs
+      await pumpMatrixApp(
+        tester,
+        ConversationScreen(
+          args: const ConversationRouteArgs(
+            conversationId: 'u0|u2',
+            otherUserId: 'u2',
+            otherNickname: 'joao',
+          ),
+        ),
+        state: state,
+      );
+      await tester.pumpAndSettle();
+
+      // The receiver's bubble "Oi!" is at index 1 (swipe → reply it).
+      final target = find.text('Oi!');
+      expect(target, findsOneWidget);
+      await tester.drag(target, const Offset(140, 0),
+          warnIfMissed: false);
+      await tester.pumpAndSettle();
+
+      // Reply composer opens with a preview of the swiped message.
+      expect(find.textContaining('Respondendo a mensagem'), findsOneWidget);
+      expect(find.textContaining('Oi!'), findsWidgets);
+
+      // Cancel the reply → preview disappears.
+      await tester.tap(find.byIcon(Icons.close_rounded));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Respondendo a mensagem'), findsNothing);
+    });
+
+    testWidgets('sending a reply persists the reply-to preview inside the bubble',
+        (tester) async {
+      final state = await seededChat(messages: ['Olá!', 'Oi!']); // m1 = theirs
+      await pumpMatrixApp(
+        tester,
+        ConversationScreen(
+          args: const ConversationRouteArgs(
+            conversationId: 'u0|u2',
+            otherUserId: 'u2',
+            otherNickname: 'joao',
+          ),
+        ),
+        state: state,
+      );
+      await tester.pumpAndSettle();
+
+      // Swipe the peer's message ("Oi!") to set it as the reply target.
+      await tester.drag(find.text('Oi!'), const Offset(140, 0), warnIfMissed: false);
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Respondendo a mensagem'), findsOneWidget);
+
+      // Send the reply.
+      await tester.enterText(find.byType(TextField).last, 'tudo ótimo!');
+      await tester.tap(find.byIcon(Icons.arrow_forward_rounded));
+      await tester.pump();
+      await tester.pump();
+
+      // The sent reply shows the quoted original (m1's content) above it.
+      expect(find.text('tudo ótimo!'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byType(CustomScrollView),
+          matching: find.textContaining('Oi!'),
+        ),
+        findsWidgets,
+      );
+    });
+
+    testWidgets('shows "enviado" inside my newest bubble and flips to '
+        '"visto agora" when read', (tester) async {
+      final state = await seededChat(messages: const []);
+      await pumpMatrixApp(
+        tester,
+        ConversationScreen(
+          args: const ConversationRouteArgs(
+            conversationId: 'u0|u2',
+            otherUserId: 'u2',
+            otherNickname: 'joao',
+          ),
+        ),
+        state: state,
+      );
+      await tester.pumpAndSettle();
+
+      // Send my message → it is the last, so "enviado" shows inside it.
+      await tester.enterText(find.byType(TextField).last, 'oi');
+      await tester.tap(find.byIcon(Icons.arrow_forward_rounded));
+      await tester.pump();
+      await tester.pump();
+      expect(find.text('enviado'), findsOneWidget);
+      expect(find.text('visto agora'), findsNothing);
+
+      // Peer read receipt arrives → flips to "visto agora".
+      state.handleIncomingChatRead(const ChatReadEvent(conversationId: 'u0|u2'));
+      await tester.pump();
+      expect(find.text('visto agora'), findsOneWidget);
+      expect(find.text('enviado'), findsNothing);
+    });
   });
 
   group('Profile navigation', () {

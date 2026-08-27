@@ -18,6 +18,16 @@ import '../../data/api_config.dart';
 import '../../models/conversation.dart';
 import 'chat_navigation.dart';
 
+/// How long the "digitando..." hint stays on screen without a new typing
+/// frame before it auto-clears (peer stopped or its app closed silently).
+const _typingTimeout = Duration(seconds: 4);
+
+/// Vertical offset the reply quote is capped at while swiping.
+const _replySwipeThreshold = 96.0;
+
+/// Minimum horizontal drag distance to activate reply selection.
+const _replyDragThreshold = 90.0;
+
 /// Private conversation screen — the single DM UI reached from every entry
 /// point (Chat search / friends / conversations list / profile "Mensagem").
 ///
@@ -50,9 +60,23 @@ class _ConversationScreenState extends State<ConversationScreen> {
   String? _error;
 
   StreamSubscription<ChatMessage>? _chatSub;
+  StreamSubscription<ChatTypingEvent>? _typingSub;
+  StreamSubscription<ChatReadEvent>? _readSub;
 
   /// Whether the newest message is pinned to the bottom (auto-follow new).
   bool _followBottom = true;
+
+  // ── "digitando..." (peer typing) ───────────────────────────
+  bool _peerTyping = false;
+  Timer? _typingAutoClear;
+
+  // ── Reply-to-message selection ─────────────────────────────
+  ChatMessage? _replyTarget;
+  int? _replyTargetIndex;
+
+  /// True after dispose — guards async callbacks (typing debounce) against
+  /// touching a destroyed state.
+  bool _disposeCalled = false;
 
   @override
   void initState() {
@@ -74,6 +98,10 @@ class _ConversationScreenState extends State<ConversationScreen> {
       _resolvedState = state;
       _chatSub?.cancel();
       _chatSub = state?.onChatIncoming.listen(_onRealtime);
+      _typingSub?.cancel();
+      _typingSub = state?.onChatTyping.listen(_onTyping);
+      _readSub?.cancel();
+      _readSub = state?.onChatRead.listen(_onReadReceipt);
     }
     if (!_loadRequested) {
       // Defer the load: _load notifies listeners synchronously.
@@ -87,7 +115,16 @@ class _ConversationScreenState extends State<ConversationScreen> {
 
   @override
   void dispose() {
+    _disposeCalled = true;
     _chatSub?.cancel();
+    _typingSub?.cancel();
+    _readSub?.cancel();
+    _typingAutoClear?.cancel();
+    _typingSendDebounce?.cancel();
+    if (_typingLastSent) {
+      final id = _conversationId;
+      if (id.isNotEmpty) _state?.sendTyping(id, false);
+    }
     _input.dispose();
     _scroll.dispose();
     super.dispose();
@@ -160,6 +197,9 @@ class _ConversationScreenState extends State<ConversationScreen> {
     final conversationId = _conversationId;
     if (conversationId.isEmpty) return;
 
+    // Grab the reply target BEFORE clearing state so the outgoing quote is
+    // attached to the right message.
+    final reply = _replyTarget;
     final controller = _input;
     setState(() => _sending = true);
     try {
@@ -167,10 +207,14 @@ class _ConversationScreenState extends State<ConversationScreen> {
         conversationId,
         text,
         otherUser: _conversation?.otherUser ?? widget.args.otherUser,
+        replyToMessageId: reply?.id,
       );
       if (!mounted) return;
       controller.clear();
-      setState(() {});
+      setState(() {
+        _replyTarget = null;
+        _replyTargetIndex = null;
+      });
       _appendMessage(message);
     } on ApiException catch (e) {
       if (!mounted) return;
@@ -198,6 +242,60 @@ class _ConversationScreenState extends State<ConversationScreen> {
     if (message.conversationId != _conversationId) return;
     if (message.senderId == _state?.currentUser?.id) return; // own send
     _appendMessage(message);
+  }
+
+  // ── Realtime "digitando..." ────────────────────────────────
+  void _onTyping(ChatTypingEvent event) {
+    if (!mounted) return;
+    if (event.conversationId != _conversationId) return;
+    _typingAutoClear?.cancel();
+    if (event.typing) {
+      setState(() => _peerTyping = true);
+      // Auto-clear if the peer stops sending frames (closed app, lost
+      // connection, stalled input) — never let it get stuck.
+      _typingAutoClear = Timer(_typingTimeout, () {
+        if (mounted) setState(() => _peerTyping = false);
+      });
+    } else {
+      setState(() => _peerTyping = false);
+    }
+  }
+
+  // ── Realtime read receipt ("visto agora") ──────────────────
+  void _onReadReceipt(ChatReadEvent event) {
+    if (!mounted) return;
+    if (event.conversationId != _conversationId) return;
+    // The peer read my messages → flip readAt on my LAST sent message.
+    bool changed = false;
+    final now = DateTime.now();
+    for (var i = _messages.length - 1; i >= 0 && !changed; i--) {
+      final m = _messages[i];
+      if (!m.mine) continue;
+      if (m.readAt == null) {
+        _messages[i] = m.copyWith(readAt: now);
+        changed = true;
+      }
+      break; // only the newest of my messages needs the hint
+    }
+    if (changed) setState(() {});
+  }
+
+  // ── Reply-to-message selection ─────────────────────────────
+  /// Activates the reply composer for [index] (a swipe crossed the
+  /// threshold).
+  void _startReply(int index) {
+    if (index < 0 || index >= _messages.length) return;
+    setState(() {
+      _replyTarget = _messages[index];
+      _replyTargetIndex = index;
+    });
+  }
+
+  void _cancelReply() {
+    setState(() {
+      _replyTarget = null;
+      _replyTargetIndex = null;
+    });
   }
 
   void _jumpToBottom() {
@@ -271,33 +369,106 @@ class _ConversationScreenState extends State<ConversationScreen> {
         ),
         title: GestureDetector(
           onTap: _openPeerProfile,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: AppDimensions.spaceSm),
-            child: NicknameRenderer(
-              other.nickname,
-              baseStyle: AppTextStyles.h3.copyWith(fontSize: 19),
-              background: AppColors.absoluteBlack,
-              nameColor: other.nameColor,
-              textAlign: TextAlign.center,
-              maxLines: 1,
-            ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              NicknameRenderer(
+                other.nickname,
+                baseStyle: AppTextStyles.h3.copyWith(fontSize: 19),
+                background: AppColors.absoluteBlack,
+                nameColor: other.nameColor,
+                textAlign: TextAlign.center,
+                maxLines: 1,
+              ),
+              // Realtime "digitando..." directly below the nickname (only in
+              // a live conversation with a peer). Centered.
+              AnimatedSwitcher(
+                duration: const Duration(milliseconds: 200),
+                transitionBuilder: (child, anim) => FadeTransition(
+                  opacity: anim,
+                  child: SizeTransition(
+                    sizeFactor: anim,
+                    axisAlignment: -1,
+                    child: child,
+                  ),
+                ),
+                child: _peerTyping && conversation != null
+                    ? const Padding(
+                        key: ValueKey('typing'),
+                        padding: EdgeInsets.only(top: 2),
+                        child: Text(
+                          'digitando...',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: AppColors.electricBlue,
+                            fontFamily: 'JetBrainsMono',
+                            fontStyle: FontStyle.italic,
+                          ),
+                        ),
+                      )
+                    : const SizedBox(
+                        key: ValueKey('idle'),
+                        width: 0,
+                        height: 0,
+                      ),
+              ),
+            ],
           ),
         ),
         titleTextStyle: AppTextStyles.h3.copyWith(fontSize: 19, color: AppColors.techWhite),
+        toolbarHeight: kToolbarHeight + (_peerTyping ? 18 : 0),
       ),
       body: SafeArea(
         child: Column(
           children: [
             Expanded(child: _buildThread(conversation, other)),
+            // Reply-to preview above the composer when a message is selected.
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 200),
+              transitionBuilder: (child, anim) => FadeTransition(
+                opacity: anim,
+                child: SizeTransition(sizeFactor: anim, axisAlignment: -1, child: child),
+              ),
+              child: _replyTarget != null
+                  ? _ReplyPreviewBar(
+                      key: ValueKey(_replyTarget!.id),
+                      target: _replyTarget!,
+                      onCancel: _cancelReply,
+                    )
+                  : const SizedBox.shrink(),
+            ),
             _Composer(
               controller: _input,
               sending: _sending,
               enabled: conversation != null,
+              onChanged: _onInputChanged,
               onSend: _send,
             ),
           ],
         ),
       ),
+    );
+  }
+
+  /// Typing debounce-signalling from the composer: any change → start typing;
+  /// after 1.5s of no input the peer's indicator stops.
+  Timer? _typingSendDebounce;
+  bool _typingLastSent = false;
+
+  void _onInputChanged(String _) {
+    final id = _conversationId;
+    if (id.isEmpty || _disposeCalled) return;
+    _typingSendDebounce?.cancel();
+    if (!_typingLastSent) {
+      _typingLastSent = true;
+      _state?.sendTyping(id, true);
+    }
+    _typingSendDebounce = Timer(
+      const Duration(milliseconds: 1400),
+      () {
+        _typingLastSent = false;
+        if (mounted && !_disposeCalled) _state?.sendTyping(id, false);
+      },
     );
   }
 
@@ -345,13 +516,24 @@ class _ConversationScreenState extends State<ConversationScreen> {
     // Chronological messages grouped by day separators.
     final items = <Widget>[];
     DateTime? lastDay;
-    for (final m in _messages) {
+    for (var i = 0; i < _messages.length; i++) {
+      final m = _messages[i];
       final day = DateTime(m.createdAt.year, m.createdAt.month, m.createdAt.day);
       if (lastDay == null || lastDay != day) {
         lastDay = day;
         items.add(_DaySeparator(label: chatDayLabel(m.createdAt)));
       }
-      items.add(_MessageBubble(message: m));
+      // Whether this is the newest message OF THE WHOLE LIST (only that one
+      // shows the "enviado"/"visto agora" hint). Slots ease updates when a
+      // message shifts position.
+      final isLast = i == _messages.length - 1;
+      items.add(_MessageBubble(
+        message: m,
+        index: i,
+        isLast: isLast,
+        onStartReply: _startReply,
+        replySelected: _replyTargetIndex == i,
+      ));
     }
     return Listener(
       onPointerMove: (_) {},
@@ -437,19 +619,45 @@ class _DaySeparator extends StatelessWidget {
   }
 }
 
-/// A single message bubble. Sent messages align right; received align left.
-/// Each bubble is independent (own rounded corners, own timestamp).
+/// A single message bubble. Sent messages align right; received align left —
+/// ALWAYS driven by `message.mine` (the server's real sender), never by a
+/// local "who sent last" heuristic.
+///
+/// Features:
+///  * Reply quote rendered inside the bubble when the message answers one.
+///  * The "enviado"/"visto agora" status only appears INSIDE the newest
+///    message the SESSION user sent (no symbols, no ticks).
+///  * Swipe-left→right on the bubble activates reply selection with a smooth
+///    followed heal-drag (bounded so the bubble never leaves the screen).
 class _MessageBubble extends StatelessWidget {
-  const _MessageBubble({required this.message});
+  const _MessageBubble({
+    required this.message,
+    required this.index,
+    required this.isLast,
+    required this.onStartReply,
+    this.replySelected = false,
+  });
+
   final ChatMessage message;
+  final int index;
+  final bool isLast;
+  final void Function(int index) onStartReply;
+  final bool replySelected;
+
+  static const _maxWidth = 300.0;
 
   @override
   Widget build(BuildContext context) {
     final mine = message.mine;
     final align = mine ? CrossAxisAlignment.end : CrossAxisAlignment.start;
+
+    // "enviado"/"visto agora" only on the SESSION user's newest message.
+    final showStatus = mine && isLast;
+    final statusText = message.readAt != null ? 'visto agora' : 'enviado';
+
     final bubble = Container(
       margin: const EdgeInsets.symmetric(vertical: 3),
-      constraints: const BoxConstraints(maxWidth: 300),
+      constraints: const BoxConstraints(maxWidth: _maxWidth),
       padding: const EdgeInsets.symmetric(
         horizontal: AppDimensions.spaceMd,
         vertical: AppDimensions.spaceSm,
@@ -467,36 +675,202 @@ class _MessageBubble extends StatelessWidget {
             : const [],
       ),
       child: Column(
-        crossAxisAlignment: mine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+        crossAxisAlignment:
+            mine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
+          // Reply quote (visual only — both the message content and the
+          // original stay untouched; the preview is resolved server-side).
+          if (message.replyTo != null)
+            Container(
+              margin: const EdgeInsets.only(bottom: 6),
+              padding: const EdgeInsets.fromLTRB(10, 6, 10, 6),
+              decoration: BoxDecoration(
+                color: AppColors.absoluteBlack.withValues(alpha: 0.35),
+                borderRadius: BorderRadius.circular(AppDimensions.radiusSm),
+                border: Border(
+                  left: BorderSide(color: AppColors.electricBlue, width: 2),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    message.replyTo!.exists
+                        ? message.replyTo!.senderNickname
+                        : 'Mensagem apagada',
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: AppColors.electricBlue,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 1),
+                  Text(
+                    message.replyTo!.exists
+                        ? message.replyTo!.content
+                        : '(a mensagem original foi apagada)',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: mine
+                          ? AppColors.techWhite.withValues(alpha: 0.85)
+                          : AppColors.holographicBlue,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           Text(
             message.content,
-            style: AppTextStyles.body.copyWith(
-              color: mine ? AppColors.techWhite : AppColors.techWhite,
-            ),
+            style: AppTextStyles.body.copyWith(color: AppColors.techWhite),
           ),
           const SizedBox(height: 2),
-          Text(
-            chatClock(message.createdAt),
-            style: TextStyle(
-              fontSize: 10,
-              color: mine
-                  ? AppColors.techWhite.withValues(alpha: 0.7)
-                  : AppColors.holographicBlue,
-              fontFamily: 'JetBrainsMono',
-            ),
+          // Status + time. Status only on my newest message; time always.
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              if (showStatus) ...[
+                Text(statusText, style: _statusStyle(mine)),
+                const SizedBox(width: 6),
+              ],
+              Text(
+                chatClock(message.createdAt),
+                style: _clockStyle(mine),
+              ),
+            ],
           ),
         ],
       ),
     );
 
-    return Align(
-      alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
-      child: Column(
-        crossAxisAlignment: align,
-        mainAxisSize: MainAxisSize.min,
-        children: [bubble],
+    return _ReplySwipe(
+      message: message,
+      index: index,
+      mine: mine,
+      align: align,
+      bubble: bubble,
+      onStartReply: onStartReply,
+      replySelected: replySelected,
+    );
+  }
+
+  TextStyle _statusStyle(bool mine) => TextStyle(
+        fontSize: 10,
+        color: mine
+            ? AppColors.techWhite.withValues(alpha: 0.75)
+            : AppColors.holographicBlue,
+        fontFamily: 'JetBrainsMono',
+        fontWeight: FontWeight.w500,
+      );
+
+  TextStyle _clockStyle(bool mine) => TextStyle(
+        fontSize: 10,
+        color: mine
+            ? AppColors.techWhite.withValues(alpha: 0.7)
+            : AppColors.holographicBlue,
+        fontFamily: 'JetBrainsMono',
+      );
+}
+
+/// Wraps a bubble with the left→right swipe-to-reply gesture. Each bubble
+/// carries its OWN drag state (StatefulWidget) so swiping one never affects
+/// its siblings. During the drag the bubble follows the finger (capped at
+/// [_replySwipeThreshold], so it can never leave the screen); when the drag
+/// releases past the threshold the message is selected for reply, otherwise
+/// it snaps back with a short ease-out animation.
+class _ReplySwipe extends StatefulWidget {
+  const _ReplySwipe({
+    required this.message,
+    required this.index,
+    required this.mine,
+    required this.align,
+    required this.bubble,
+    required this.onStartReply,
+    this.replySelected = false,
+  });
+
+  final ChatMessage message;
+  final int index;
+  final bool mine;
+  final CrossAxisAlignment align;
+  final Widget bubble;
+  final void Function(int index) onStartReply;
+  final bool replySelected;
+
+  @override
+  State<_ReplySwipe> createState() => _ReplySwipeState();
+}
+
+class _ReplySwipeState extends State<_ReplySwipe> {
+  /// Current horizontal displacement (0 when idle/selected).
+  double _dx = 0;
+
+  bool get _selected => widget.replySelected;
+
+  @override
+  void didUpdateWidget(covariant _ReplySwipe old) {
+    super.didUpdateWidget(old);
+    // When the parent marks this message as the reply target, settle at the
+    // pinned offset; when it deselects, snap back.
+    if (widget.replySelected != old.replySelected) {
+      _dx = widget.replySelected ? _replySwipeThreshold : 0;
+    }
+  }
+
+  void _endDragAndMaybeSelect() {
+    if (_dx >= _replyDragThreshold) {
+      widget.onStartReply(widget.index);
+    } else {
+      setState(() => _dx = 0); // snap back
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final mine = widget.mine;
+    return GestureDetector(
+      onHorizontalDragUpdate: (details) {
+        if (_selected) return; // already replying another message
+        setState(() {
+          _dx = (_dx + details.delta.dx).clamp(0.0, _replySwipeThreshold);
+        });
+      },
+      onHorizontalDragEnd: (_) => _endDragAndMaybeSelect(),
+      onHorizontalDragCancel: () => setState(() => _dx = 0),
+      child: AnimatedContainer(
+        duration: _selected
+            ? Duration.zero
+            : const Duration(milliseconds: 160),
+        curve: Curves.easeOut,
+        transform: Matrix4.translationValues(_dx, 0, 0),
+        alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
+        child: Column(
+          crossAxisAlignment: widget.align,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                // Reply affordance that lights up as the swipe approaches.
+                AnimatedOpacity(
+                  opacity: _selected || _dx > 8 ? 0.9 : 0,
+                  duration: const Duration(milliseconds: 120),
+                  child: Icon(
+                    Icons.reply_rounded,
+                    color: AppColors.electricBlue,
+                    size: 18,
+                  ),
+                ),
+                widget.bubble,
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -508,12 +882,14 @@ class _Composer extends StatefulWidget {
     required this.controller,
     required this.sending,
     required this.enabled,
+    required this.onChanged,
     required this.onSend,
   });
 
   final TextEditingController controller;
   final bool sending;
   final bool enabled;
+  final ValueChanged<String> onChanged;
   final VoidCallback onSend;
 
   @override
@@ -552,7 +928,10 @@ class _ComposerState extends State<_Composer> {
                   maxLines: 4,
                   textCapitalization: TextCapitalization.sentences,
                   textInputAction: TextInputAction.newline,
-                  onChanged: (v) => setState(() {}),
+                  onChanged: (v) {
+                    setState(() {});
+                    widget.onChanged(v);
+                  },
                 ),
               ),
               const SizedBox(width: AppDimensions.spaceSm),
@@ -611,6 +990,80 @@ class _SendButton extends StatelessWidget {
                 color: canSend ? AppColors.techWhite : AppColors.holographicBlue,
                 size: 22,
               ),
+      ),
+    );
+  }
+}
+
+/// The "Respondendo a …" bar shown above the composer while a reply is
+/// selected: the original message's author + truncated preview + a ✕ close.
+class _ReplyPreviewBar extends StatelessWidget {
+  const _ReplyPreviewBar({
+    super.key,
+    required this.target,
+    required this.onCancel,
+  });
+
+  final ChatMessage target;
+  final VoidCallback onCancel;
+
+  @override
+  Widget build(BuildContext context) {
+    // The swiped message is itself the original being replied to — show its
+    // own preview (the server separately renders the quote inside bubble).
+    final preview = target.content.isNotEmpty ? target.content : 'mensagem';
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.navBarBackground,
+        border: Border(
+          top: BorderSide(color: AppColors.electricBlue, width: 1),
+        ),
+      ),
+      padding: const EdgeInsets.fromLTRB(
+        AppDimensions.spaceLg,
+        AppDimensions.spaceSm,
+        AppDimensions.spaceSm,
+        AppDimensions.spaceSm,
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.reply_rounded, color: AppColors.electricBlue, size: 18),
+          const SizedBox(width: AppDimensions.spaceSm),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Respondendo a mensagem',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: AppColors.electricBlue,
+                    fontWeight: FontWeight.w800,
+                    fontFamily: 'JetBrainsMono',
+                  ),
+                ),
+                const SizedBox(height: 1),
+                Text(
+                  '“$preview”',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTextStyles.caption.copyWith(
+                    color: AppColors.holographicBlue,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            icon: Icon(Icons.close_rounded,
+                color: AppColors.holographicBlue, size: 20),
+            onPressed: onCancel,
+            tooltip: 'Cancelar resposta',
+          ),
+        ],
       ),
     );
   }

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:matrix_app/app/theme/app_colors.dart';
 import 'package:matrix_app/core/services/app_state.dart';
 import 'package:matrix_app/core/widgets/user_avatar.dart';
 import 'package:matrix_app/features/feed/comments_sheet.dart';

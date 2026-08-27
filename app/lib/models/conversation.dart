@@ -94,6 +94,8 @@ class ChatMessage {
     required this.content,
     required this.createdAt,
     required this.mine,
+    this.readAt,
+    this.replyTo,
   });
 
   final String id;
@@ -102,4 +104,45 @@ class ChatMessage {
   final String content;
   final DateTime createdAt;
   final bool mine;
+
+  /// When the RECIPIENT of this message read it (drives "enviado" → "visto
+  /// agora" inside the sender's last bubble). Null while still unread.
+  final DateTime? readAt;
+
+  /// The original message this one answers (server-resolved preview). Null
+  /// when not a reply. [ReplyInfo.exists] is false when the original was
+  /// deleted (renders a graceful placeholder instead of breaking).
+  final ReplyInfo? replyTo;
+
+  ChatMessage copyWith({DateTime? readAt, ReplyInfo? replyTo}) => ChatMessage(
+        id: id,
+        conversationId: conversationId,
+        senderId: senderId,
+        content: content,
+        createdAt: createdAt,
+        mine: mine,
+        readAt: readAt ?? this.readAt,
+        replyTo: replyTo ?? this.replyTo,
+      );
+}
+
+/// Server-resolved preview of the original message a reply points at. Only
+/// the preview is transmitted — never a duplicate of the original row.
+class ReplyInfo {
+  const ReplyInfo({
+    required this.id,
+    required this.senderId,
+    required this.senderNickname,
+    required this.content,
+    required this.exists,
+  });
+
+  final String id;
+  final String senderId;
+  final String senderNickname;
+  final String content;
+
+  /// False when the original message was deleted (still renders a
+  /// "mensagem apagada" placeholder rather than breaking the view).
+  final bool exists;
 }

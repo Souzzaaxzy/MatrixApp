@@ -517,7 +517,9 @@ class ConversationLastMessageDto {
       );
 }
 
-/// A single private chat message.
+/// A single private chat message. Now carries the read state (drives the
+/// "enviado" → "visto agora" hint) and the reply reference (preview of the
+/// original message, resolved by the server).
 class ChatMessageDto {
   final String id;
   final String conversationId;
@@ -525,6 +527,8 @@ class ChatMessageDto {
   final String content;
   final DateTime createdAt;
   final bool mine;
+  final DateTime? readAt;
+  final ReplyInfoDto? replyTo;
 
   const ChatMessageDto({
     required this.id,
@@ -533,6 +537,8 @@ class ChatMessageDto {
     required this.content,
     required this.createdAt,
     required this.mine,
+    this.readAt,
+    this.replyTo,
   });
 
   ChatMessage toModel() => ChatMessage(
@@ -542,15 +548,59 @@ class ChatMessageDto {
         content: content,
         createdAt: createdAt,
         mine: mine,
+        readAt: readAt,
+        replyTo: replyTo?.toModel(),
       );
 
-  factory ChatMessageDto.fromJson(Map<String, dynamic> json) => ChatMessageDto(
-        id: json['id'] as String,
-        conversationId: json['conversationId'] as String,
-        senderId: json['senderId'] as String,
-        content: json['content'] as String,
-        createdAt: DateTime.parse(json['createdAt'] as String),
-        mine: (json['mine'] as bool?) ?? false,
+  factory ChatMessageDto.fromJson(Map<String, dynamic> json) {
+    final raw = json['readAt'];
+    final replyRaw = json['replyTo'];
+    return ChatMessageDto(
+      id: json['id'] as String,
+      conversationId: json['conversationId'] as String,
+      senderId: json['senderId'] as String,
+      content: json['content'] as String,
+      createdAt: DateTime.parse(json['createdAt'] as String),
+      mine: (json['mine'] as bool?) ?? false,
+      readAt: raw is String ? DateTime.tryParse(raw) : null,
+      replyTo: replyRaw is Map<String, dynamic>
+          ? ReplyInfoDto.fromJson(replyRaw)
+          : null,
+    );
+  }
+}
+
+/// Server-resolved preview of the original message a reply answers. Only the
+/// preview rides the wire — never a duplicate of the full original.
+class ReplyInfoDto {
+  final String id;
+  final String senderId;
+  final String senderNickname;
+  final String content;
+  final bool exists;
+
+  const ReplyInfoDto({
+    required this.id,
+    required this.senderId,
+    required this.senderNickname,
+    required this.content,
+    required this.exists,
+  });
+
+  ReplyInfo toModel() => ReplyInfo(
+        id: id,
+        senderId: senderId,
+        senderNickname: senderNickname,
+        content: content,
+        exists: exists,
+      );
+
+  factory ReplyInfoDto.fromJson(Map<String, dynamic> json) => ReplyInfoDto(
+        id: json['id'] as String? ?? '',
+        senderId: json['senderId'] as String? ?? '',
+        senderNickname: json['senderNickname'] as String? ?? '',
+        content: json['content'] as String? ?? '',
+        exists: (json['exists'] as bool?) ?? false,
       );
 }
 

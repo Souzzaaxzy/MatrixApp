@@ -412,11 +412,21 @@ class ChatRepository {
   }
 
   /// Sends a chat message. Returns the persisted message (auth-derived
-  /// sender). Throws [ApiException] with a friendly message on rejection.
-  Future<ChatMessage> send(String conversationId, String content) async {
+  /// sender). [replyToMessageId] is optional: when set, the message is a
+  /// reply to that existing message of the same conversation (only the
+  /// reference is stored server-side). Throws [ApiException] on rejection.
+  Future<ChatMessage> send(
+    String conversationId,
+    String content, {
+    String? replyToMessageId,
+  }) async {
     final json = await _api.post<Map<String, dynamic>>(
       '/api/conversations/$conversationId/messages',
-      data: {'content': content},
+      data: {
+        'content': content,
+        if (replyToMessageId != null && replyToMessageId.isNotEmpty)
+          'replyToMessageId': replyToMessageId,
+      },
     );
     return ChatMessageDto.fromJson(json['message'] as Map<String, dynamic>)
         .toModel();
@@ -425,6 +435,16 @@ class ChatRepository {
   /// Marks all messages FROM THE OTHER SIDE as read (clears the unread badge).
   Future<void> markRead(String conversationId) async {
     await _api.post('/api/conversations/$conversationId/read');
+  }
+
+  /// Signals the session user's typing state to the peer (ephemeral realtime
+  /// frame — nothing persists server-side). Best-effort: failures are silent.
+  void setTyping(String conversationId, bool typing) {
+    // Fire-and-forget: typing state is transient and non-critical.
+    _api
+        .post<void>('/api/conversations/$conversationId/typing',
+            data: {'typing': typing})
+        .catchError((_) {});
   }
 }
 
