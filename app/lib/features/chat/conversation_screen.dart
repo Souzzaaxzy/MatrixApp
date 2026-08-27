@@ -542,9 +542,9 @@ class _ConversationScreenState extends State<ConversationScreen> {
                 duration: const Duration(milliseconds: 200),
                 transitionBuilder: (child, anim) => FadeTransition(
                   opacity: anim,
-                  child: SizeTransition(
-                    sizeFactor: anim,
-                    axisAlignment: -1,
+                  child: SlideTransition(
+                    position: Tween(begin: const Offset(0, -0.05), end: Offset.zero)
+                        .animate(anim),
                     child: child,
                   ),
                 ),
@@ -583,7 +583,11 @@ class _ConversationScreenState extends State<ConversationScreen> {
               duration: const Duration(milliseconds: 200),
               transitionBuilder: (child, anim) => FadeTransition(
                 opacity: anim,
-                child: SizeTransition(sizeFactor: anim, axisAlignment: -1, child: child),
+                child: SlideTransition(
+                  position: Tween(begin: const Offset(0, 0.05), end: Offset.zero)
+                      .animate(anim),
+                  child: child,
+                ),
               ),
               child: _replyTarget != null
                   ? _ReplyPreviewBar(
