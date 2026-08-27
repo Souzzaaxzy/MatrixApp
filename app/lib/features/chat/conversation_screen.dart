@@ -1268,28 +1268,31 @@ class _MessageActionMenu extends StatelessWidget {
             ),
           ],
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _ActionItem(
-              icon: Icons.reply_rounded,
-              label: 'Responder',
-              onTap: () => Navigator.of(context).pop(_MessageAction.reply),
-            ),
-            _ActionItem(
-              icon: Icons.remove_circle_outline_rounded,
-              iconColor: AppColors.holographicBlue,
-              label: 'Excluir',
-              hint: 'só para mim',
-              onTap: () => Navigator.of(context).pop(_MessageAction.deleteForMe),
-            ),
-            _ActionItem(
-              icon: Icons.delete_forever_rounded,
-              iconColor: AppColors.error,
-              label: 'Excluir para todos',
-              onTap: () => Navigator.of(context).pop(_MessageAction.deleteForEveryone),
-            ),
-          ],
+        child: Material(
+          color: Colors.transparent,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _ActionItem(
+                icon: Icons.reply_rounded,
+                label: 'Responder',
+                onTap: () => Navigator.of(context).pop(_MessageAction.reply),
+              ),
+              _ActionItem(
+                icon: Icons.remove_circle_outline_rounded,
+                iconColor: AppColors.holographicBlue,
+                label: 'Excluir',
+                hint: 'só para mim',
+                onTap: () => Navigator.of(context).pop(_MessageAction.deleteForMe),
+              ),
+              _ActionItem(
+                icon: Icons.delete_forever_rounded,
+                iconColor: AppColors.error,
+                label: 'Excluir para todos',
+                onTap: () => Navigator.of(context).pop(_MessageAction.deleteForEveryone),
+              ),
+            ],
+          ),
         ),
       ),
     );
