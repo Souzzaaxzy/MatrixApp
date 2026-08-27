@@ -35,6 +35,8 @@ class FakeRepositories extends Repositories {
   factory FakeRepositories({
     bool failLikes = false,
     Map<String, List<Comment>> seedComments = const {},
+    Map<String, List<Comment>> seedReplies = const {},
+    Set<String> seedLikedCommentIds = const {},
     List<MatrixNotification> seedNotifications = const [],
     Map<String, CosmeticItem> seedEquippedCosmetics = const {},
     List<CosmeticItem> seedCatalog = const [],
@@ -43,6 +45,10 @@ class FakeRepositories extends Repositories {
     seedComments.forEach((postId, comments) {
       store.commentsByPost[postId] = List.of(comments);
     });
+    seedReplies.forEach((parentId, replies) {
+      store.repliesByParent[parentId] = List.of(replies);
+    });
+    store.likedCommentIds.addAll(seedLikedCommentIds);
     store.notifications.addAll(seedNotifications);
     store.equippedCosmetics.addAll(seedEquippedCosmetics);
     store.catalog.addAll(seedCatalog);
@@ -117,6 +123,9 @@ class FakeStore {
     // Authoritative like counts, independent of AppState's optimistic writes.
     likeCountByPost = {'p1': 5};
     commentsByPost = <String, List<Comment>>{};
+    repliesByParent = <String, List<Comment>>{};
+    likedCommentIds = <String>{};
+    commentLikeCount = <String, int>{};
     notifications = <MatrixNotification>[];
     friendRequests = <String, FriendRequest>{};
     friendships = <String>{};
@@ -129,6 +138,9 @@ class FakeStore {
   late Set<String> likedPostIds;
   late Map<String, int> likeCountByPost;
   late Map<String, List<Comment>> commentsByPost;
+  late Map<String, List<Comment>> repliesByParent;
+  late Set<String> likedCommentIds;
+  late Map<String, int> commentLikeCount;
 
   /// Server-side persistent notifications (recipient = current user).
   late final List<MatrixNotification> notifications;
@@ -340,9 +352,14 @@ class _FakeCommentRepository implements CommentRepository {
   }
 
   @override
+  Future<List<Comment>> listReplies(String parentCommentId) async {
+    return List.of(_store.repliesByParent[parentCommentId] ?? const []);
+  }
+
+  @override
   Future<Comment> create({required String postId, required String text}) async {
     final comment = Comment(
-      id: 'c${DateTime.now().millisecondsSinceEpoch}',
+      id: 'c${DateTime.now().microsecondsSinceEpoch}',
       authorId: _store.currentUser.id,
       authorNickname: _store.currentUser.nickname,
       authorAvatarUrl: _store.currentUser.avatarUrl,
@@ -354,10 +371,46 @@ class _FakeCommentRepository implements CommentRepository {
   }
 
   @override
+  Future<Comment> reply({
+    required String parentCommentId,
+    required String text,
+  }) async {
+    final reply = Comment(
+      id: 'r${DateTime.now().microsecondsSinceEpoch}',
+      authorId: _store.currentUser.id,
+      authorNickname: _store.currentUser.nickname,
+      authorAvatarUrl: _store.currentUser.avatarUrl,
+      text: text,
+      createdAt: DateTime.now(),
+      parentCommentId: parentCommentId,
+    );
+    _store.repliesByParent.putIfAbsent(parentCommentId, () => []).add(reply);
+    return reply;
+  }
+
+  @override
   Future<void> delete(String commentId) async {
     for (final list in _store.commentsByPost.values) {
       list.removeWhere((c) => c.id == commentId);
     }
+    for (final list in _store.repliesByParent.values) {
+      list.removeWhere((c) => c.id == commentId);
+    }
+  }
+
+  @override
+  Future<({bool liked, int likeCount})> toggleLike(String commentId,
+      {required bool liked}) async {
+    final nowLiked = liked;
+    if (nowLiked) {
+      _store.likedCommentIds.add(commentId);
+    } else {
+      _store.likedCommentIds.remove(commentId);
+    }
+    final base = _store.commentLikeCount[commentId] ?? 0;
+    final count = (base + (nowLiked ? 1 : -1)).clamp(0, 1 << 31);
+    _store.commentLikeCount[commentId] = count;
+    return (liked: nowLiked, likeCount: count);
   }
 }
 

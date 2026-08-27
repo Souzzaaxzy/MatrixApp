@@ -155,7 +155,7 @@ class LikeRepository {
   }
 }
 
-/// Comments repository — list, create, delete.
+/// Comments repository — list, create, reply, delete and like.
 class CommentRepository {
   CommentRepository(this._api);
 
@@ -167,6 +167,15 @@ class CommentRepository {
     return list.map(CommentDto.fromJson).map((d) => d.toModel()).toList();
   }
 
+  /// Replies of a top-level comment (oldest first).
+  Future<List<Comment>> listReplies(String parentCommentId) async {
+    final json = await _api.get<Map<String, dynamic>>(
+      '/api/comments/$parentCommentId/replies',
+    );
+    final list = (json['replies'] as List).cast<Map<String, dynamic>>();
+    return list.map(CommentDto.fromJson).map((d) => d.toModel()).toList();
+  }
+
   Future<Comment> create({required String postId, required String text}) async {
     final json = await _api.post<Map<String, dynamic>>(
       '/api/posts/$postId/comments',
@@ -175,8 +184,34 @@ class CommentRepository {
     return CommentDto.fromJson(json).toModel();
   }
 
+  /// Creates a reply under [parentCommentId]. The server associates it with
+  /// that comment so it renders grouped under it.
+  Future<Comment> reply({
+    required String parentCommentId,
+    required String text,
+  }) async {
+    final json = await _api.post<Map<String, dynamic>>(
+      '/api/comments/$parentCommentId/replies',
+      data: {'text': text},
+    );
+    return CommentDto.fromJson(json).toModel();
+  }
+
   Future<void> delete(String commentId) async {
     await _api.delete('/api/comments/$commentId');
+  }
+
+  /// Toggles the session user's like on a comment/reply. Returns the
+  /// updated {liked, likeCount} from the server (single source of truth).
+  Future<({bool liked, int likeCount})> toggleLike(String commentId,
+      {required bool liked}) async {
+    final json = liked
+        ? await _api.post<Map<String, dynamic>>('/api/comments/$commentId/like')
+        : await _api.delete<Map<String, dynamic>>('/api/comments/$commentId/like');
+    return (
+      liked: json['liked'] as bool,
+      likeCount: (json['likeCount'] as num).toInt(),
+    );
   }
 }
 

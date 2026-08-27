@@ -138,6 +138,9 @@ class CommentDto {
   final String? authorNicknameColor;
   final String? authorFrameId;
   final String? authorFrameAsset;
+  final String? parentCommentId;
+  final int likeCount;
+  final bool liked;
 
   const CommentDto({
     required this.id,
@@ -149,6 +152,9 @@ class CommentDto {
     this.authorNicknameColor,
     this.authorFrameId,
     this.authorFrameAsset,
+    this.parentCommentId,
+    this.likeCount = 0,
+    this.liked = false,
   });
 
   Comment toModel() => Comment(
@@ -161,6 +167,9 @@ class CommentDto {
         authorFrameAsset: authorFrameAsset,
         text: text,
         createdAt: createdAt,
+        parentCommentId: parentCommentId,
+        likeCount: likeCount,
+        liked: liked,
       );
 
   factory CommentDto.fromJson(Map<String, dynamic> json) {
@@ -175,6 +184,9 @@ class CommentDto {
       authorNicknameColor: author['nameColor'] as String?,
       authorFrameId: author['frameId'] as String?,
       authorFrameAsset: author['frameAsset'] as String?,
+      parentCommentId: json['parentCommentId'] as String?,
+      likeCount: (json['likeCount'] as num?)?.toInt() ?? 0,
+      liked: (json['liked'] as bool?) ?? false,
     );
   }
 }

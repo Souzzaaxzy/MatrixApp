@@ -345,6 +345,45 @@ class AppState extends ChangeNotifier {
     return comment;
   }
 
+  /// Loads the replies of a top-level comment.
+  Future<List<Comment>> loadReplies(String parentCommentId) async {
+    return _comments.listReplies(parentCommentId);
+  }
+
+  /// Creates a reply under [parentCommentId] and returns it. Bumps the
+  /// post's comment count like a regular comment.
+  Future<Comment> addReply({
+    required String parentCommentId,
+    required String postId,
+    required String text,
+  }) async {
+    final reply = await _comments.reply(
+      parentCommentId: parentCommentId,
+      text: text.trim(),
+    );
+    final post = _findPost(postId);
+    if (post != null) {
+      post.commentCount += 1;
+      notifyListeners();
+    }
+    return reply;
+  }
+
+  /// Toggles a like on a comment/reply. The server is the source of truth;
+  /// on failure we simply don't change anything (the UI optimistically
+  /// reflects the change and reconciles with the confirmed state).
+  Future<({bool liked, int likeCount})?> toggleCommentLike(
+    String commentId, {
+    required bool liked,
+  }) async {
+    try {
+      final result = await _comments.toggleLike(commentId, liked: liked);
+      return result;
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// Creates a post remotely and prepends it to the local feed (and to the
   /// profile grid when the viewed profile is the author's own).
   Future<String> createPost({required String text, String? imageUrl}) async {

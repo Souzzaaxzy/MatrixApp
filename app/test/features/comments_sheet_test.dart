@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:matrix_app/app/theme/app_colors.dart';
 import 'package:matrix_app/core/services/app_state.dart';
 import 'package:matrix_app/core/widgets/user_avatar.dart';
 import 'package:matrix_app/features/feed/comments_sheet.dart';
@@ -110,5 +111,114 @@ void main() {
     final sendRect = tester.getRect(sendIcon);
     final screenSize = tester.view.physicalSize / tester.view.devicePixelRatio;
     expect(sendRect.bottom, lessThanOrEqualTo(screenSize.height));
+  });
+
+  testWidgets('comment sheet background is fully opaque', (tester) async {
+    final state = await stateWithComments();
+    final post = state.posts.firstWhere((p) => p.id == 'p1');
+
+    await pumpMatrixApp(tester, Scaffold(body: CommentsSheet(post: post)), state: state);
+    await tester.pumpAndSettle();
+
+    // The sheet's own background is a solid palette color (no transparency),
+    // so the feed behind can never show through.
+    final sheetContainer = tester.widget<Material>(find.byType(Material).first);
+    expect(sheetContainer.color, isNot(Colors.transparent));
+  });
+
+  testWidgets('comment like toggles the heart and persists', (tester) async {
+    final state = await stateWithComments();
+    final post = state.posts.firstWhere((p) => p.id == 'p1');
+
+    await pumpMatrixApp(tester, Scaffold(body: CommentsSheet(post: post)), state: state);
+    await tester.pumpAndSettle();
+
+    // sc2 (joao) starts unliked → outline heart.
+    final outline = find.byIcon(Icons.favorite_border_rounded);
+    expect(outline, findsWidgets);
+
+    // Tap the heart on joao's comment.
+    await tester.tap(outline.first);
+    await tester.pumpAndSettle();
+
+    // Now a filled heart exists.
+    expect(find.byIcon(Icons.favorite_rounded), findsWidgets);
+  });
+
+  testWidgets('replying creates a reply under the correct comment',
+      (tester) async {
+    final state = await stateWithComments();
+    final post = state.posts.firstWhere((p) => p.id == 'p1');
+
+    await pumpMatrixApp(tester, Scaffold(body: CommentsSheet(post: post)), state: state);
+    await tester.pumpAndSettle();
+
+    // Tap "Responder" on joao's comment (first matching).
+    await tester.tap(find.text('Responder').first);
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byType(TextField), 'Adorei também!');
+    await tester.tap(find.byIcon(Icons.send_rounded));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Adorei também!'), findsOneWidget);
+  });
+
+  testWidgets('shows only 5 replies initially and expands via mais comentários',
+      (tester) async {
+    final replies = List.generate(7, (i) => Comment(
+      id: 'r$i',
+      authorId: 'u2',
+      authorNickname: 'maria',
+      text: 'Resposta $i',
+      createdAt: DateTime(2024, 1, 1, 10, i),
+      parentCommentId: 'sc1',
+    ));
+    final state = AppState(
+      repositories: FakeRepositories(
+        seedComments: {
+          'p1': [
+            Comment(
+              id: 'sc1',
+              authorId: 'u2',
+              authorNickname: 'joao',
+              text: 'comentário principal',
+              createdAt: DateTime(2024, 1, 1, 9),
+            ),
+          ],
+        },
+        seedReplies: {'sc1': replies},
+      ),
+    );
+    await state.restoreSession();
+    await state.loadFeed();
+    final post = state.posts.firstWhere((p) => p.id == 'p1');
+
+    await pumpMatrixApp(tester, Scaffold(body: CommentsSheet(post: post)), state: state);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Ver respostas').first);
+    await tester.pumpAndSettle();
+
+    // Only 5 replies visible; the 6th and 7th are hidden behind the toggle.
+    expect(find.text('Resposta 0'), findsOneWidget);
+    expect(find.text('Resposta 4'), findsOneWidget);
+    expect(find.text('Resposta 5'), findsNothing);
+    expect(find.text('Resposta 6'), findsNothing);
+    expect(find.text('mais comentários...'), findsOneWidget);
+
+    // Scroll the toggle into view first (the outer list lazily clips content).
+    await tester.ensureVisible(find.text('mais comentários...'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('mais comentários...'));
+    await tester.pumpAndSettle();
+
+    // Build the last (7th) reply by scrolling it into view — the ListView
+    // lazily builds only the on-screen children (cacheExtent).
+    await tester.drag(find.byType(ListView), const Offset(0, -400));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Resposta 5'), findsOneWidget);
+    expect(find.text('Resposta 6'), findsOneWidget);
+    expect(find.text('mais comentários...'), findsNothing);
   });
 }

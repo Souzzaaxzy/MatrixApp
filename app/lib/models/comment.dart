@@ -12,6 +12,9 @@ class Comment {
     this.authorFrameAsset,
     required this.text,
     required this.createdAt,
+    this.parentCommentId,
+    this.likeCount = 0,
+    this.liked = false,
   });
 
   /// Placeholder used when only the comment *count* is known (e.g. in feed
@@ -26,7 +29,10 @@ class Comment {
         authorFrameId = null,
         authorFrameAsset = null,
         text = '',
-        createdAt = null;
+        createdAt = null,
+        parentCommentId = null,
+        likeCount = 0,
+        liked = false;
 
   final String id;
 
@@ -53,4 +59,34 @@ class Comment {
 
   final String text;
   final DateTime? createdAt;
+
+  /// Null for top-level comments; equals the parent comment id for replies.
+  final String? parentCommentId;
+
+  /// Total number of likes (from the server, the source of truth).
+  final int likeCount;
+
+  /// Whether the CURRENT session user already liked this comment.
+  final bool liked;
+
+  Comment copyWith({
+    String? text,
+    int? likeCount,
+    bool? liked,
+  }) {
+    return Comment(
+      id: id,
+      authorId: authorId,
+      authorNickname: authorNickname,
+      authorAvatarUrl: authorAvatarUrl,
+      authorNicknameColor: authorNicknameColor,
+      authorFrameId: authorFrameId,
+      authorFrameAsset: authorFrameAsset,
+      text: text ?? this.text,
+      createdAt: createdAt,
+      parentCommentId: parentCommentId,
+      likeCount: likeCount ?? this.likeCount,
+      liked: liked ?? this.liked,
+    );
+  }
 }
