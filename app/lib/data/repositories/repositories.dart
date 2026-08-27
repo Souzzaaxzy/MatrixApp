@@ -437,6 +437,31 @@ class ChatRepository {
     await _api.post('/api/conversations/$conversationId/read');
   }
 
+  /// "Excluir mensagem para mim" — the message disappears for the CURRENT
+  /// user only (the peer keeps seeing it). Server-persisted (MessageHide
+  /// row), so it survives app restarts and re-logins. Idempotent.
+  Future<void> deleteMessageForMe(String conversationId, String messageId) async {
+    await _api.delete('/api/conversations/$conversationId/messages/$messageId');
+  }
+
+  /// "Excluir mensagem para todos" — server-authoritative soft-delete that
+  /// removes the message for BOTH participants (the server validates the
+  /// caller is a member of the conversation). The peer gets a realtime
+  /// `chat_message_deleted` frame so an open conversation updates live.
+  /// Idempotent; errors (403/404) surface as [ApiException].
+  Future<void> deleteMessageForEveryone(String conversationId, String messageId) async {
+    await _api.delete(
+      '/api/conversations/$conversationId/messages/$messageId/everyone',
+    );
+  }
+
+  /// "Excluir conversa para mim" — removes the conversation from the CURRENT
+  /// user's Chat list only. The conversation + its messages stay fully intact
+  /// for the peer. A new incoming message un-hides it (server-side). Idempotent.
+  Future<void> hideConversation(String conversationId) async {
+    await _api.delete('/api/conversations/$conversationId');
+  }
+
   /// Signals the session user's typing state to the peer (ephemeral realtime
   /// frame — nothing persists server-side). Best-effort: failures are silent.
   void setTyping(String conversationId, bool typing) {

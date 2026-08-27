@@ -46,6 +46,14 @@ class PushService {
   /// below the peer's nickname in an open conversation.
   void Function(Map<String, dynamic> data)? onChatTyping;
 
+  /// Called when a chat message was deleted FOR EVERYONE by the peer
+  /// (kind `chat_message_deleted`). Payload carries {conversationId, messageId}.
+  void Function(Map<String, dynamic> data)? onChatMessageDeleted;
+
+  /// Called when a comment was deleted (kind `comment_deleted`). Payload
+  /// carries {postId, commentId}.
+  void Function(Map<String, dynamic> data)? onCommentDeleted;
+
   /// Called when the peer READ this conversation (kind `chat_read`). Receives
   /// `{ conversationId }` — lets the sender flip its "enviado" → "visto
   /// agora" hint in real time.
@@ -189,6 +197,18 @@ class PushService {
       final data =
           (message['data'] as Map?)?.cast<String, dynamic>() ?? const {};
       onChatRead?.call(data);
+      return;
+    }
+    if (message['kind'] == 'chat_message_deleted') {
+      final data =
+          (message['data'] as Map?)?.cast<String, dynamic>() ?? const {};
+      onChatMessageDeleted?.call(data);
+      return;
+    }
+    if (message['kind'] == 'comment_deleted') {
+      final data =
+          (message['data'] as Map?)?.cast<String, dynamic>() ?? const {};
+      onCommentDeleted?.call(data);
       return;
     }
     if (message['kind'] != 'notification') return;

@@ -32,7 +32,38 @@ class _MatrixAppState extends State<MatrixApp> {
       Services.instance.push.onChatMessage = _onChatMessage;
       Services.instance.push.onChatTyping = _onChatTyping;
       Services.instance.push.onChatRead = _onChatRead;
+      Services.instance.push.onChatMessageDeleted = _onChatMessageDeleted;
+      Services.instance.push.onCommentDeleted = _onCommentDeleted;
     }
+  }
+
+  /// A peer deleted a message FOR EVERYONE (realtime). AppState forwards it
+  /// to open conversation screens via [AppState.onChatMessageDeleted].
+  void _onChatMessageDeleted(Map<String, dynamic> data) {
+    final state = _state;
+    if (state == null) return;
+    final conversationId = data['conversationId'] as String? ?? '';
+    final messageId = data['messageId'] as String? ?? '';
+    if (conversationId.isEmpty || messageId.isEmpty) return;
+    state.handleIncomingChatMessageDeleted(
+      ChatMessageDeletedEvent(
+        conversationId: conversationId,
+        messageId: messageId,
+      ),
+    );
+  }
+
+  /// A comment was deleted (by its owner or the post author). AppState
+  /// exposes it so open comments surfaces remove the entry live.
+  void _onCommentDeleted(Map<String, dynamic> data) {
+    final state = _state;
+    if (state == null) return;
+    final postId = data['postId'] as String? ?? '';
+    final commentId = data['commentId'] as String? ?? '';
+    if (postId.isEmpty || commentId.isEmpty) return;
+    state.handleIncomingCommentDeleted(
+      CommentDeletedEvent(postId: postId, commentId: commentId),
+    );
   }
 
   /// A real-time private message arrived on the WebSocket. Route it into the

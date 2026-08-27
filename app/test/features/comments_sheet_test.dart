@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:matrix_app/core/services/app_state.dart';
+import 'package:matrix_app/core/widgets/app_state_scope.dart';
 import 'package:matrix_app/core/widgets/user_avatar.dart';
 import 'package:matrix_app/features/feed/comments_sheet.dart';
 import 'package:matrix_app/models/comment.dart';
@@ -84,6 +85,52 @@ void main() {
     expect(find.text('Ficou ótimo!'), findsOneWidget);
     // The current user IS the author of p1 in the fake store.
     expect(find.text('AUTOR'), findsOneWidget);
+  });
+
+  group('Excluir comentário', () {
+    testWidgets(
+        'post author deleting another user\'s comment removes it + dialog confirms',
+        (tester) async {
+      final state = await stateWithComments();
+      final post = state.posts.firstWhere((p) => p.id == 'p1');
+      await pumpMatrixApp(tester, Scaffold(body: CommentsSheet(post: post)), state: state);
+      await tester.pumpAndSettle();
+
+      // The post author (u0) can delete joao's (u2) comment → long-press shows
+      // the confirmation dialog, "Cancelar" keeps it.
+      await tester.longPress(find.text('Comentário de outra pessoa'));
+      await tester.pumpAndSettle();
+      expect(find.text('Excluir comentário?'), findsOneWidget);
+      await tester.tap(find.text('Cancelar'));
+      await tester.pumpAndSettle();
+      expect(find.text('Comentário de outra pessoa'), findsOneWidget);
+
+      // Confirming removes the comment entirely.
+      await tester.longPress(find.text('Comentário de outra pessoa'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Excluir').last);
+      await tester.pumpAndSettle();
+      expect(find.text('Comentário de outra pessoa'), findsNothing);
+      expect(find.text('Comentário do próprio autor'), findsOneWidget);
+    });
+
+    testWidgets('realtime comment_deleted removes the comment from the sheet',
+        (tester) async {
+      final state = await stateWithComments();
+      final post = state.posts.firstWhere((p) => p.id == 'p1');
+      await pumpMatrixApp(tester, Scaffold(body: CommentsSheet(post: post)), state: state);
+      await tester.pumpAndSettle();
+      expect(find.text('Comentário de outra pessoa'), findsOneWidget);
+
+      // Simulate the server broadcasting the deletion (post author excluded it
+      // from another device) → the sheet livestreams the removal.
+      final AppState appState = AppStateScope.of(tester.element(find.byType(CommentsSheet)));
+      appState.handleIncomingCommentDeleted(
+        CommentDeletedEvent(postId: 'p1', commentId: 'sc2'),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Comentário de outra pessoa'), findsNothing);
+    });
   });
 
   testWidgets(

@@ -94,6 +94,17 @@ class AppState extends ChangeNotifier {
   final _chatRead = StreamController<ChatReadEvent>.broadcast();
   Stream<ChatReadEvent> get onChatRead => _chatRead.stream;
 
+  /// Emits when a message in a conversation is deleted FOR EVERYONE by the
+  /// peer (realtime). Open conversation screens remove the bubble live.
+  final _chatMessageDeleted = StreamController<ChatMessageDeletedEvent>.broadcast();
+  Stream<ChatMessageDeletedEvent> get onChatMessageDeleted =>
+      _chatMessageDeleted.stream;
+
+  /// Emits when a comment on a post is deleted (realtime by the post author
+  /// or the comment owner). Open comments sheets / posts remove the entry live.
+  final _commentDeleted = StreamController<CommentDeletedEvent>.broadcast();
+  Stream<CommentDeletedEvent> get onCommentDeleted => _commentDeleted.stream;
+
   /// Emits whenever a friendship relationship changes (request sent/cancelled,
   /// removed, accepted). Screens that render the live friends list subscribe
   /// so removal on a profile reflects immediately when they become visible.
@@ -951,6 +962,117 @@ class AppState extends ChangeNotifier {
     if (!_chatRead.isClosed) _chatRead.add(event);
   }
 
+  /// A real-time `chat_message_deleted` frame arrived → the peer removed a
+  /// message for everyone. The conversation screen removes the bubble; the
+  /// Chat tab refreshes its preview. Cached conversation last-preview is
+  /// recomputed lazily on the next list load.
+  void handleIncomingChatMessageDeleted(ChatMessageDeletedEvent event) {
+    if (_disposed) return;
+    if (!_chatMessageDeleted.isClosed) _chatMessageDeleted.add(event);
+    notifyListeners();
+  }
+
+  /// A real-time `comment_deleted` frame arrived → a comment was removed
+  /// (by its owner or the post author). Open comment surfaces subscribe to
+  /// [onCommentDeleted] to remove it live.
+  void handleIncomingCommentDeleted(CommentDeletedEvent event) {
+    if (_disposed) return;
+    if (!_commentDeleted.isClosed) _commentDeleted.add(event);
+    // Decrement the cached post comment count if we have it.
+    final post = _findPost(event.postId);
+    if (post != null && post.commentCount > 0) {
+      post.commentCount -= 1;
+      notifyListeners();
+    }
+  }
+
+  /// Excluir comentário — server-enforced: allowed only for the comment's
+  /// author or the post author. Returns true on success.
+  Future<bool> deleteComment(String commentId, {required String postId}) async {
+    try {
+      await _comments.delete(commentId);
+      final post = _findPost(postId);
+      if (post != null && post.commentCount > 0) {
+        post.commentCount -= 1;
+      }
+      notifyListeners();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// "Excluir mensagem para mim" — server-persisted (survives restarts).
+  /// The open conversation screen removes the bubble locally after success.
+  Future<bool> deleteChatMessageForMe(String conversationId, String messageId) async {
+    try {
+      await _chat.deleteMessageForMe(conversationId, messageId);
+      notifyListeners();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// "Excluir mensagem para todos" — server-authoritative; on success the
+  /// open conversation screen removes the bubble and we refresh the cached
+  /// conversation preview (the last visible message may have changed).
+  Future<bool> deleteChatMessageForEveryone(
+    String conversationId,
+    String messageId,
+  ) async {
+    try {
+      await _chat.deleteMessageForEveryone(conversationId, messageId);
+      // Re-fetch the conversation preview lazily (best-effort) so the Chat
+      // tab's last-message reflects the deletion.
+      unawaited(_refreshConversationPreview(conversationId));
+      notifyListeners();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// "Excluir conversa para mim" — removes the conversation from the local
+  /// list immediately (server persists the hide). Returns true on success.
+  Future<bool> hideConversation(String conversationId) async {
+    try {
+      await _chat.hideConversation(conversationId);
+      _conversations.removeWhere((c) => c.id == conversationId);
+      _recomputeUnreadBadge();
+      notifyListeners();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Best-effort refresh of a cached conversation's last-visible-message
+  /// preview after a "delete for everyone" so the Chat tab stays in sync.
+  Future<void> _refreshConversationPreview(String conversationId) async {
+    try {
+      final idx = _conversations.indexWhere((c) => c.id == conversationId);
+      if (idx == -1) return;
+      final page = await _chat.messages(conversationId, limit: 1);
+      final last = page.messages.isNotEmpty ? page.messages.last : null;
+      final c = _conversations[idx];
+      _conversations[idx] = c.copyWith(
+        lastMessage: last == null
+            ? null
+            : ConversationLastMessage(
+                id: last.id,
+                content: last.content,
+                senderId: last.senderId,
+                createdAt: last.createdAt,
+              ),
+        lastMine: last?.senderId == _currentUser?.id,
+      );
+      notifyListeners();
+    } catch (_) {
+      // Best-effort: the next list load refreshes it anyway.
+    }
+  }
+
   /// Marks a conversation as read by the session user and clears its unread
   /// badge from the local cache.
   Future<void> markConversationRead(String conversationId) async {
@@ -1072,6 +1194,8 @@ class AppState extends ChangeNotifier {
     _chatIncoming.close();
     _chatTyping.close();
     _chatRead.close();
+    _chatMessageDeleted.close();
+    _commentDeleted.close();
     _friendsChanged.close();
     super.dispose();
   }
@@ -1088,6 +1212,24 @@ class ChatTypingEvent {
 class ChatReadEvent {
   const ChatReadEvent({required this.conversationId});
   final String conversationId;
+}
+
+/// A realtime signal that a message was deleted FOR EVERYONE by the peer.
+class ChatMessageDeletedEvent {
+  const ChatMessageDeletedEvent({
+    required this.conversationId,
+    required this.messageId,
+  });
+  final String conversationId;
+  final String messageId;
+}
+
+/// A realtime signal that a comment was deleted (by its owner or the post
+/// author), so open comments sheets remove it.
+class CommentDeletedEvent {
+  const CommentDeletedEvent({required this.postId, required this.commentId});
+  final String postId;
+  final String commentId;
 }
 
 /// Immutable snapshot of a viewed profile: the viewed user, their posts

@@ -76,6 +76,18 @@ class FakeStore {
   /// Server-owned cosmetic catalog (palette of colors, frames, ...).
   final List<CosmeticItem> catalog = [];
 
+  /// Conversations hidden FOR the current user (`pair|userId`) — mirrors the
+  /// server's ConversationHidden rows ("Excluir conversa para mim").
+  final List<String> conversationHides = [];
+
+  /// Messages hidden FOR the current user (`pair|messageId|userId`) — mirrors
+  /// the server's MessageHide rows ("Excluir mensagem para mim").
+  final List<String> messageHides = [];
+
+  /// Messages deleted for everyone (`pair|messageId`) — mirrors the server's
+  /// soft-deleted messages (deletedAt set).
+  final List<String> deletedEverywhere = [];
+
   FakeStore() {
     users = {
       'u0': MatrixUser(
@@ -684,17 +696,30 @@ class _FakeChatRepository implements ChatRepository {
   List<ChatMessage> _messagesOf(String pair) =>
       List.of(_store.chatMessagesByPair[pair] ?? const []);
 
+  /// Messages that [me] may actually see: not hidden for them ("Excluir para
+  /// mim") and not deleted for everyone. Mirrors the server's read paths.
+  List<ChatMessage> _visibleMessages(String pair, String me) {
+    return _messagesOf(pair).where((m) {
+      if (_store.deletedEverywhere.contains('$pair|${m.id}')) return false;
+      if (_store.messageHides.contains('$pair|${m.id}|$me')) return false;
+      return true;
+    }).toList();
+  }
+
   @override
   Future<List<Conversation>> conversations() async {
     final me = _store.currentUserId;
+    if (me == null) return const [];
     final result = <Conversation>[];
     for (final pair in _store.friendships) {
       final parts = pair.split('|');
       if (!parts.contains(me)) continue;
+      // "Excluir conversa (para mim)" hides it from THIS user's list only.
+      if (_store.conversationHides.contains('$pair|$me')) continue;
       final otherId = parts.firstWhere((id) => id != me);
       final other = _store.users[otherId];
       if (other == null) continue;
-      final messages = _messagesOf(pair);
+      final messages = _visibleMessages(pair, me);
       final last = messages.isNotEmpty ? messages.last : null;
       result.add(Conversation(
         id: pair,
@@ -720,6 +745,35 @@ class _FakeChatRepository implements ChatRepository {
   Future<int> unreadCount() async => 0;
 
   @override
+  Future<void> deleteMessageForMe(String conversationId, String messageId) async {
+    final pair = _pairFromConversationId(conversationId);
+    if (pair == null) return;
+    _store.messageHides.add('$pair|$messageId|${_store.currentUserId}');
+  }
+
+  @override
+  Future<void> deleteMessageForEveryone(String conversationId, String messageId) async {
+    final pair = _pairFromConversationId(conversationId);
+    if (pair == null) return;
+    _store.deletedEverywhere.add('$pair|$messageId');
+  }
+
+  @override
+  Future<void> hideConversation(String conversationId) async {
+    final pair = _pairFromConversationId(conversationId);
+    if (pair == null) return;
+    _store.conversationHides.add('$pair|${_store.currentUserId}');
+  }
+
+  // Deterministic reverse of the pair -> conversationId mapping.
+  String? _pairFromConversationId(String conversationId) {
+    for (final pair in _store.friendships) {
+      if (pair == conversationId) return pair;
+    }
+    return null;
+  }
+
+  @override
   Future<Conversation> getOrCreate(String otherUserId) async {
     final me = _store.currentUserId;
     if (me == null || me == otherUserId) {
@@ -736,7 +790,7 @@ class _FakeChatRepository implements ChatRepository {
       throw const ApiException(statusCode: 404, message: 'Usuário não encontrado.');
     }
     final pair = _pairKey(me, otherUserId);
-    final messages = _messagesOf(pair);
+    final messages = _visibleMessages(pair, me);
     final last = messages.isNotEmpty ? messages.last : null;
     return Conversation(
       id: pair,
@@ -761,7 +815,10 @@ class _FakeChatRepository implements ChatRepository {
     String? before,
     int limit = 30,
   }) async {
-    final all = _messagesOf(conversationId);
+    final me = _store.currentUserId ?? '';
+    // Only VISIBLE messages are returned (mirrors the server): hidden-for-me
+    // and deleted-for-everyone messages never reach the client.
+    final all = _visibleMessages(conversationId, me);
     // `before` references a message id → return the messages OLDER than it.
     if (before != null) {
       final index = all.indexWhere((m) => m.id == before);
@@ -789,7 +846,9 @@ class _FakeChatRepository implements ChatRepository {
       final all = _messagesOf(conversationId);
       ChatMessage? target;
       for (final m in all) {
-        if (m.id == replyToMessageId) {
+        // A message deleted for everyone can no longer be a reply preview.
+        if (m.id == replyToMessageId &&
+            !_store.deletedEverywhere.contains('$conversationId|${m.id}')) {
           target = m;
           break;
         }

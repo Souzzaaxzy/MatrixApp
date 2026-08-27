@@ -62,6 +62,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
   StreamSubscription<ChatMessage>? _chatSub;
   StreamSubscription<ChatTypingEvent>? _typingSub;
   StreamSubscription<ChatReadEvent>? _readSub;
+  StreamSubscription<ChatMessageDeletedEvent>? _deletedSub;
 
   /// Whether the newest message is pinned to the bottom (auto-follow new).
   bool _followBottom = true;
@@ -102,6 +103,8 @@ class _ConversationScreenState extends State<ConversationScreen> {
       _typingSub = state?.onChatTyping.listen(_onTyping);
       _readSub?.cancel();
       _readSub = state?.onChatRead.listen(_onReadReceipt);
+      _deletedSub?.cancel();
+      _deletedSub = state?.onChatMessageDeleted.listen(_onMessageDeletedRealtime);
     }
     if (!_loadRequested) {
       // Defer the load: _load notifies listeners synchronously.
@@ -119,6 +122,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
     _chatSub?.cancel();
     _typingSub?.cancel();
     _readSub?.cancel();
+    _deletedSub?.cancel();
     _typingAutoClear?.cancel();
     _typingSendDebounce?.cancel();
     if (_typingLastSent) {
@@ -242,6 +246,158 @@ class _ConversationScreenState extends State<ConversationScreen> {
     if (message.conversationId != _conversationId) return;
     if (message.senderId == _state?.currentUser?.id) return; // own send
     _appendMessage(message);
+  }
+
+  // ── Realtime message deletion ─────────────────────────────
+  /// A peer deleted a message FOR EVERYONE → drop the bubble live from this
+  /// open conversation (no manual refresh needed).
+  void _onMessageDeletedRealtime(ChatMessageDeletedEvent event) {
+    if (!mounted) return;
+    if (event.conversationId != _conversationId) return;
+    if (event.messageId.isEmpty) return;
+    setState(() {
+      _messages.removeWhere((m) => m.id == event.messageId);
+      if (_replyTarget?.id == event.messageId) {
+        _replyTarget = null;
+        _replyTargetIndex = null;
+      }
+    });
+  }
+
+  // ── Long-press message menu ──────────────────────────────
+  /// Long-press on a bubble → contextual menu with the actions the user is
+  /// actually allowed to take. "Excluir" = for me only; "Excluir para todos"
+  /// (always available to any participant, server-validated) removes it for
+  /// both sides.
+  Future<void> _showMessageMenu(int index) async {
+    if (index < 0 || index >= _messages.length) return;
+    final message = _messages[index];
+    final conversationId = _conversationId;
+    if (conversationId.isEmpty) return;
+
+    final action = await showModalBottomSheet<_MessageAction>(
+      context: context,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      barrierColor: Colors.black.withValues(alpha: 0.5),
+      isScrollControlled: true,
+      builder: (_) => _MessageActionMenu(message: message, index: index),
+    );
+    if (action == null || !mounted) return;
+
+    switch (action) {
+      case _MessageAction.reply:
+        _startReply(index);
+      case _MessageAction.deleteForMe:
+        await _confirmAndDeleteMessageForMe(
+          conversationId,
+          message,
+        );
+      case _MessageAction.deleteForEveryone:
+        await _confirmAndDeleteForEveryone(
+          conversationId,
+          message,
+        );
+    }
+  }
+
+  Future<void> _confirmAndDeleteMessageForMe(
+    String conversationId,
+    ChatMessage message,
+  ) async {
+    if (!mounted) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.bluishBlack,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppDimensions.radiusLg),
+          side: BorderSide(color: AppColors.deepBlue),
+        ),
+        title: Text(
+          'Excluir mensagem?',
+          style: AppTextStyles.hud.copyWith(
+            fontSize: 16,
+            color: AppColors.techWhite,
+          ),
+        ),
+        content: Text(
+          'A mensagem será removida somente para você.',
+          style: AppTextStyles.bodyMuted,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text('Cancelar',
+                style: TextStyle(color: AppColors.holographicBlue)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text('Excluir', style: TextStyle(color: AppColors.error)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    final ok = await _state?.deleteChatMessageForMe(conversationId, message.id);
+    if (!mounted) return;
+    if (ok == true) {
+      setState(() => _messages.removeWhere((m) => m.id == message.id));
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Não foi possível excluir a mensagem.')),
+      );
+    }
+  }
+
+  Future<void> _confirmAndDeleteForEveryone(
+    String conversationId,
+    ChatMessage message,
+  ) async {
+    if (!mounted) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.bluishBlack,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppDimensions.radiusLg),
+          side: BorderSide(color: AppColors.deepBlue),
+        ),
+        title: Text(
+          'Excluir esta mensagem para todos?',
+          style: AppTextStyles.hud.copyWith(
+            fontSize: 16,
+            color: AppColors.techWhite,
+          ),
+        ),
+        content: Text(
+          'Esta mensagem será removida para todos os participantes.',
+          style: AppTextStyles.bodyMuted,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text('Cancelar',
+                style: TextStyle(color: AppColors.holographicBlue)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text('Excluir', style: TextStyle(color: AppColors.error)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    final ok =
+        await _state?.deleteChatMessageForEveryone(conversationId, message.id);
+    if (!mounted) return;
+    if (ok == true) {
+      setState(() => _messages.removeWhere((m) => m.id == message.id));
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Não foi possível excluir a mensagem.')),
+      );
+    }
   }
 
   // ── Realtime "digitando..." ────────────────────────────────
@@ -532,6 +688,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
         index: i,
         isLast: isLast,
         onStartReply: _startReply,
+        onLongPress: () => _showMessageMenu(i),
         replySelected: _replyTargetIndex == i,
       ));
     }
@@ -635,6 +792,7 @@ class _MessageBubble extends StatelessWidget {
     required this.index,
     required this.isLast,
     required this.onStartReply,
+    required this.onLongPress,
     this.replySelected = false,
   });
 
@@ -642,6 +800,7 @@ class _MessageBubble extends StatelessWidget {
   final int index;
   final bool isLast;
   final void Function(int index) onStartReply;
+  final VoidCallback onLongPress;
   final bool replySelected;
 
   static const _maxWidth = 300.0;
@@ -754,6 +913,7 @@ class _MessageBubble extends StatelessWidget {
       align: align,
       bubble: bubble,
       onStartReply: onStartReply,
+      onLongPress: onLongPress,
       replySelected: replySelected,
     );
   }
@@ -790,6 +950,7 @@ class _ReplySwipe extends StatefulWidget {
     required this.align,
     required this.bubble,
     required this.onStartReply,
+    required this.onLongPress,
     this.replySelected = false,
   });
 
@@ -799,6 +960,7 @@ class _ReplySwipe extends StatefulWidget {
   final CrossAxisAlignment align;
   final Widget bubble;
   final void Function(int index) onStartReply;
+  final VoidCallback onLongPress;
   final bool replySelected;
 
   @override
@@ -833,6 +995,9 @@ class _ReplySwipeState extends State<_ReplySwipe> {
   Widget build(BuildContext context) {
     final mine = widget.mine;
     return GestureDetector(
+      // Long-press on a message bubble opens the contextual actions menu
+      // (Responder / Excluir / Excluir para todos).
+      onLongPress: widget.onLongPress,
       onHorizontalDragUpdate: (details) {
         if (_selected) return; // already replying another message
         setState(() {
@@ -1065,6 +1230,96 @@ class _ReplyPreviewBar extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Actions a user can take on a message via the long-press menu.
+enum _MessageAction { reply, deleteForMe, deleteForEveryone }
+
+/// Bottom menu shown when a message bubble is long-pressed. Options respect
+/// the real (server-validated) rules: replying is always allowed; "Excluir"
+/// removes the message only for ME; "Excluir para todos" removes it for every
+/// participant.
+class _MessageActionMenu extends StatelessWidget {
+  const _MessageActionMenu({required this.message, required this.index});
+
+  final ChatMessage message;
+  final int index;
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Container(
+        margin: const EdgeInsets.all(AppDimensions.spaceMd),
+        padding: const EdgeInsets.symmetric(vertical: AppDimensions.spaceXs),
+        decoration: BoxDecoration(
+          color: AppColors.bluishBlack,
+          borderRadius: BorderRadius.circular(AppDimensions.radiusXl),
+          border: Border.all(color: AppColors.deepBlue),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.4),
+              blurRadius: 20,
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _ActionItem(
+              icon: Icons.reply_rounded,
+              label: 'Responder',
+              onTap: () => Navigator.of(context).pop(_MessageAction.reply),
+            ),
+            _ActionItem(
+              icon: Icons.remove_circle_outline_rounded,
+              iconColor: AppColors.holographicBlue,
+              label: 'Excluir',
+              hint: 'só para mim',
+              onTap: () => Navigator.of(context).pop(_MessageAction.deleteForMe),
+            ),
+            _ActionItem(
+              icon: Icons.delete_forever_rounded,
+              iconColor: AppColors.error,
+              label: 'Excluir para todos',
+              onTap: () => Navigator.of(context).pop(_MessageAction.deleteForEveryone),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ActionItem extends StatelessWidget {
+  const _ActionItem({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.hint,
+    this.iconColor,
+  });
+
+  final IconData icon;
+  final String label;
+  final String? hint;
+  final Color? iconColor;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      dense: true,
+      onTap: onTap,
+      leading: Icon(icon, color: iconColor ?? AppColors.electricBlue, size: 22),
+      title: Text(
+        label,
+        style: AppTextStyles.body.copyWith(color: AppColors.techWhite),
+      ),
+      trailing: hint == null
+          ? null
+          : Text(hint!, style: AppTextStyles.hud.copyWith(fontSize: 10)),
     );
   }
 }

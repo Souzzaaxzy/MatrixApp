@@ -48,6 +48,7 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _searching = false;
   bool _searched = false;
   StreamSubscription<ChatMessage>? _chatSub;
+  StreamSubscription<ChatMessageDeletedEvent>? _deletedSub;
 
   @override
   void didChangeDependencies() {
@@ -61,6 +62,9 @@ class _ChatScreenState extends State<ChatScreen> {
       final state = AppStateScope.maybeOf(context);
       if (state == null) return;
       _chatSub = state.onChatIncoming.listen((_) => _onRealtime());
+      _deletedSub = state.onChatMessageDeleted.listen((_) {
+        if (mounted) _loadConversations(state);
+      });
       // Re-sync the friends row when a friendship changes elsewhere (e.g. a
       // friend removed from their profile) so the list never shows stale rows.
       _friendsChangedSub = state.onFriendsChanged.listen((_) {
@@ -76,6 +80,7 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void dispose() {
     _chatSub?.cancel();
+    _deletedSub?.cancel();
     _friendsChangedSub?.cancel();
     _search.dispose();
     super.dispose();
@@ -109,6 +114,60 @@ class _ChatScreenState extends State<ChatScreen> {
     final state = AppStateScope.maybeOf(context);
     if (state == null) return;
     _loadConversations(state);
+  }
+
+  /// Long-press on a conversation → "Excluir conversa" (for ME only). The
+  /// chat disappears from MY list but the other participant keeps theirs.
+  /// Confirmations make the destructive action explicit before any call.
+  Future<void> _confirmHideConversation(Conversation conv) async {
+    final state = AppStateScope.maybeOf(context);
+    if (state == null) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.bluishBlack,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppDimensions.radiusLg),
+          side: BorderSide(color: AppColors.deepBlue),
+        ),
+        title: Text(
+          'Excluir conversa?',
+          style: AppTextStyles.hud.copyWith(
+            fontSize: 16,
+            color: AppColors.techWhite,
+          ),
+        ),
+        content: Text(
+          'A conversa será removida somente para você. '
+          'Essa ação não poderá ser desfeita.',
+          style: AppTextStyles.bodyMuted,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text('Cancelar',
+                style: TextStyle(color: AppColors.holographicBlue)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text('Excluir', style: TextStyle(color: AppColors.error)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    final ok = await state.hideConversation(conv.id);
+    if (!mounted) return;
+    if (ok) {
+      // Optimistically drop it from the visible list right away (the next
+      // refresh — on focus or realtime — also keeps it hidden persistently).
+      setState(() {});
+      await _loadConversations(state);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Não foi possível excluir a conversa.')),
+      );
+    }
   }
 
   Future<void> _searchUsers(String query) async {
@@ -380,6 +439,7 @@ class _ChatScreenState extends State<ChatScreen> {
           return _ConversationTile(
             conversation: conv,
             onTap: () => openChatConversation(context, conv),
+            onLongPress: () => _confirmHideConversation(conv),
           );
         },
       ),
@@ -390,10 +450,15 @@ class _ChatScreenState extends State<ChatScreen> {
 /// A single conversation card: the other user's photo + nickname, the last
 /// message (truncated), and its time.
 class _ConversationTile extends StatelessWidget {
-  const _ConversationTile({required this.conversation, required this.onTap});
+  const _ConversationTile({
+    required this.conversation,
+    required this.onTap,
+    this.onLongPress,
+  });
 
   final Conversation conversation;
   final VoidCallback onTap;
+  final VoidCallback? onLongPress;
 
   @override
   Widget build(BuildContext context) {
@@ -409,6 +474,7 @@ class _ConversationTile extends StatelessWidget {
     return MatrixCard(
       margin: const EdgeInsets.symmetric(vertical: AppDimensions.spaceSm),
       onTap: onTap,
+      onLongPress: onLongPress,
       child: Row(
         children: [
           FramedAvatar(

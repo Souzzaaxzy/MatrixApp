@@ -10,6 +10,10 @@ import 'package:matrix_app/models/conversation.dart';
 import '../helpers/fake_repositories.dart';
 import '../helpers/test_app.dart';
 
+/// The [FakeRepositories] of the most recently seeded chat state — lets the
+/// deletion tests assert what was actually persisted (hides/soft-deletes).
+FakeRepositories? lastSeededRepos;
+
 void main() {
   // Seeds a session user (u0 = 'leonardo') who is friends with joao (u2),
   // plus a private conversation between the two with some persisted messages.
@@ -19,6 +23,7 @@ void main() {
     bool withConversation = true,
   }) async {
     final repos = FakeRepositories();
+    lastSeededRepos = repos;
     final store = repos.store;
     if (withFriend) store.friendships.add('u0|u2');
     store.chatMessagesByPair['u0|u2'] = [];
@@ -340,6 +345,159 @@ void main() {
       await tester.tap(find.text('MENSAGEM'));
       await tester.pumpAndSettle();
       expect(find.byType(ConversationScreen), findsOneWidget);
+    });
+  });
+
+  group('Exclusão de mensagens', () {
+    testWidgets(
+        'long-press on a message opens the menu with Responder/Excluir/'
+        'Excluir para todos', (tester) async {
+      final state = await seededChat(messages: ['Oi']);
+      await pumpMatrixApp(
+        tester,
+        ConversationScreen(
+          args: const ConversationRouteArgs(
+            conversationId: 'u0|u2',
+            otherUserId: 'u2',
+            otherNickname: 'joao',
+          ),
+        ),
+        state: state,
+      );
+      await tester.pumpAndSettle();
+      // "Oi" is MY (u0) message.
+      await tester.longPress(find.text('Oi'));
+      await tester.pumpAndSettle();
+      expect(find.text('Responder'), findsOneWidget);
+      expect(find.text('Excluir'), findsOneWidget);
+      expect(find.text('Excluir para todos'), findsOneWidget);
+    });
+
+    testWidgets('Excluir (para mim) requires confirm then hides for ME only',
+        (tester) async {
+      final state = await seededChat(messages: ['Oi']);
+      await pumpMatrixApp(
+        tester,
+        ConversationScreen(
+          args: const ConversationRouteArgs(
+            conversationId: 'u0|u2',
+            otherUserId: 'u2',
+            otherNickname: 'joao',
+          ),
+        ),
+        state: state,
+      );
+      await tester.pumpAndSettle();
+      await tester.longPress(find.text('Oi'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Excluir'));
+      await tester.pumpAndSettle();
+      // Confirmation dialog explains the scope.
+      expect(find.text('Excluir mensagem?'), findsOneWidget);
+      await tester.tap(find.text('Excluir').last);
+      await tester.pumpAndSettle();
+      expect(find.text('Oi'), findsNothing);
+
+      // Persistence: reloading from the repo still hides MY message
+      // (server actually records the hide for the current user).
+      expect(lastSeededRepos!.store.messageHides, contains('u0|u2|m0|u0'));
+    });
+
+    testWidgets('Excluir para todos removes the message for both sides + realtime',
+        (tester) async {
+      final state = await seededChat(messages: ['Oi']);
+      await pumpMatrixApp(
+        tester,
+        ConversationScreen(
+          args: const ConversationRouteArgs(
+            conversationId: 'u0|u2',
+            otherUserId: 'u2',
+            otherNickname: 'joao',
+          ),
+        ),
+        state: state,
+      );
+      await tester.pumpAndSettle();
+      await tester.longPress(find.text('Oi'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Excluir para todos'));
+      await tester.pumpAndSettle();
+      expect(find.text('Excluir esta mensagem para todos?'), findsOneWidget);
+      await tester.tap(find.text('Excluir').last);
+      await tester.pumpAndSettle();
+      expect(find.text('Oi'), findsNothing);
+      // Server-side the message is soft-deleted for everyone.
+      expect(lastSeededRepos!.store.deletedEverywhere, contains('u0|u2|m0'));
+
+      // Realtime: a peer deletion of another message livestreams removal.
+      state.handleIncomingChatMessageDeleted(
+        const ChatMessageDeletedEvent(
+          conversationId: 'u0|u2',
+          messageId: 'mZ',
+        ),
+      );
+      await tester.pump();
+      // No crash; the delete handler for a non-existent id is a no-op that
+      // clears any pending reply — asserting no error state is enough here.
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('deleting for me keeps the peer message on screen',
+        (tester) async {
+      final state = await seededChat(messages: ['Oi', 'Resp']);
+      await pumpMatrixApp(
+        tester,
+        ConversationScreen(
+          args: const ConversationRouteArgs(
+            conversationId: 'u0|u2',
+            otherUserId: 'u2',
+            otherNickname: 'joao',
+          ),
+        ),
+        state: state,
+      );
+      await tester.pumpAndSettle();
+      // Delete MY message 'Oi' for me; peer's 'Resp' stays.
+      await tester.longPress(find.text('Oi'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Excluir'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Excluir').last);
+      await tester.pumpAndSettle();
+      expect(find.text('Oi'), findsNothing);
+      expect(find.text('Resp'), findsOneWidget);
+    });
+  });
+
+  group('Exclusão de conversa', () {
+    testWidgets('long-press a conversation asks + hides it for ME only',
+        (tester) async {
+      final state = await seededChat(messages: ['Oi']);
+      await pumpMatrixApp(tester, const ChatScreen(), state: state);
+      await tester.pumpAndSettle();
+      // The conversation tile exists.
+      expect(find.text('joao'), findsWidgets);
+
+      await tester.longPress(find.textContaining('Oi'));
+      await tester.pumpAndSettle();
+      expect(find.text('Excluir conversa?'), findsOneWidget);
+      await tester.tap(find.text('Excluir').last);
+      await tester.pumpAndSettle();
+
+      // Conversation disappeared from MY list and the hide is persisted.
+      expect(find.textContaining('Suas conversas aparecerão aqui.'), findsOneWidget);
+      expect(lastSeededRepos!.store.conversationHides, contains('u0|u2|u0'));
+    });
+
+    testWidgets('peer hides their side — my conversation stays intact',
+        (tester) async {
+      final state = await seededChat(messages: ['Oi']);
+      // The peer hides the conversation for THEMSELVES only.
+      lastSeededRepos!.store.conversationHides.add('u0|u2|u2');
+      await pumpMatrixApp(tester, const ChatScreen(), state: state);
+      await tester.pumpAndSettle();
+      // My (u0) list still shows the conversation.
+      expect(find.textContaining('Oi'), findsOneWidget);
     });
   });
 }

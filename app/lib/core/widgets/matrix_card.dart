@@ -14,6 +14,7 @@ class MatrixCard extends StatelessWidget {
     this.background,
     this.border,
     this.onTap,
+    this.onLongPress,
   });
 
   final Widget child;
@@ -23,6 +24,7 @@ class MatrixCard extends StatelessWidget {
   final Color? background;
   final Border? border;
   final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
 
   @override
   Widget build(BuildContext context) {
@@ -44,6 +46,7 @@ class MatrixCard extends StatelessWidget {
         borderRadius: radius,
         child: InkWell(
           onTap: onTap,
+          onLongPress: onLongPress,
           borderRadius: radius,
           child: Padding(padding: padding, child: child),
         ),

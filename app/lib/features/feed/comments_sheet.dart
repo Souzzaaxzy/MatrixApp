@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_dimensions.dart';
 import '../../app/theme/app_text_styles.dart';
+import '../../core/services/app_state.dart';
 import '../../core/utils/date_utils.dart';
 import '../../core/utils/profile_navigation.dart';
 import '../../core/widgets/nickname_renderer.dart';
@@ -76,6 +79,8 @@ class _CommentsSheetState extends State<CommentsSheet>
   late final AnimationController _popController;
   final FocusNode _inputFocusNode = FocusNode();
 
+  StreamSubscription<CommentDeletedEvent>? _commentDeletedSub;
+
   @override
   void initState() {
     super.initState();
@@ -87,7 +92,15 @@ class _CommentsSheetState extends State<CommentsSheet>
     );
     // Defer: AppStateScope.of() cannot be called from initState.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _loadComments();
+      if (!mounted) return;
+      _loadComments();
+      // Subscribe to realtime "comment deleted" frames so a deletion made
+      // elsewhere (by the post author) removes the entry live in this sheet.
+      _commentDeletedSub = AppStateScope.of(context).onCommentDeleted.listen((e) {
+        if (!mounted || e.postId != widget.post.id) return;
+        if (e.commentId.isEmpty) return;
+        _removeCommentById(e.commentId);
+      });
     });
   }
 
@@ -115,10 +128,93 @@ class _CommentsSheetState extends State<CommentsSheet>
 
   @override
   void dispose() {
+    _commentDeletedSub?.cancel();
     _controller.dispose();
     _popController.dispose();
     _inputFocusNode.dispose();
     super.dispose();
+  }
+
+  Future<void> _removeCommentById(String commentId) {
+    // Drop any cached reply subtree for the deleted parent.
+    _replies.remove(commentId);
+    setState(() {
+      _comments?.removeWhere((c) => c.id == commentId);
+    });
+    return Future.value();
+  }
+
+  Future<void> _removeReplyById(String parentId, String replyId) async {
+    final list = _replies[parentId];
+    if (list == null) return;
+    setState(() {
+      list.removeWhere((r) => r.id == replyId);
+    });
+  }
+
+  /// User-followed delete of a comment (allowed for the comment author or the
+  /// post author — enforced server-side too). Shows a clear confirmation
+  /// before the removal and animates the entry out after success.
+  Future<void> _confirmAndDeleteComment(Comment c, {bool isReply = false}) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: true,
+      builder: (ctx) => ThemeWatcher(
+        builder: (_) => AlertDialog(
+          backgroundColor: AppColors.bluishBlack,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AppDimensions.radiusLg),
+            side: BorderSide(color: AppColors.deepBlue),
+          ),
+          title: Text('Excluir comentário?',
+              style: AppTextStyles.hud.copyWith(
+                fontSize: 16,
+                color: AppColors.techWhite,
+              )),
+          content: Text(
+            'Essa ação não poderá ser desfeita.',
+            style: AppTextStyles.bodyMuted,
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: Text('Cancelar',
+                  style: TextStyle(color: AppColors.holographicBlue)),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: Text(
+                'Excluir',
+                style: TextStyle(color: AppColors.error),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    final ok = await AppStateScope.of(context)
+        .deleteComment(c.id, postId: widget.post.id);
+    if (!mounted) return;
+    if (!ok) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Não foi possível excluir o comentário.')),
+      );
+      return;
+    }
+    if (isReply && c.parentCommentId != null) {
+      await _removeReplyById(c.parentCommentId!, c.id);
+    } else {
+      _removeCommentById(c.id);
+    }
+  }
+
+  /// Whether the CURRENT session user may delete [c]: they wrote it, or they
+  /// wrote the post it belongs to (mirrors the server permission).
+  bool _canDelete(Comment c) {
+    final me = AppStateScope.of(context).currentUser?.id;
+    if (me == null || me.isEmpty) return false;
+    return c.authorId == me || widget.post.authorId == me;
   }
 
   /// Toggles a like optimistically and reconciles with the server result.
@@ -345,6 +441,8 @@ class _CommentsSheetState extends State<CommentsSheet>
                             comment: c,
                             isAuthor: c.authorId.isNotEmpty &&
                                 c.authorId == widget.post.authorId,
+                            canDelete: _canDelete(c),
+                            onDelete: () => _confirmAndDeleteComment(c),
                             replies: _replies[c.id],
                             repliesError: _repliesError[c.id] == true,
                             expanded: _expandedReplies.contains(c.id),
@@ -362,6 +460,8 @@ class _CommentsSheetState extends State<CommentsSheet>
                             onReplyLike: (reply) =>
                                 _toggleReplyLike(c.id, reply),
                             onReplyReply: (reply) => _startReply(c),
+                            onReplyDelete: (reply) =>
+                                _confirmAndDeleteComment(reply, isReply: true),
                           );
                         },
                       ),
@@ -456,6 +556,8 @@ class _CommentTile extends StatelessWidget {
     super.key,
     required this.comment,
     required this.isAuthor,
+    required this.canDelete,
+    required this.onDelete,
     required this.replies,
     required this.repliesError,
     required this.expanded,
@@ -466,10 +568,17 @@ class _CommentTile extends StatelessWidget {
     required this.onLoadReplies,
     required this.onReplyLike,
     required this.onReplyReply,
+    required this.onReplyDelete,
   });
 
   final Comment comment;
   final bool isAuthor;
+
+  /// Whether the current session user may delete this comment (they wrote it
+  /// or they wrote the post). Mirrors the server permission.
+  final bool canDelete;
+  final VoidCallback onDelete;
+
   final List<Comment>? replies;
   final bool repliesError;
   final bool expanded;
@@ -480,6 +589,7 @@ class _CommentTile extends StatelessWidget {
   final VoidCallback onLoadReplies;
   final void Function(Comment reply) onReplyLike;
   final void Function(Comment reply) onReplyReply;
+  final void Function(Comment reply) onReplyDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -495,6 +605,8 @@ class _CommentTile extends StatelessWidget {
         _CommentRow(
           comment: comment,
           isAuthor: isAuthor,
+          canDelete: canDelete,
+          onDelete: onDelete,
           popController: popController,
           onLike: onLike,
           onReply: onReply,
@@ -527,6 +639,8 @@ class _CommentTile extends StatelessWidget {
                           comment: r,
                           isAuthor: isAuthor,
                           asReply: true,
+                          canDelete: canDelete,
+                          onDelete: () => onReplyDelete(r),
                           popController: popController,
                           onLike: () => onReplyLike(r),
                           onReply: () => onReplyReply(r),
@@ -584,6 +698,8 @@ class _CommentRow extends StatelessWidget {
     required this.comment,
     required this.isAuthor,
     this.asReply = false,
+    required this.canDelete,
+    required this.onDelete,
     required this.popController,
     required this.onLike,
     required this.onReply,
@@ -592,6 +708,11 @@ class _CommentRow extends StatelessWidget {
   final Comment comment;
   final bool isAuthor;
   final bool asReply;
+
+  /// Whether the current session user may delete this comment.
+  final bool canDelete;
+  final VoidCallback onDelete;
+
   final Animation<double> popController;
   final VoidCallback onLike;
   final VoidCallback onReply;
@@ -633,7 +754,12 @@ class _CommentRow extends StatelessWidget {
           ),
           const SizedBox(width: AppDimensions.spaceMd),
           Expanded(
-            child: Column(
+            child: GestureDetector(
+              // Long-press on the comment body (with permission) exposes the
+              // same delete confirmation as the "Excluir" affordance.
+              onLongPress: canDelete ? onDelete : null,
+              behavior: HitTestBehavior.translucent,
+              child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
@@ -687,6 +813,37 @@ class _CommentRow extends StatelessWidget {
                         ),
                       ),
                     ),
+                    // "Excluir" — shown ONLY for users with permission
+                    // (the comment author or the post author, enforced
+                    // server-side). Tapping asks for confirmation.
+                    if (canDelete) ...[
+                      const SizedBox(width: AppDimensions.spaceMd),
+                      GestureDetector(
+                        onTap: onDelete,
+                        behavior: HitTestBehavior.opaque,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 4),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.delete_outline_rounded,
+                                size: 12,
+                                color: AppColors.error.withValues(alpha: 0.85),
+                              ),
+                              const SizedBox(width: 3),
+                              Text(
+                                'Excluir',
+                                style: AppTextStyles.hud.copyWith(
+                                  fontSize: 10,
+                                  color: AppColors.error.withValues(alpha: 0.9),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
                     const Spacer(),
                     ScaleTransition(
                       scale: popController,
@@ -731,6 +888,7 @@ class _CommentRow extends StatelessWidget {
                   ],
                 ),
               ],
+            ),
             ),
           ),
         ],
