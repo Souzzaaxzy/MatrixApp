@@ -482,13 +482,29 @@ class ChatRepository {
 
   /// Signals the session user's typing state to the peer (ephemeral realtime
   /// frame — nothing persists server-side). Best-effort: failures are silent.
+
   void setTyping(String conversationId, bool typing) {
     // Fire-and-forget: typing state is transient and non-critical.
+
     _api
         .post<void>('/api/conversations/$conversationId/typing',
             data: {'typing': typing})
         .catchError((_) {});
   }
+
+  /// Signals the peer that the session user is (or stopped) recording a voice
+  /// message in [conversationId]. Ephemeral realtime frame — nothing persists,
+  /// so there is no stale state to clean up server-side (the peer also
+  /// auto-clears it). Mirrors [setTyping]: same auth + membership rules,
+  /// best-effort (a failed signal must never break the recording flow).
+  void setRecording(String conversationId, bool recording) {
+
+    _api
+        .post<void>('/api/conversations/$conversationId/recording',
+            data: {'recording': recording})
+        .catchError((_) {});
+  }
+
 }
 
 /// Profile customization (cosmetics): catalog, inventory and equipped

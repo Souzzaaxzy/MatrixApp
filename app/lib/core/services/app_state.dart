@@ -94,6 +94,13 @@ class AppState extends ChangeNotifier {
   final _chatRead = StreamController<ChatReadEvent>.broadcast();
   Stream<ChatReadEvent> get onChatRead => _chatRead.stream;
 
+  /// Real-time peer voice-recording signal (started/stopped) for an open
+  /// conversation, so the "gravando áudio" hint appears/disappears live below
+  /// the peer's nickname. Ephemeral, like typing — never persists.
+
+  final _chatRecording = StreamController<ChatRecordingEvent>.broadcast();
+  Stream<ChatRecordingEvent> get onChatRecording => _chatRecording.stream;
+
   /// Emits when a message in a conversation is deleted FOR EVERYONE by the
   /// peer (realtime). Open conversation screens remove the bubble live.
   final _chatMessageDeleted = StreamController<ChatMessageDeletedEvent>.broadcast();
@@ -964,9 +971,19 @@ class AppState extends ChangeNotifier {
   }
 
   /// A real-time `chat_typing` frame arrived → forward to open conversations.
+
   void handleIncomingChatTyping(ChatTypingEvent event) {
     if (_disposed) return;
     if (!_chatTyping.isClosed) _chatTyping.add(event);
+  }
+
+  /// Signals the peer that the session user is (or stopped) recording a voice
+
+  /// message. Ephemeral + best-effort, like [sendTyping].
+
+  void sendRecording(String conversationId, bool recording) {
+
+    _chat.setRecording(conversationId, recording);
   }
 
   /// A real-time `chat_read` frame arrived → the peer read my messages. Flip
@@ -975,6 +992,14 @@ class AppState extends ChangeNotifier {
   void handleIncomingChatRead(ChatReadEvent event) {
     if (_disposed) return;
     if (!_chatRead.isClosed) _chatRead.add(event);
+  }
+
+  /// A real-time `chat_recording` frame arrived → forward to open conversations
+  /// so the "gravando áudio" hint under the peer's nickname updates live.
+  void handleIncomingChatRecording(ChatRecordingEvent event) {
+    if (_disposed) return;
+    if (!_chatRecording.isClosed) _chatRecording.add(event);
+    notifyListeners();
   }
 
   /// A real-time `chat_message_deleted` frame arrived → the peer removed a
@@ -1216,6 +1241,7 @@ void handleIncomingChatMessage(ChatMessage message, {ChatUser? peer}) {
     _disposed = true;
     _chatIncoming.close();
     _chatTyping.close();
+    _chatRecording.close();
     _chatRead.close();
     _chatMessageDeleted.close();
     _commentDeleted.close();
@@ -1224,7 +1250,19 @@ void handleIncomingChatMessage(ChatMessage message, {ChatUser? peer}) {
   }
 }
 
+/// A realtime peer-recording signal for a conversation (voice capture active).
+class ChatRecordingEvent {
+  const ChatRecordingEvent({
+    required this.conversationId,
+    required this.recording,
+  });
+
+  final String conversationId;
+  final bool recording;
+}
+
 /// A realtime peer-typing signal for a conversation.
+
 class ChatTypingEvent {
   const ChatTypingEvent({required this.conversationId, required this.typing});
   final String conversationId;

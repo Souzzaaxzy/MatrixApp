@@ -72,9 +72,12 @@ class _ConversationScreenState extends State<ConversationScreen>
   double _dragDx = 0; // live gesture displacement of the mic button
   bool _dragLocked = false;
   bool _voiceSending = false;
+  double _dragDy = 0; // vertical live gesture displacement (up = negative)
+  bool _recordingSignaled = false; // whether the peer was told were are recording
 
   StreamSubscription<ChatMessage>? _chatSub;
   StreamSubscription<ChatTypingEvent>? _typingSub;
+  StreamSubscription<ChatRecordingEvent>? _recordingSub;
   StreamSubscription<ChatReadEvent>? _readSub;
   StreamSubscription<ChatMessageDeletedEvent>? _deletedSub;
 
@@ -84,6 +87,10 @@ class _ConversationScreenState extends State<ConversationScreen>
   // ── "digitando..." (peer typing) ───────────────────────────
   bool _peerTyping = false;
   Timer? _typingAutoClear;
+
+  // ── "gravando áudio" (peer voice recording) ─────────────
+  bool _peerRecording = false;
+  Timer? _recordingAutoClear;
 
   // ── Reply-to-message selection ─────────────────────────────
   ChatMessage? _replyTarget;
@@ -125,6 +132,8 @@ class _ConversationScreenState extends State<ConversationScreen>
       _chatSub = state?.onChatIncoming.listen(_onRealtime);
       _typingSub?.cancel();
       _typingSub = state?.onChatTyping.listen(_onTyping);
+      _recordingSub?.cancel();
+      _recordingSub = state?.onChatRecording.listen(_onRecording);
       _readSub?.cancel();
       _readSub = state?.onChatRead.listen(_onReadReceipt);
       _deletedSub?.cancel();
@@ -166,8 +175,16 @@ class _ConversationScreenState extends State<ConversationScreen>
   @override
   void dispose() {
     _disposeCalled = true;
+    // Leaving the screen while capturing must clear the peer's
+    // "gravando áudio" hint immediately (ephemeral signal, fire-and-forget).
+    if (_recordingSignaled) {
+      _recordingSignaled = false;
+      final id = _conversationId;
+      if (id.isNotEmpty) _state?.sendRecording(id, false);
+    }
     _chatSub?.cancel();
     _typingSub?.cancel();
+    _recordingSub?.cancel();
     _readSub?.cancel();
     _deletedSub?.cancel();
     if (_recListener != null) {
@@ -185,6 +202,11 @@ class _ConversationScreenState extends State<ConversationScreen>
     if (_typingLastSent) {
       final id = _conversationId;
       if (id.isNotEmpty) _state?.sendTyping(id, false);
+    }
+    _recordingAutoClear?.cancel();
+    if (_peerRecording) {
+      final id = _conversationId;
+      if (id.isNotEmpty) _state?.sendRecording(id, false);
     }
     // Releasing the recorder here ALSO cancels a live capture (the mic is
     // closed in VoiceRecorderController.dispose) — leaving the screen while
@@ -315,8 +337,16 @@ class _ConversationScreenState extends State<ConversationScreen>
       _voiceSending = true;
       _dragLocked = false;
       _dragDx = 0;
+      _dragDy =  0;
     });
     final file = await _recorder.finish();
+    // The capture ended (regardless of outcome) — tell rise peer so the
+    // "gravando áudio" hint clears immediately, even when we cannot send.s
+    if (_recordingSignaled) {
+      _recordingSignaled = false;
+      final id = _conversationId;
+      if (id.isNotEmpty) _state?.sendRecording(id, false);
+    }
     if (!mounted) return;
     if (file == null) {
       setState(() => _voiceSending = false);
@@ -533,6 +563,23 @@ class _ConversationScreenState extends State<ConversationScreen>
     }
   }
 
+  // ── Realtime "gravando áudio" (peer voice recording) ──────
+  void _onRecording(ChatRecordingEvent event) {
+    if (!mounted) return;
+    if (event.conversationId != _conversationId) return;
+    _recordingAutoClear?.cancel();
+    if (event.recording) {
+      if (!_peerRecording) setState(() => _peerRecording = true);
+      // Auto-clear if the peer's app dies mid-capture (closed, lost
+      // connection, crash) — never leave "gravando áudio" stuck.s
+      _recordingAutoClear = Timer(const Duration(seconds: 8), () {
+        if (mounted) setState(() => _peerRecording = false);
+      });
+    } else {
+      if (_peerRecording) setState(() => _peerRecording = false);
+    }
+  }
+
   // ── Realtime read receipt ("visto agora") ──────────────────
   void _onReadReceipt(ChatReadEvent event) {
     if (!mounted) return;
@@ -652,8 +699,10 @@ class _ConversationScreenState extends State<ConversationScreen>
                 textAlign: TextAlign.center,
                 maxLines: 1,
               ),
-              // Realtime "digitando..." directly below the nickname (only in
-              // a live conversation with a peer). Centered.
+              // Realtime peer status directly below the nickname (only in
+              // a live conversation with a peer). Centered. Voice recording
+              // takes precedence over typing — the peer cannot do both,so
+              // swapping them avoids rendering a stacked/conflicting pair.
               AnimatedSwitcher(
                 duration: const Duration(milliseconds: 200),
                 transitionBuilder: (child, anim) => FadeTransition(
@@ -664,31 +713,30 @@ class _ConversationScreenState extends State<ConversationScreen>
                     child: child,
                   ),
                 ),
-                child: _peerTyping && conversation != null
-                    ? const Padding(
-                        key: ValueKey('typing'),
-                        padding: EdgeInsets.only(top: 2),
-                        child: Text(
-                          'digitando...',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: AppColors.electricBlue,
-                            fontFamily: 'JetBrainsMono',
-                            fontStyle: FontStyle.italic,
-                          ),
-                        ),
-                      )
-                    : const SizedBox(
-                        key: ValueKey('idle'),
-                        width: 0,
-                        height: 0,
-                      ),
+                child: conversation == null
+                    ? const SizedBox(key: ValueKey('idle'), width: 0, height: 0)
+                    : _peerRecording
+                        ? _RecordingIndicator(
+                            key: const ValueKey('recording'),
+                            typing: false,
+                          )
+                        : _peerTyping
+                            ? const _RecordingIndicator(
+                                key: ValueKey('typing'),
+                                typing: true,
+                              )
+                            : const SizedBox(
+                                key: ValueKey('idle'),
+                                width: 0,
+                                height: 0,
+                              ),
               ),
             ],
           ),
         ),
         titleTextStyle: AppTextStyles.h3.copyWith(fontSize: 19, color: AppColors.techWhite),
-        toolbarHeight: kToolbarHeight + (_peerTyping ? 18 : 0),
+        toolbarHeight: kToolbarHeight +
+            ((_peerRecording || _peerTyping) ? 18 : 0),
       ),
       body: SafeArea(
         child: Column(
@@ -726,6 +774,8 @@ class _ConversationScreenState extends State<ConversationScreen>
               onMicTapLocked: _sendVoice,
               recorder: _recorder,
               dragDx: _dragDx,
+              dragDy: _dragDy,
+              dragCancelZone: _dragDx <= -40 && !_dragLocked,
               dragLocked: _dragLocked,
               voiceSending: _voiceSending,
             ),
@@ -758,10 +808,12 @@ class _ConversationScreenState extends State<ConversationScreen>
   }
 
   // ── Voice recording gestures ──────────────────────────────
-  // Short tap: hint only (never starts a capture). Hold: start recording.
-  // Hold+drag LEFT: lock the take (recording continues after release and the
-  // central button becomes "tap to send"). Hold+drag RIGHT: cancel + discard.
-  // The button can never leave the screen (displacement is clamped).
+  // Short tap: hint only (never starts a capture). Hold: start recording
+  // immediately). Hold+drag UP: lock the take (recording continues after
+  // the finger lifts and the central button becomes "tap to send"). Hold+
+  // drag LEFT: cancel + discard (no file, no message, back to idle).
+  // The button can never leave the screen (displacement is clamped to keep it
+  // inside the composer area).
 
   Future<void> _onMicTap() async {
     if (_recorder.isRecording) return;
@@ -783,7 +835,24 @@ class _ConversationScreenState extends State<ConversationScreen>
     }
     _dragLocked = false;
     _dragDx = 0;
+    _dragDy = 0;
+    _recordingSignaled = false;
     final ok = await _recorder.start();
+    if (ok && mounted) {
+      _recordingSignaled = true;
+      // Tell the peer the capture started (ephemeral realtime frame — best
+      // effort; failed signals don't kill the recording). Also stops the
+      // "digitando..." if it was showing (we no longer are typing).s
+      final id = _conversationId;
+      if (id.isNotEmpty) {
+        _state?.sendRecording(id, true);
+        _typingSendDebounce?.cancel();
+        if (_typingLastSent) {
+          _typingLastSent = false;
+          _state?.sendTyping(id, false);
+        }
+      }
+    }
     if (!ok && mounted) {
       // Permission denied or capture failed. Show a clear message once.
       ScaffoldMessenger.of(context)
@@ -796,19 +865,29 @@ class _ConversationScreenState extends State<ConversationScreen>
     }
   }
 
-  void _onMicDrag(double dx) {
+  void _onMicDrag(Offset delta) {
     if (_recorder.state != VoiceRecorderState.recording) return;
-    final total = (_dragDx + dx).clamp(-140.0, 140.0);
-    _dragDx = total;
-    if (!_dragLocked && total <= -70) {
-      // Drag LEFT past the threshold → LOCK the recording.
+    // Horizontal clamp keeps the button inside the composer area; vertical
+    // only tracks upward motion (negative) — past its threshold it locks
+    // the take (recording survives release,, mic becomes "tap to send").
+    // Positive dy can jitter from the long-press recognizer, so it is ignored
+    // toward lock/send. Dragging within the cancel zone already shows red.
+
+
+    _dragDx = (_dragDx + delta.dx).clamp(-140.0, 140.0);
+    if (delta.dy < 0) {
+      _dragDy = (_dragDy + delta.dy).clamp(-140.0,  0);
+    }
+    if (!_dragLocked && _dragDy <= -70) {
       _dragLocked = true;
+      _dragDy = 0;
       _recorder.lock();
+      if (mounted) setState(() {});
       return;
     }
-    if (!_dragLocked && total >= 70) {
-      // Drag RIGHT past the threshold → CANCEL + discard.
+    if (!_dragLocked && _dragDx <= -70) {
       _dragDx = 0;
+      _dragDy =  0;
       unawaited(_cancelMic());
       return;
     }
@@ -819,21 +898,43 @@ class _ConversationScreenState extends State<ConversationScreen>
     if (_recorder.state == VoiceRecorderState.recording && !_dragLocked) {
       // Plain press-and-release with NO lock → send the take (matches
       // WhatsApp-style short holds). Cancelled drags already reset state.
+
+      _dragDx = 0;
+      _dragDy = 0;
       await _sendVoice();
+      return;
+    }
+    if (_dragLocked) {
+      // Release after LOCK: nothing to do — the take keeps recording until
+      // the "send" button is tapped. Reset the drag visuals anyway.s
+      if (mounted) {
+        setState(() {
+          _dragDx = 0;
+          _dragDy = 0;
+        });
+      }
+      return;
     }
     if (mounted) {
       setState(() {
         _dragDx = 0;
+        _dragDy =  0;
       });
     }
   }
 
   Future<void> _cancelMic() async {
     await _recorder.cancel();
+    if (_recordingSignaled) {
+      _recordingSignaled = false;
+      final id = _conversationId;
+      if (id.isNotEmpty) _state?.sendRecording(id, false);
+    }
     if (mounted) {
       setState(() {
         _dragLocked = false;
         _dragDx = 0;
+        _dragDy =  0;
       });
     }
   }
@@ -882,6 +983,7 @@ class _ConversationScreenState extends State<ConversationScreen>
     // Chronological messages grouped by day separators.
     final items = <Widget>[];
     DateTime? lastDay;
+    var normalShownCounter = 0;
     for (var i = 0; i < _messages.length; i++) {
       final m = _messages[i];
       final day = DateTime(m.createdAt.year, m.createdAt.month, m.createdAt.day);
@@ -898,12 +1000,37 @@ class _ConversationScreenState extends State<ConversationScreen>
       final senderAvatar = m.mine
           ? null
           : (other.avatarUrl ?? other.nickname);
-      // First visible bubble of a same-sender run → full avatar; consecutive
-      // ones get a faded avatar so long bursts stay visually clean.
-      final firstOfRun = !m.mine &&
-          (i == 0 ||
-              _messages[i - 1].mine ||
-              _messages[i - 1].senderId != m.senderId);
+      // Avatar rule for OTHER-side bubbles (own never show one):
+      //  * a reply or a voice message ALWAYS shows the avatar;
+      //  * a normal (text, non-reply] message shows when the previous
+      //    same-sender run was interrupted (sender change,, my own message,
+      //    voice or reply), OR when five consecutive normal bubbles already
+      //    showed it —the 6th starts a fresh 5-group again.
+      final prev = i > 0 ? _messages[i - 1] : null;
+      final prevSameNormalSender = prev != null &&
+          !prev.mine &&
+          prev.senderId == m.senderId &&
+          !prev.isVoice &&
+          prev.replyTo == null;
+      final interrupted = m.mine ||
+          prev == null ||
+          !prevSameNormalSender ||
+          m.isVoice ||
+          m.replyTo != null;
+      final showAvatar = !m.mine &&
+          (interrupted || normalShownCounter >= 5);
+      if (m.mine) {
+        normalShownCounter = 0;
+      } else if (m.isVoice || m.replyTo != null) {
+        normalShownCounter = 0;
+      } else if (interrupted) {
+        normalShownCounter = 1;
+      } else if (normalShownCounter >= 5) {
+        normalShownCounter = 1;
+      } else {
+        normalShownCounter++;
+      }
+      final firstOfRun = showAvatar;
       items.add(_MessageBubble(
         message: m,
         index: i,
@@ -995,6 +1122,101 @@ class _DaySeparator extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: AppDimensions.spaceMd),
       child: Center(
         child: HudLabel(text: label.toUpperCase(), dot: false),
+      ),
+    );
+  }
+}
+
+/// Realtime peer status hint under the app-bar nickname: "gravando áudio"
+/// (recording voice — animated, light: a tiny looping 3-dot wave, no
+/// layout churn) or "digitando..." (typing — static, matching the pre-existing
+/// hint). Only one is rendered at a time — recording wins when both arrive.
+
+class _RecordingIndicator extends StatefulWidget {
+  const _RecordingIndicator({super.key, required this.typing});
+  final bool typing;
+
+  @override
+  State<_RecordingIndicator> createState() => _RecordingIndicatorState();
+}
+
+class _RecordingIndicatorState extends State<_RecordingIndicator>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _pulse;
+  static const _period = Duration(milliseconds: 900);
+
+  @override
+  void initState() {
+    super.initState();
+    // Only a recording indicator needs the loop; typing stays static (zero
+    // extra work for the common case).
+    _pulse = AnimationController(vsync: this, duration: _period)
+      ..repeat();
+  }
+
+  @override
+  void dispose() {
+    _pulse.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.typing) {
+      return const Padding(
+        padding: EdgeInsets.only(top: 2),
+        child: Text(
+          'digitando...',
+          style: TextStyle(
+            fontSize: 12,
+            color: AppColors.electricBlue,
+            fontFamily: 'JetBrainsMono',
+            fontStyle: FontStyle.italic,
+          ),
+        ),
+      );
+    }
+    // Three dots pulsing in sequence around the label — a lightweight
+    // wave driven by a single ticker (one small row,, no full-list rebuild).
+    return Padding(
+      padding: const EdgeInsets.only(top: 2),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text(
+            'gravando áudio',
+            style: TextStyle(
+              fontSize: 12,
+              color: AppColors.electricBlue,
+              fontFamily: 'JetBrainsMono',
+            ),
+          ),
+          const SizedBox(width: 4),
+          AnimatedBuilder(
+            animation: _pulse,
+            builder: (_, __) {
+              final v = _pulse.value;
+              return Row(
+                mainAxisSize: MainAxisSize.min,
+                children: List.generate(3, (i) {
+                  final phase = (v + i / 3) % 1;
+                  final opacity = phase < 0.5 ? phase * 2 : (1 - phase) * 2;
+                  return Opacity(
+                    opacity: opacity.clamp(0.2, 1.0),
+                    child: const Text(
+                      '•',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: AppColors.electricBlue,
+                        fontFamily: 'JetBrainsMono',
+                      ),
+                    ),
+                  );
+                }),
+              );
+            },
+          ),
+        ],
       ),
     );
   }
@@ -1217,7 +1439,9 @@ class _ReplySwipe extends StatefulWidget {
 }
 
 class _ReplySwipeState extends State<_ReplySwipe> {
-  /// Current horizontal displacement (0 when idle/selected).
+  /// Current displacement magnitude (0 when idle/selected.). Direction
+  /// is implied by the owner: theirs drags left→right (positive); mine drags
+  /// right→left toward the reply affordance (also positive after flipping).
   double _dx = 0;
 
   bool get _selected => widget.replySelected;
@@ -1243,6 +1467,7 @@ class _ReplySwipeState extends State<_ReplySwipe> {
   @override
   Widget build(BuildContext context) {
     final mine = widget.mine;
+    final dir = mine ? -1.0 : 1.0; // flip drag so BOTH sides swipe toward the arrow
     return GestureDetector(
       // Long-press on a message bubble opens the contextual actions menu
       // (Responder / Excluir / Excluir para todos).
@@ -1250,7 +1475,7 @@ class _ReplySwipeState extends State<_ReplySwipe> {
       onHorizontalDragUpdate: (details) {
         if (_selected) return; // already replying another message
         setState(() {
-          _dx = (_dx + details.delta.dx).clamp(0.0, _replySwipeThreshold);
+          _dx = (_dx + details.delta.dx * dir).clamp(0.0, _replySwipeThreshold);
         });
       },
       onHorizontalDragEnd: (_) => _endDragAndMaybeSelect(),
@@ -1260,7 +1485,7 @@ class _ReplySwipeState extends State<_ReplySwipe> {
             ? Duration.zero
             : const Duration(milliseconds: 160),
         curve: Curves.easeOut,
-        transform: Matrix4.translationValues(_dx, 0, 0),
+        transform: Matrix4.translationValues(_dx * dir, 0, 0),
         alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
         child: Column(
           crossAxisAlignment: widget.align,
@@ -1271,22 +1496,24 @@ class _ReplySwipeState extends State<_ReplySwipe> {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 // Profile picture of the OTHER sender, shown to the LEFT of
-                // every received message (matches [FOTO] [MENSAGEM]). Hidden
-                // on my own messages — the layout stays clean. The first
-                // bubble of a run keeps the avatar; consecutive bubbles from
-                // the same sender fade it out so a burst doesn't look noisy.
-                if (!widget.mine && widget.peerName != null)
+                // received messages (matches [FOTO] [MENSAGEM]). Hidden
+                // on my own messages —the layout stays clean. Replies and
+                // voice messages ALWAYS keep it (firstOfRun force-cs true,
+                // so a burst of five normal bubbles wears it only once,, then
+                // the next group's first normal brings it back).
+                if (!widget.mine &&
+                    widget.peerName != null &&
+                    widget.firstOfRun)
                   Padding(
-                    padding: const EdgeInsets.only(right: 5, bottom: 3),
-                    child: Opacity(
-                      opacity: widget.firstOfRun ? 1 : 0.35,
-                      child: UserAvatar(
-                        key: ValueKey('peer-avatar-${widget.message.id}'),
-                        name: widget.peerName!,
-                        imageUrl: widget.peerAvatar,
-                        size: 26,
-                        seed: widget.peerName,
-                      ),
+                    padding: const EdgeInsets.only(right: 5, bottom: 4),
+                    child: UserAvatar(
+                      key: ValueKey('peer-avatar-${widget.message.id}'),
+                      name: widget.peerName!,
+                      imageUrl: widget.peerAvatar,
+                      // Proportional to the 300px-max bubble — keeping the
+                      // received layout balanced (MATRIX's visual format).
+                      size: 38,
+                      seed: widget.peerName,
                     ),
                   ),
                 // Reply affordance that lights up as the swipe approaches.
@@ -1324,6 +1551,8 @@ class _Composer extends StatefulWidget {
     required this.onMicTapLocked,
     required this.recorder,
     required this.dragDx,
+    required this.dragDy,
+    required this.dragCancelZone,
     required this.dragLocked,
     required this.voiceSending,
   });
@@ -1338,10 +1567,15 @@ class _Composer extends StatefulWidget {
   final VoidCallback onTapMic;
   final void Function(LongPressStartDetails) onMicLongPressStart;
   final VoidCallback onMicLongPressEnd;
-  final void Function(double dx) onMicDragUpdate;
+  final void Function(Offset delta) onMicDragUpdate;
   final VoidCallback onMicTapLocked;
   final VoiceRecorderController recorder;
   final double dragDx;
+  final double dragDy;
+  /// Whether the finger is inside the cancel zone (drag left, under threshold)
+  /// — drives the red cancel tint feedback.
+
+  final bool dragCancelZone;
   final bool dragLocked;
   final bool voiceSending;
 
@@ -1375,6 +1609,8 @@ class _ComposerState extends State<_Composer> {
                   recorder: widget.recorder,
                   locking: widget.dragLocked,
                   dragDx: widget.dragDx,
+                  dragDy: widget.dragDy,
+                  cancelZone: widget.dragCancelZone,
                   onTap: widget.onMicTapLocked,
                 )
               : Row(
@@ -1400,7 +1636,7 @@ class _ComposerState extends State<_Composer> {
                       onTap: widget.onTapMic,
                       onLongPressStart: widget.onMicLongPressStart,
                       onLongPressEnd: widget.onMicLongPressEnd,
-                      onDragX: widget.onMicDragUpdate,
+                      onDrag: widget.onMicDragUpdate,
                       enabled: widget.enabled,
                     ),
                     const SizedBox(width: AppDimensions.spaceSm),
@@ -1466,20 +1702,22 @@ class _SendButton extends StatelessWidget {
 
 /// The capture button between the text field and the send button. A SHORT
 /// tap shows the "segure para gravar áudio" hint; a HOLD starts recording
-/// (holding + dragging left locks the take, dragging right cancels it).
+/// immediately. Dragging UP locks the take; dragging LEFT cancels it.
+/// The button always stays inside the composer area (clamped displacement).
 class _MicButton extends StatelessWidget {
   const _MicButton({
     required this.onTap,
     required this.onLongPressStart,
     required this.onLongPressEnd,
-    required this.onDragX,
+    required this.onDrag,
     required this.enabled,
   });
 
   final VoidCallback onTap;
+
   final void Function(LongPressStartDetails) onLongPressStart;
   final VoidCallback onLongPressEnd;
-  final void Function(double dx) onDragX;
+  final void Function(Offset delta) onDrag;
   final bool enabled;
 
   @override
@@ -1489,7 +1727,7 @@ class _MicButton extends StatelessWidget {
       onLongPressStart: enabled ? onLongPressStart : null,
       onLongPressEnd: enabled ? (details) => onLongPressEnd() : null,
       onLongPressMoveUpdate: enabled
-          ? (d) => onDragX(d.offsetFromOrigin.dx)
+          ? (d) => onDrag(d.offsetFromOrigin)
           : null,
       // The long-press recognizer wins over the tap, so a SHORT tap fires
       // onTap (the "segure para gravar" hint) and a HOLD fires the recording.
@@ -1521,12 +1759,22 @@ class _RecordingBar extends StatelessWidget {
     required this.recorder,
     required this.locking,
     required this.dragDx,
+    required this.dragDy,
+    required this.cancelZone,
     required this.onTap,
   });
 
   final VoiceRecorderController recorder;
   final bool locking;
   final double dragDx;
+
+  /// Live upward drag displacement (negative while pulled up).
+  final double dragDy;
+
+  /// Whether the finger is inside the cancel zone — red tint + "cancelar"
+  /// hint feedback while dragging left.
+
+  final bool cancelZone;
   final VoidCallback onTap;
 
   @override
@@ -1554,30 +1802,57 @@ class _RecordingBar extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
         Expanded(
-          child: Container(
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 160),
             height: 48,
             padding: const EdgeInsets.symmetric(horizontal: 12),
             decoration: BoxDecoration(
-              color: AppColors.absoluteBlack.withValues(alpha: 0.45),
+              color: cancelZone
+                  ? AppColors.error.withValues(alpha: 0.15)
+                  : AppColors.absoluteBlack.withValues(alpha: 0.45),
               borderRadius: BorderRadius.circular(AppDimensions.radiusLg),
               border: Border.all(
-                color: locking
-                    ? AppColors.electricBlue
-                    : AppColors.deepBlue,
+                color: cancelZone
+                    ? AppColors.error
+                    : (locking ? AppColors.electricBlue : AppColors.deepBlue),
               ),
             ),
             child: Row(
               children: [
                 Icon(
-                  locking ? Icons.lock_rounded : Icons.graphic_eq_rounded,
-                  color: locking
-                      ? AppColors.techWhite
-                      : AppColors.electricBlue,
+                  locking
+                      ? Icons.lock_rounded
+                      : (cancelZone ? Icons.cancel_rounded : Icons.graphic_eq_rounded),
+                  color: cancelZone
+                      ? AppColors.error
+                      : (locking ? AppColors.techWhite : AppColors.electricBlue),
                   size: 18,
                 ),
                 const SizedBox(width: 10),
                 Expanded(
-                  child: Center(child: Row(mainAxisSize: MainAxisSize.min, children: bars)),
+                  child: Center(
+                    child: AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 160),
+                      child: cancelZone
+                          ? const Padding(
+                              key: ValueKey('cancel'),
+                              padding: EdgeInsets.zero,
+                              child: Text(
+                                'soltar para cancelar',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: AppColors.error,
+                                  fontFamily: 'JetBrainsMono',
+                                ),
+                              ),
+                            )
+                          : Row(
+                              key: const ValueKey('wave'),
+                              mainAxisSize: MainAxisSize.min,
+                              children: bars,
+                            ),
+                    ),
+                  ),
                 ),
                 const SizedBox(width: 8),
                 Text(
@@ -1594,31 +1869,47 @@ class _RecordingBar extends StatelessWidget {
         ),
         const SizedBox(width: AppDimensions.spaceSm),
         Transform.translate(
-          offset: Offset(dragDx.clamp(-120, 120), 0),
+          // Follow the finger: horizontal (cancel) AND upward (lock
+          // hint), clamped so the button never leaves the composer area.
+
+          offset: Offset(dragDx.clamp(-120, 120), dragDy.clamp(-60, 0)),
           child: GestureDetector(
             // LOCKED → tap to send; otherwise the button is inert (the finger
             // is already on it; recording continues via the held gesture).
+
             onTap: locking ? onTap : null,
-            child: Container(
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeOut,
               width: 44,
               height: 44,
               alignment: Alignment.center,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: locking ? AppColors.primaryBlue : AppColors.electricBlue,
+                color: cancelZone
+                    ? AppColors.error
+                    : (locking ? AppColors.primaryBlue : AppColors.electricBlue),
                 boxShadow: [BoxShadow(color: AppColors.glowSmall, blurRadius: 8)],
               ),
-              child: Icon(
-                locking ? Icons.send_rounded : Icons.mic_rounded,
-                color: AppColors.techWhite,
-                size: 22,
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 160),
+                child: Icon(
+                  locking
+                      ? Icons.send_rounded
+                      : (cancelZone ? Icons.close_rounded : Icons.mic_rounded),
+                  key: ValueKey(locking ? 'send' : (cancelZone ? 'cancel' : 'mic')),
+                  color: AppColors.techWhite,
+                  size: 22,
+                ),
               ),
             ),
           ),
         ),
       ],
     );
-  }
+
+
+}
 
   String _clockText(Duration d) {
     final s = d.inSeconds;
@@ -1627,7 +1918,7 @@ class _RecordingBar extends StatelessWidget {
 }
 
 /// The "Respondendo a …" bar shown above the composer while a reply is
-/// selected: the original message's author + truncated preview + a ✕ close.
+/// selected:the original message's author + truncated preview + a ✕ close.
 class _ReplyPreviewBar extends StatelessWidget {
   const _ReplyPreviewBar({
     super.key,

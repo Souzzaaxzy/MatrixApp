@@ -33,6 +33,7 @@ class _MatrixAppState extends State<MatrixApp> {
       Services.instance.push.onNavigate = _onPushNavigate;
       Services.instance.push.onChatMessage = _onChatMessage;
       Services.instance.push.onChatTyping = _onChatTyping;
+      Services.instance.push.onChatRecording = _onChatRecording;
       Services.instance.push.onChatRead = _onChatRead;
       Services.instance.push.onChatMessageDeleted = _onChatMessageDeleted;
       Services.instance.push.onCommentDeleted = _onCommentDeleted;
@@ -113,7 +114,20 @@ class _MatrixAppState extends State<MatrixApp> {
     ));
   }
 
-  /// The peer read one of my messages in a conversation (realtime read
+  /// The peer started/stopped recording a voice message in a conversation
+  /// (realtime "gravando áudio" hint below the nickname).
+  void _onChatRecording(Map<String, dynamic> data) {
+    final state = _state;
+    if (state == null) return;
+    final conversationId = data['conversationId'] as String? ?? '';
+    if (conversationId.isEmpty) return;
+    state.handleIncomingChatRecording(ChatRecordingEvent(
+      conversationId: conversationId,
+      recording: (data['recording'] as bool?) ?? false,
+    ));
+  }
+
+  /// The peer read one of my messages in a conversation(realtime read
   /// receipt for the "visto agora" hint).
   void _onChatRead(Map<String, dynamic> data) {
     final state = _state;

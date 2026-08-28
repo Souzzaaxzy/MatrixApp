@@ -47,6 +47,11 @@ class PushService {
   /// below the peer's nickname in an open conversation.
   void Function(Map<String, dynamic> data)? onChatTyping;
 
+  /// Called when a real-time RECORDING frame arrives (kind `chat_recording`).
+  /// Receives `{ conversationId, recording }`. Drives the "gravando áudio"
+  /// hint below the peer's nickname in an open conversation. Ephemeral.t
+  void Function(Map<String, dynamic> data)? onChatRecording;
+
   /// Called when a chat message was deleted FOR EVERYONE by the peer
   /// (kind `chat_message_deleted`). Payload carries {conversationId, messageId}.
   void Function(Map<String, dynamic> data)? onChatMessageDeleted;
@@ -215,6 +220,12 @@ class PushService {
       final data =
           (message['data'] as Map?)?.cast<String, dynamic>() ?? const {};
       onChatTyping?.call(data);
+      return;
+    }
+    if (message['kind'] == 'chat_recording') {
+      final data =
+          (message['data'] as Map?)?.cast<String, dynamic>() ?? const {};
+      onChatRecording?.call(data);
       return;
     }
     if (message['kind'] == 'chat_read') {

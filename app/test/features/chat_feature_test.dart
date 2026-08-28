@@ -200,8 +200,213 @@ void main() {
       expect(find.text('digitando...'), findsNothing);
     });
 
-    testWidgets('watches realtime incoming messages and appends to the right',
+    testWidgets('realtime recording shows "gravando áudio" below the nickname',
         (tester) async {
+      final state = await seededChat(messages: const []);
+      await pumpMatrixApp(
+        tester,
+        ConversationScreen(
+          args: const ConversationRouteArgs(
+            conversationId: 'u0|u2',
+            otherUserId: 'u2',
+            otherNickname: 'joao',
+          ),
+        ),
+        state: state,
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('gravando áudio'), findsNothing);
+
+      // The peer (joao) starts recording a voice message.
+
+      state.handleIncomingChatRecording(
+          const ChatRecordingEvent(conversationId: 'u0|u2', recording: true));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.text('gravando áudio'), findsOneWidget);
+
+      // Peer stops → the indicator disappears immediately (no fade-in/out stick).
+      state.handleIncomingChatRecording(
+          const ChatRecordingEvent(conversationId: 'u0|u2', recording: false));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.text('gravando áudio'), findsNothing);
+    });
+
+    testWidgets('recording indicator auto-hides after 8s even without a stop frame',
+        (tester) async {
+      final state = await seededChat(messages: const []);
+      await pumpMatrixApp(
+        tester,
+        ConversationScreen(
+          args: const ConversationRouteArgs(
+            conversationId: 'u0|u2',
+            otherUserId: 'u2',
+            otherNickname: 'joao',
+          ),
+        ),
+        state: state,
+      );
+      await tester.pumpAndSettle();
+      state.handleIncomingChatRecording(
+          const ChatRecordingEvent(conversationId: 'u0|u2', recording: true));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.text('gravando áudio'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 9));
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.text('gravando áudio'), findsNothing);
+    });
+
+    testWidgets('peer avatar shows on the 1st and 6th of a 5-group of normals',
+        (tester) async {
+      final state = await seededChat(messages: const []);
+      await pumpMatrixApp(
+        tester,
+        ConversationScreen(
+          args: const ConversationRouteArgs(
+            conversationId: 'u0|u2',
+            otherUserId: 'u2',
+            otherNickname: 'joao',
+          ),
+        ),
+        state: state,
+      );
+      await tester.pumpAndSettle();
+      // Push seven consecutive NORMAL peer texts (m1..m7) live.
+
+
+
+      for (var i =  1; i <=  7; i++) {
+
+        state.handleIncomingChatMessage(ChatMessage(
+          id: 'g$i',
+          conversationId: 'u0|u2',
+          senderId: 'u2',
+          content: 'normal $i',
+          createdAt: DateTime(2024, 1, 1, 22, i),
+          mine: false,
+        ));
+        await tester.pump();
+      }
+      await tester.pumpAndSettle();
+      // Group 1 → avatar on g1 only; group 2 → avatar on g6 only.
+
+      expect(find.byKey(const ValueKey('peer-avatar-g1')), findsOneWidget);
+
+
+
+      expect(find.byKey(const ValueKey('peer-avatar-g6')), findsOneWidget);
+
+      expect(find.byKey(const ValueKey('peer-avatar-g2')), findsNothing);
+      expect(find.byKey(const ValueKey('peer-avatar-g3')), findsNothing);
+      expect(find.byKey(const ValueKey('peer-avatar-g4')), findsNothing);
+
+      expect(find.byKey(const ValueKey('peer-avatar-g5')), findsNothing);
+      expect(find.byKey(const ValueKey('peer-avatar-g7')), findsNothing);
+    });
+
+    testWidgets('reply and voice always show the avatar and start a fresh group',
+        (tester) async {
+      final state = await seededChat(messages: const []);
+      await pumpMatrixApp(
+        tester,
+        ConversationScreen(
+          args: const ConversationRouteArgs(
+            conversationId: 'u0|u2',
+            otherUserId: 'u2',
+            otherNickname: 'joao',
+          ),
+        ),
+        state: state,
+      );
+      await tester.pumpAndSettle();
+      void push(ChatMessage m) => state.handleIncomingChatMessage(m);
+      // normals g1..g3 -> reply (g4,, replyTo set) -> normal g5 starts a fresh
+      // group;then voice g6 -> normal g7 starts another group.
+
+      push(ChatMessage(id: 'g1', conversationId: 'u0|u2', senderId: 'u2', content: 'a', createdAt: DateTime(2024, 1, 1, 22, 1), mine: false));
+      push(ChatMessage(id: 'g2', conversationId: 'u0|u2', senderId: 'u2', content: 'b', createdAt: DateTime(2024, 1, 1, 22, 2), mine: false));
+      push(ChatMessage(id: 'g3', conversationId: 'u0|u2', senderId: 'u2', content: 'c', createdAt: DateTime(2024, 1, 1, 22, 3), mine: false));
+      push(ChatMessage(
+        id: 'g4',
+        conversationId: 'u0|u2',
+
+        senderId: 'u2',
+        content: 'd',
+
+        createdAt: DateTime(2024, 1, 1,  22, 4),
+        mine: false,
+        replyTo: const ReplyInfo(
+          id: 'g2',
+          senderId: 'u2',
+          senderNickname: 'joao',
+          content: 'b',
+          exists: true,
+        ),
+      ));
+      push(ChatMessage(id: 'g5', conversationId: 'u0|u2', senderId: 'u2', content: 'e', createdAt: DateTime(2024, 1,  1,  22,  5), mine: false));
+      push(ChatMessage(
+        id: 'g6',
+        conversationId: 'u0|u2',
+        senderId: 'u2',
+        content: '',
+        createdAt: DateTime(2024, 1,  1,  22,  6),
+        mine: false,
+        type: 'voice',
+        audioUrl: 'file:///tmp/m6.m4a',
+        durationMs: 3000,
+      ));
+      push(ChatMessage(id: 'g7', conversationId: 'u0|u2', senderId: 'u2', content: 'f', createdAt: DateTime(2024, 1,  1,  22,  7), mine: false));
+      await tester.pumpAndSettle();
+      // Avatar mandatory on the reply and the voice themselves.
+      expect(find.byKey(const ValueKey('peer-avatar-g4')), findsOneWidget);
+      expect(find.byKey(const ValueKey('peer-avatar-g6')), findsOneWidget);
+      // The normal right after each interruption starts a new group → avatar.
+
+      expect(find.byKey(const ValueKey('peer-avatar-g5')), findsOneWidget);
+
+      expect(find.byKey(const ValueKey('peer-avatar-g7')), findsNothing);
+      // g1..g3 are the first 3 of group 1 → only g1 has the avatar.
+
+
+      expect(find.byKey(const ValueKey('peer-avatar-g1')), findsOneWidget);
+      expect(find.byKey(const ValueKey('peer-avatar-g2')), findsNothing);
+      expect(find.byKey(const ValueKey('peer-avatar-g3')), findsNothing);
+    });
+
+    testWidgets('own message swiped right→left opens reply composer',
+        (tester) async {
+      final state = await seededChat(messages: ['Minha própria', 'Oi!']); // m0 = mine
+      await pumpMatrixApp(
+        tester,
+        ConversationScreen(
+          args: const ConversationRouteArgs(
+            conversationId: 'u0|u2',
+            otherUserId: 'u2',
+            otherNickname: 'joao',
+          ),
+        ),
+        state: state,
+      );
+      await tester.pumpAndSettle();
+      // m0 is a bubble sent by THE SESSION USER (mine=true) — swipe it
+      // right→left (negative dx) to activate the reply composer.
+
+
+
+      await tester.drag(find.text('Minha própria'), const Offset(-140, 0), warnIfMissed: false);
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Respondendo a mensagem'), findsOneWidget);
+
+      await tester.tap(find.byIcon(Icons.close_rounded));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Respondendo a mensagem'), findsNothing);
+    });
+
+    testWidgets('watches realtime incoming messagesand appends to the right',
+        (tester) async {
+
       final state = await seededChat(messages: ['Oi!']); // m0 = mine
       await pumpMatrixApp(
         tester,

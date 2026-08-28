@@ -919,5 +919,7 @@ class _FakeChatRepository implements ChatRepository {
 
   @override
   void setTyping(String conversationId, bool typing) {}
+  @override
+  void setRecording(String conversationId, bool recording) {}
 }
 
