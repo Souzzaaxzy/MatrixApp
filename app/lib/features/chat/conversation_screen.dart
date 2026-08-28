@@ -73,7 +73,8 @@ class _ConversationScreenState extends State<ConversationScreen>
   bool _dragLocked = false;
   bool _voiceSending = false;
   double _dragDy = 0; // vertical live gesture displacement (up = negative)
-  bool _recordingSignaled = false; // whether the peer was told were are recording
+  bool _recordingSignaled =
+      false; // whether the peer was told were are recording
 
   StreamSubscription<ChatMessage>? _chatSub;
   StreamSubscription<ChatTypingEvent>? _typingSub;
@@ -110,8 +111,7 @@ class _ConversationScreenState extends State<ConversationScreen>
     // Guarded: Services may not be initialized in isolated widget tests.
     if (Services.isInitialized) {
       final id = widget.args.conversationId;
-      if (id.isNotEmpty &&
-          Services.instance.push.activeConversationId != id) {
+      if (id.isNotEmpty && Services.instance.push.activeConversationId != id) {
         Services.instance.push.activeConversationId = id;
       }
     }
@@ -137,7 +137,8 @@ class _ConversationScreenState extends State<ConversationScreen>
       _readSub?.cancel();
       _readSub = state?.onChatRead.listen(_onReadReceipt);
       _deletedSub?.cancel();
-      _deletedSub = state?.onChatMessageDeleted.listen(_onMessageDeletedRealtime);
+      _deletedSub =
+          state?.onChatMessageDeleted.listen(_onMessageDeletedRealtime);
     }
     if (!_loadRequested) {
       // Defer the load: _load notifies listeners synchronously.
@@ -158,6 +159,7 @@ class _ConversationScreenState extends State<ConversationScreen>
     // so the mic is always released (never left "gravando" forever).
     WidgetsBinding.instance.addObserver(this);
   }
+
   bool _loadRequested = false;
 
   @override
@@ -220,7 +222,9 @@ class _ConversationScreenState extends State<ConversationScreen>
   }
 
   String get _conversationId {
-    if (widget.args.conversationId.isNotEmpty) return widget.args.conversationId;
+    if (widget.args.conversationId.isNotEmpty) {
+      return widget.args.conversationId;
+    }
     return _conversation?.id ?? '';
   }
 
@@ -236,7 +240,8 @@ class _ConversationScreenState extends State<ConversationScreen>
       // other user (search/friend/profile entry). Already-known ids load fast.
       var conversation = _conversation;
       if (_conversationId.isEmpty) {
-        conversation = await state.getOrCreateConversation(widget.args.otherUserId);
+        conversation =
+            await state.getOrCreateConversation(widget.args.otherUserId);
         if (!mounted) return;
       } else if (conversation == null || conversation.id == _conversationId) {
         // Reuse the cached conversation if present, else fetch a fresh one.
@@ -246,7 +251,8 @@ class _ConversationScreenState extends State<ConversationScreen>
         if (cached != null) {
           conversation = cached;
         } else {
-          conversation = await state.getOrCreateConversation(widget.args.otherUserId);
+          conversation =
+              await state.getOrCreateConversation(widget.args.otherUserId);
           if (!mounted) return;
         }
       }
@@ -307,7 +313,8 @@ class _ConversationScreenState extends State<ConversationScreen>
       _appendMessage(message);
     } on ApiException catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(e.message)));
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -337,7 +344,7 @@ class _ConversationScreenState extends State<ConversationScreen>
       _voiceSending = true;
       _dragLocked = false;
       _dragDx = 0;
-      _dragDy =  0;
+      _dragDy = 0;
     });
     final file = await _recorder.finish();
     // The capture ended (regardless of outcome) — tell rise peer so the
@@ -371,7 +378,8 @@ class _ConversationScreenState extends State<ConversationScreen>
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Erro ao enviar o áudio. Tente novamente.')),
+          const SnackBar(
+              content: Text('Erro ao enviar o áudio. Tente novamente.')),
         );
       }
     } finally {
@@ -637,7 +645,8 @@ class _ConversationScreenState extends State<ConversationScreen>
       if (!mounted) return;
       final offsetBefore = _scroll.position.minScrollExtent;
       setState(() {
-        _messages.insertAll(0, page.messages.where((m) => !_messages.any((x) => x.id == m.id)));
+        _messages.insertAll(
+            0, page.messages.where((m) => !_messages.any((x) => x.id == m.id)));
         _hasMore = page.hasMore;
         _loadingOlder = false;
       });
@@ -708,8 +717,9 @@ class _ConversationScreenState extends State<ConversationScreen>
                 transitionBuilder: (child, anim) => FadeTransition(
                   opacity: anim,
                   child: SlideTransition(
-                    position: Tween(begin: const Offset(0, -0.05), end: Offset.zero)
-                        .animate(anim),
+                    position:
+                        Tween(begin: const Offset(0, -0.05), end: Offset.zero)
+                            .animate(anim),
                     child: child,
                   ),
                 ),
@@ -734,9 +744,10 @@ class _ConversationScreenState extends State<ConversationScreen>
             ],
           ),
         ),
-        titleTextStyle: AppTextStyles.h3.copyWith(fontSize: 19, color: AppColors.techWhite),
-        toolbarHeight: kToolbarHeight +
-            ((_peerRecording || _peerTyping) ? 18 : 0),
+        titleTextStyle:
+            AppTextStyles.h3.copyWith(fontSize: 19, color: AppColors.techWhite),
+        toolbarHeight:
+            kToolbarHeight + ((_peerRecording || _peerTyping) ? 18 : 0),
       ),
       body: SafeArea(
         child: Column(
@@ -748,8 +759,9 @@ class _ConversationScreenState extends State<ConversationScreen>
               transitionBuilder: (child, anim) => FadeTransition(
                 opacity: anim,
                 child: SlideTransition(
-                  position: Tween(begin: const Offset(0, 0.05), end: Offset.zero)
-                      .animate(anim),
+                  position:
+                      Tween(begin: const Offset(0, 0.05), end: Offset.zero)
+                          .animate(anim),
                   child: child,
                 ),
               ),
@@ -771,7 +783,6 @@ class _ConversationScreenState extends State<ConversationScreen>
               onMicLongPressStart: _onMicPressStart,
               onMicLongPressEnd: _onMicRelease,
               onMicDragUpdate: _onMicDrag,
-              onMicTapLocked: _sendVoice,
               recorder: _recorder,
               dragDx: _dragDx,
               dragDy: _dragDy,
@@ -816,16 +827,24 @@ class _ConversationScreenState extends State<ConversationScreen>
   // inside the composer area).
 
   Future<void> _onMicTap() async {
-    if (_recorder.isRecording) return;
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        const SnackBar(
-          content: Text('segure para gravar áudio'),
-          duration: Duration(seconds: 2),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+    if (_recorder.state == VoiceRecorderState.recording ||
+        _recorder.state == VoiceRecorderState.locked) {
+      // Locked take: the stable mic button now wears the send icon — a tap
+      // finalizes the capture and starts the upload (no second hold needed).
+      if (_dragLocked) await _sendVoice();
+      return;
+    }
+    if (mounted) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(
+            content: Text('segure para gravar áudio'),
+            duration: Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+    }
   }
 
   Future<void> _onMicPressStart(LongPressStartDetails details) async {
@@ -873,10 +892,9 @@ class _ConversationScreenState extends State<ConversationScreen>
     // Positive dy can jitter from the long-press recognizer, so it is ignored
     // toward lock/send. Dragging within the cancel zone already shows red.
 
-
     _dragDx = (_dragDx + delta.dx).clamp(-140.0, 140.0);
     if (delta.dy < 0) {
-      _dragDy = (_dragDy + delta.dy).clamp(-140.0,  0);
+      _dragDy = (_dragDy + delta.dy).clamp(-140.0, 0);
     }
     if (!_dragLocked && _dragDy <= -70) {
       _dragLocked = true;
@@ -887,7 +905,7 @@ class _ConversationScreenState extends State<ConversationScreen>
     }
     if (!_dragLocked && _dragDx <= -70) {
       _dragDx = 0;
-      _dragDy =  0;
+      _dragDy = 0;
       unawaited(_cancelMic());
       return;
     }
@@ -918,7 +936,7 @@ class _ConversationScreenState extends State<ConversationScreen>
     if (mounted) {
       setState(() {
         _dragDx = 0;
-        _dragDy =  0;
+        _dragDy = 0;
       });
     }
   }
@@ -934,14 +952,15 @@ class _ConversationScreenState extends State<ConversationScreen>
       setState(() {
         _dragLocked = false;
         _dragDx = 0;
-        _dragDy =  0;
+        _dragDy = 0;
       });
     }
   }
 
   Widget _buildThread(Conversation? conversation, ChatUser other) {
     if (_loading) {
-      return const Center(child: HudLabel(text: 'CARREGANDO MENSAGENS...', dot: true));
+      return const Center(
+          child: HudLabel(text: 'CARREGANDO MENSAGENS...', dot: true));
     }
     final error = _error;
     if (error != null) {
@@ -951,7 +970,8 @@ class _ConversationScreenState extends State<ConversationScreen>
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.cloud_off_rounded, color: AppColors.error, size: 40),
+              const Icon(Icons.cloud_off_rounded,
+                  color: AppColors.error, size: 40),
               const SizedBox(height: AppDimensions.spaceMd),
               Text(
                 error,
@@ -986,7 +1006,8 @@ class _ConversationScreenState extends State<ConversationScreen>
     var normalShownCounter = 0;
     for (var i = 0; i < _messages.length; i++) {
       final m = _messages[i];
-      final day = DateTime(m.createdAt.year, m.createdAt.month, m.createdAt.day);
+      final day =
+          DateTime(m.createdAt.year, m.createdAt.month, m.createdAt.day);
       if (lastDay == null || lastDay != day) {
         lastDay = day;
         items.add(_DaySeparator(label: chatDayLabel(m.createdAt)));
@@ -997,9 +1018,7 @@ class _ConversationScreenState extends State<ConversationScreen>
       final isLast = i == _messages.length - 1;
       // Mention the SENDER only when it's the OTHER side (my own avatar is
       // not shown — the layout stays clean and matches the original design).
-      final senderAvatar = m.mine
-          ? null
-          : (other.avatarUrl ?? other.nickname);
+      final senderAvatar = m.mine ? null : (other.avatarUrl ?? other.nickname);
       // Avatar rule for OTHER-side bubbles (own never show one):
       //  * a reply or a voice message ALWAYS shows the avatar;
       //  * a normal (text, non-reply] message shows when the previous
@@ -1017,8 +1036,7 @@ class _ConversationScreenState extends State<ConversationScreen>
           !prevSameNormalSender ||
           m.isVoice ||
           m.replyTo != null;
-      final showAvatar = !m.mine &&
-          (interrupted || normalShownCounter >= 5);
+      final showAvatar = !m.mine && (interrupted || normalShownCounter >= 5);
       if (m.mine) {
         normalShownCounter = 0;
       } else if (m.isVoice || m.replyTo != null) {
@@ -1055,7 +1073,8 @@ class _ConversationScreenState extends State<ConversationScreen>
               child: _loadingOlder
                   ? const Padding(
                       padding: EdgeInsets.all(AppDimensions.spaceMd),
-                      child: Center(child: HudLabel(text: 'CARREGANDO...', dot: true)),
+                      child: Center(
+                          child: HudLabel(text: 'CARREGANDO...', dot: true)),
                     )
                   : const SizedBox(height: AppDimensions.spaceSm),
             ),
@@ -1066,7 +1085,8 @@ class _ConversationScreenState extends State<ConversationScreen>
             ),
             sliver: SliverList(delegate: SliverChildListDelegate(items)),
           ),
-          const SliverToBoxAdapter(child: SizedBox(height: AppDimensions.spaceMd)),
+          const SliverToBoxAdapter(
+              child: SizedBox(height: AppDimensions.spaceMd)),
         ],
       ),
     );
@@ -1150,8 +1170,7 @@ class _RecordingIndicatorState extends State<_RecordingIndicator>
     super.initState();
     // Only a recording indicator needs the loop; typing stays static (zero
     // extra work for the common case).
-    _pulse = AnimationController(vsync: this, duration: _period)
-      ..repeat();
+    _pulse = AnimationController(vsync: this, duration: _period)..repeat();
   }
 
   @override
@@ -1285,8 +1304,10 @@ class _MessageBubble extends StatelessWidget {
         borderRadius: BorderRadius.only(
           topLeft: const Radius.circular(AppDimensions.radiusLg),
           topRight: const Radius.circular(AppDimensions.radiusLg),
-          bottomLeft: Radius.circular(mine ? AppDimensions.radiusLg : AppDimensions.radiusSm),
-          bottomRight: Radius.circular(mine ? AppDimensions.radiusSm : AppDimensions.radiusLg),
+          bottomLeft: Radius.circular(
+              mine ? AppDimensions.radiusLg : AppDimensions.radiusSm),
+          bottomRight: Radius.circular(
+              mine ? AppDimensions.radiusSm : AppDimensions.radiusLg),
         ),
         boxShadow: mine
             ? [BoxShadow(color: AppColors.glowSmall, blurRadius: 6)]
@@ -1467,7 +1488,8 @@ class _ReplySwipeState extends State<_ReplySwipe> {
   @override
   Widget build(BuildContext context) {
     final mine = widget.mine;
-    final dir = mine ? -1.0 : 1.0; // flip drag so BOTH sides swipe toward the arrow
+    final dir =
+        mine ? -1.0 : 1.0; // flip drag so BOTH sides swipe toward the arrow
     return GestureDetector(
       // Long-press on a message bubble opens the contextual actions menu
       // (Responder / Excluir / Excluir para todos).
@@ -1481,9 +1503,7 @@ class _ReplySwipeState extends State<_ReplySwipe> {
       onHorizontalDragEnd: (_) => _endDragAndMaybeSelect(),
       onHorizontalDragCancel: () => setState(() => _dx = 0),
       child: AnimatedContainer(
-        duration: _selected
-            ? Duration.zero
-            : const Duration(milliseconds: 160),
+        duration: _selected ? Duration.zero : const Duration(milliseconds: 160),
         curve: Curves.easeOut,
         transform: Matrix4.translationValues(_dx * dir, 0, 0),
         alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
@@ -1548,7 +1568,6 @@ class _Composer extends StatefulWidget {
     required this.onMicLongPressStart,
     required this.onMicLongPressEnd,
     required this.onMicDragUpdate,
-    required this.onMicTapLocked,
     required this.recorder,
     required this.dragDx,
     required this.dragDy,
@@ -1568,10 +1587,10 @@ class _Composer extends StatefulWidget {
   final void Function(LongPressStartDetails) onMicLongPressStart;
   final VoidCallback onMicLongPressEnd;
   final void Function(Offset delta) onMicDragUpdate;
-  final VoidCallback onMicTapLocked;
   final VoiceRecorderController recorder;
   final double dragDx;
   final double dragDy;
+
   /// Whether the finger is inside the cancel zone (drag left, under threshold)
   /// — drives the red cancel tint feedback.
 
@@ -1586,7 +1605,14 @@ class _Composer extends StatefulWidget {
 class _ComposerState extends State<_Composer> {
   @override
   Widget build(BuildContext context) {
-    final recording = widget.recorder.isRecording || widget.voiceSending;
+    // The mic button stays mounted in every state (idle/recording/locked/
+    // sending/. Only the left area swaps between the text field and the recording
+    // status bar. The gesture recognizers live on the mic button, so keeping
+    // it in place lets the hold → release → send chain complete (see class doc).
+    final captureActive =
+        widget.recorder.state == VoiceRecorderState.recording ||
+            widget.recorder.state == VoiceRecorderState.locked;
+    final barShown = captureActive || widget.voiceSending;
     return Container(
       decoration: BoxDecoration(
         color: AppColors.navBarBackground,
@@ -1604,21 +1630,20 @@ class _ComposerState extends State<_Composer> {
             horizontal: AppDimensions.spaceLg,
             vertical: AppDimensions.spaceSm,
           ),
-          child: recording
-              ? _RecordingBar(
-                  recorder: widget.recorder,
-                  locking: widget.dragLocked,
-                  dragDx: widget.dragDx,
-                  dragDy: widget.dragDy,
-                  cancelZone: widget.dragCancelZone,
-                  sending: widget.voiceSending,
-                  onTap: widget.onMicTapLocked,
-                )
-              : Row(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Expanded(
-                      child: MatrixTextField(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Expanded(
+                child: barShown
+                    ? _RecordingBar(
+                        recorder: widget.recorder,
+                        locking: widget.dragLocked,
+                        dragDx: widget.dragDx,
+                        dragDy: widget.dragDy,
+                        cancelZone: widget.dragCancelZone,
+                        sending: widget.voiceSending,
+                      )
+                    : MatrixTextField(
                         hint: 'Escreva sua mensagem...',
                         controller: widget.controller,
                         enabled: widget.enabled,
@@ -1631,23 +1656,29 @@ class _ComposerState extends State<_Composer> {
                           widget.onChanged(v);
                         },
                       ),
-                    ),
-                    const SizedBox(width: AppDimensions.spaceSm),
-                    _MicButton(
-                      onTap: widget.onTapMic,
-                      onLongPressStart: widget.onMicLongPressStart,
-                      onLongPressEnd: widget.onMicLongPressEnd,
-                      onDrag: widget.onMicDragUpdate,
-                      enabled: widget.enabled,
-                    ),
-                    const SizedBox(width: AppDimensions.spaceSm),
-                    _SendButton(
-                      enabled: widget.enabled && !widget.sending,
-                      sending: widget.sending,
-                      onTap: widget.onSend,
-                    ),
-                  ],
+              ),
+              const SizedBox(width: AppDimensions.spaceSm),
+              _MicButton(
+                onTap: widget.onTapMic,
+                onLongPressStart: widget.onMicLongPressStart,
+                onLongPressEnd: widget.onMicLongPressEnd,
+                onDrag: widget.onMicDragUpdate,
+                enabled: widget.enabled && !widget.voiceSending,
+                state: widget.recorder.state,
+                sending: widget.voiceSending,
+                locking: widget.dragLocked,
+                cancelZone: widget.dragCancelZone,
+              ),
+              if (!barShown) ...[
+                const SizedBox(width: AppDimensions.spaceSm),
+                _SendButton(
+                  enabled: widget.enabled && !widget.sending,
+                  sending: widget.sending,
+                  onTap: widget.onSend,
                 ),
+              ],
+            ],
+          ),
         ),
       ),
     );
@@ -1693,7 +1724,8 @@ class _SendButton extends StatelessWidget {
               )
             : Icon(
                 Icons.arrow_forward_rounded,
-                color: canSend ? AppColors.techWhite : AppColors.holographicBlue,
+                color:
+                    canSend ? AppColors.techWhite : AppColors.holographicBlue,
                 size: 22,
               ),
       ),
@@ -1704,7 +1736,11 @@ class _SendButton extends StatelessWidget {
 /// The capture button between the text field and the send button. A SHORT
 /// tap shows the "segure para gravar áudio" hint; a HOLD starts recording
 /// immediately. Dragging UP locks the take; dragging LEFT cancels it.
-/// The button always stays inside the composer area (clamped displacement).
+/// The button stays mounted in the SAME slot in every state (the composer
+/// only swaps the text area) so the long-press/drag recognizers survive the
+/// whole hold→release→send sequence (the classic "stuck gravando" bug).
+/// Its surface reflects the recorder state: idle→mic, recording→glowing
+/// recording mic, locked→send icon (tap to send,, uploading→spinner.
 class _MicButton extends StatelessWidget {
   const _MicButton({
     required this.onTap,
@@ -1712,49 +1748,120 @@ class _MicButton extends StatelessWidget {
     required this.onLongPressEnd,
     required this.onDrag,
     required this.enabled,
+    required this.state,
+    required this.sending,
+    required this.locking,
+    required this.cancelZone,
   });
 
   final VoidCallback onTap;
 
   final void Function(LongPressStartDetails) onLongPressStart;
+
   final VoidCallback onLongPressEnd;
+
   final void Function(Offset delta) onDrag;
+
   final bool enabled;
+
+  final VoiceRecorderState state;
+
+  final bool sending;
+
+  final bool locking;
+
+  final bool cancelZone;
 
   @override
   Widget build(BuildContext context) {
+    final showingSpinner = sending;
+    final showingLockedSend = locking && !sending;
+    final showingCancel = cancelZone && !locking && !sending;
+    final recordingActive = state == VoiceRecorderState.recording ||
+        state == VoiceRecorderState.locked;
+    final Color bg;
+    final IconData? icon;
+    if (showingSpinner) {
+      bg = AppColors.nightBlue;
+      icon = null;
+    } else if (showingCancel) {
+      bg = AppColors.error;
+      icon = Icons.close_rounded;
+    } else if (showingLockedSend) {
+      bg = AppColors.primaryBlue;
+      icon = Icons.send_rounded;
+    } else if (recordingActive) {
+      bg = AppColors.electricBlue.withValues(alpha: 0.18);
+      icon = Icons.mic_rounded;
+    } else {
+      bg = AppColors.nightBlue;
+      icon = Icons.mic_rounded;
+    }
     return GestureDetector(
       onTap: enabled ? onTap : null,
       onLongPressStart: enabled ? onLongPressStart : null,
       onLongPressEnd: enabled ? (details) => onLongPressEnd() : null,
-      onLongPressMoveUpdate: enabled
-          ? (d) => onDrag(d.offsetFromOrigin)
-          : null,
+      onLongPressMoveUpdate: enabled ? (d) => onDrag(d.offsetFromOrigin) : null,
       // The long-press recognizer wins over the tap, so a SHORT tap fires
-      // onTap (the "segure para gravar" hint) and a HOLD fires the recording.
-      child: Container(
+      // onTap (the "segure para gravar" hint / locked "send")and a HOLD
+      // starts recording; the recording surface itself never owns gestures.
+
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 160),
         width: 44,
         height: 44,
         alignment: Alignment.center,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
-          color: AppColors.nightBlue,
-          border: Border.all(color: AppColors.holographicBlue, width: 1.2),
-          boxShadow: [BoxShadow(color: AppColors.glowSmall, blurRadius: 6)],
+          color: bg,
+          border: Border.all(
+            color: showingCancel
+                ? AppColors.error
+                : (showingLockedSend
+                    ? AppColors.techWhite.withValues(alpha: 0.6)
+                    : AppColors.holographicBlue),
+            width: 1.2,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: showingCancel || showingLockedSend || recordingActive
+                  ? AppColors.glowStrong
+                  : AppColors.glowSmall,
+              blurRadius: showingCancel ? 10 : 6,
+            ),
+          ],
         ),
-        child: Icon(
-          Icons.mic_rounded,
-          color: enabled ? AppColors.techWhite : AppColors.holographicBlue,
-          size: 22,
-        ),
+        child: showingSpinner
+            ? SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.5,
+                  color: AppColors.techWhite,
+                ),
+              )
+            : Icon(
+                icon ?? Icons.mic_rounded,
+                color: showingLockedSend
+                    ? AppColors.techWhite
+                    : (recordingActive
+                        ? AppColors.electricBlue
+                        : AppColors.techWhite),
+                size: 22,
+              ),
       ),
     );
   }
 }
 
-/// The recorder surface swapped in place of the text field while capturing:
-/// the waveform (reacting to the real mic level) + a locking mic icon. When
-/// LOCKED it becomes the "tap to send" affordance for the frozen take.
+/// The recorder status surface swapped in place of the text field while a
+/// capture is active or being uploaded. It shows the live waveform + elapsed
+/// timer; dragging LEFT tints it red ("soltar para cancelar"), dragging UP
+/// hints the take is about to lock ("solte para enviar"); once LOCKED it
+/// shows the locked hint (the stable mic button beside it becomes the send
+/// affordance),and while uploading it swaps to the "enviando audio..."
+/// spinner (the mic button beside it shows the matching spinner).
+
 class _RecordingBar extends StatelessWidget {
   const _RecordingBar({
     required this.recorder,
@@ -1762,23 +1869,22 @@ class _RecordingBar extends StatelessWidget {
     required this.dragDx,
     required this.dragDy,
     required this.cancelZone,
-    required this.onTap,
     required this.sending,
   });
 
   final VoiceRecorderController recorder;
+
   final bool locking;
+
   final double dragDx;
 
   /// Live upward drag displacement (negative while pulled up).
   final double dragDy;
 
-  /// Whether the finger is inside the cancel zone — red tint + "cancelar"
+  /// Whetherthe finger is inside the cancel zone — red tint + "cancelar"
   /// hint feedback while dragging left.
 
   final bool cancelZone;
-  final VoidCallback onTap;
-
 
   /// Whetherthe recorded take is being uploaded/sent (spinner + "enviando
   /// audio..."), replacing the live waveform with a sending state.
@@ -1791,167 +1897,130 @@ class _RecordingBar extends StatelessWidget {
     final bars = <Widget>[];
     if (!sending) {
       for (var i = 0; i < 28; i++) {
-      // Weighted toward the center so the on-mic "pulse" reads naturally.
-      final core = 1 - ((i - 13.5).abs() / 13.5);
-      final h = 6 + (amp * 30 * (0.4 + 0.6 * core)).clamp(2.0, 34.0);
-      bars.add(AnimatedContainer(
-        duration: const Duration(milliseconds: 90),
-        width: 3,
-        height: h,
-        margin: const EdgeInsets.symmetric(horizontal: 1.5),
-        decoration: BoxDecoration(
-          color: locking
-              ? AppColors.holographicBlue
-              : AppColors.primaryBlue.withValues(alpha: 0.85),
-          borderRadius: BorderRadius.circular(2),
-        ),
-      ));
+        // Weighted toward the center so the on-mic "pulse" reads naturally.
+
+        final core = 1 - ((i - 13.5).abs() / 13.5);
+        final h = 6 + (amp * 30 * (0.4 + 0.6 * core)).clamp(2.0, 34.0);
+        bars.add(AnimatedContainer(
+          duration: const Duration(milliseconds: 90),
+          width: 3,
+          height: h,
+          margin: const EdgeInsets.symmetric(horizontal: 1.5),
+          decoration: BoxDecoration(
+            color: locking
+                ? AppColors.holographicBlue
+                : AppColors.primaryBlue.withValues(alpha: 0.85),
+            borderRadius: BorderRadius.circular(2),
+          ),
+        ));
       }
     }
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      children: [
-        Expanded(
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 160),
-            height: 48,
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            decoration: BoxDecoration(
-              color: cancelZone
-                  ? AppColors.error.withValues(alpha: 0.15)
-                  : AppColors.absoluteBlack.withValues(alpha: 0.45),
-              borderRadius: BorderRadius.circular(AppDimensions.radiusLg),
-              border: Border.all(
-                color: cancelZone
-                    ? AppColors.error
-                    : (locking ? AppColors.electricBlue : AppColors.deepBlue),
-              ),
-            ),
-            child: Row(
-              children: [
-                Icon(
-                  sending
-                      ? Icons.cloud_upload_rounded
-                      : locking
-                          ? Icons.lock_rounded
-                          : (cancelZone ? Icons.cancel_rounded : Icons.graphic_eq_rounded),
-                  color: cancelZone
-                      ? AppColors.error
-                      : (sending || locking ? AppColors.techWhite : AppColors.electricBlue),
-                  size: 18,
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Center(
-                    child: AnimatedSwitcher(
-                      duration: const Duration(milliseconds: 160),
-                      child: sending
-                          ? const Row(
-                              key: ValueKey('sending'),
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                SizedBox(
-                                  width: 12,
-                                  height: 12,
-                                  child: CircularProgressIndicator(strokeWidth: 2),
-                                ),
-                                SizedBox(width: 8),
-                                Text(
-                                  'enviando audio...',
+    final lockHint = !locking && dragDy <= -40;
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 160),
+      height: 48,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        color: cancelZone
+            ? AppColors.error.withValues(alpha: 0.15)
+            : AppColors.absoluteBlack.withValues(alpha: 0.45),
+        borderRadius: BorderRadius.circular(AppDimensions.radiusLg),
+        border: Border.all(
+          color: cancelZone
+              ? AppColors.error
+              : (locking ? AppColors.electricBlue : AppColors.deepBlue),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            sending
+                ? Icons.cloud_upload_rounded
+                : locking
+                    ? Icons.lock_rounded
+                    : (cancelZone
+                        ? Icons.cancel_rounded
+                        : Icons.graphic_eq_rounded),
+            color: cancelZone
+                ? AppColors.error
+                : (sending || locking
+                    ? AppColors.techWhite
+                    : AppColors.electricBlue),
+            size: 18,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Center(
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 160),
+                child: sending
+                    ? const Row(
+                        key: ValueKey('sending'),
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          SizedBox(
+                            width: 12,
+                            height: 12,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                          SizedBox(width: 8),
+                          Text(
+                            'enviando audio...',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: AppColors.electricBlue,
+                              fontFamily: 'JetBrainsMono',
+                            ),
+                          ),
+                        ],
+                      )
+                    : cancelZone
+                        ? const Padding(
+                            key: ValueKey('cancel'),
+                            padding: EdgeInsets.zero,
+                            child: Text(
+                              'soltar para cancelar',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: AppColors.error,
+                                fontFamily: 'JetBrainsMono',
+                              ),
+                            ),
+                          )
+                        : lockHint
+                            ? const Padding(
+                                key: ValueKey('lock'),
+                                padding: EdgeInsets.zero,
+                                child: Text(
+                                  'solte para enviar',
                                   style: TextStyle(
                                     fontSize: 12,
                                     color: AppColors.electricBlue,
                                     fontFamily: 'JetBrainsMono',
                                   ),
                                 ),
-                              ],
-                            )
-                          : cancelZone
-                          ? const Padding(
-                              key: ValueKey('cancel'),
-                              padding: EdgeInsets.zero,
-                              child: Text(
-                                'soltar para cancelar',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: AppColors.error,
-                                  fontFamily: 'JetBrainsMono',
-                                ),
+                              )
+                            : Row(
+                                key: const ValueKey('wave'),
+                                mainAxisSize: MainAxisSize.min,
+                                children: bars,
                               ),
-                            )
-                          : Row(
-                              key: const ValueKey('wave'),
-                              mainAxisSize: MainAxisSize.min,
-                              children: bars,
-                            ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  _clockText(recorder.elapsed),
-                  style: TextStyle(
-                    color: AppColors.techWhite,
-                    fontFamily: 'JetBrainsMono',
-                    fontSize: 12,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(width: AppDimensions.spaceSm),
-        Transform.translate(
-          // Follow the finger: horizontal (cancel) AND upward (lock
-          // hint), clamped so the button never leaves the composer area.
-
-          offset: Offset(dragDx.clamp(-120, 120), dragDy.clamp(-60, 0)),
-          child: GestureDetector(
-            // LOCKED → tap to send; otherwise the button is inert (the finger
-            // is already on it; recording continues via the held gesture).
-
-            onTap: locking ? onTap : null,
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              curve: Curves.easeOut,
-              width: 44,
-              height: 44,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: cancelZone
-                    ? AppColors.error
-                    : (sending
-                        ? AppColors.nightBlue
-                        : (locking ? AppColors.primaryBlue : AppColors.electricBlue)),
-                boxShadow: [BoxShadow(color: AppColors.glowSmall, blurRadius: 8)],
-              ),
-              child: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 160),
-                child: sending
-                    ? SizedBox(
-                        key: ValueKey('uploading'),
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2.5, color: AppColors.techWhite),
-                      )
-                    : Icon(
-                        locking
-                            ? Icons.send_rounded
-                            : (cancelZone ? Icons.close_rounded : Icons.mic_rounded),
-                        key: ValueKey(locking ? 'send' : (cancelZone ? 'cancel' : 'mic')),
-                        color: AppColors.techWhite,
-                        size: 22,
-                      ),
               ),
             ),
           ),
-        ),
-      ],
+          const SizedBox(width: 8),
+          Text(
+            _clockText(recorder.elapsed),
+            style: TextStyle(
+              color: AppColors.techWhite,
+              fontFamily: 'JetBrainsMono',
+              fontSize: 12,
+            ),
+          ),
+        ],
+      ),
     );
-
-
-}
+  }
 
   String _clockText(Duration d) {
     final s = d.inSeconds;
@@ -1991,7 +2060,8 @@ class _ReplyPreviewBar extends StatelessWidget {
       ),
       child: Row(
         children: [
-          const Icon(Icons.reply_rounded, color: AppColors.electricBlue, size: 18),
+          const Icon(Icons.reply_rounded,
+              color: AppColors.electricBlue, size: 18),
           const SizedBox(width: AppDimensions.spaceSm),
           Expanded(
             child: Column(
@@ -2078,13 +2148,15 @@ class _MessageActionMenu extends StatelessWidget {
                 iconColor: AppColors.holographicBlue,
                 label: 'Excluir',
                 hint: 'só para mim',
-                onTap: () => Navigator.of(context).pop(_MessageAction.deleteForMe),
+                onTap: () =>
+                    Navigator.of(context).pop(_MessageAction.deleteForMe),
               ),
               _ActionItem(
                 icon: Icons.delete_forever_rounded,
                 iconColor: AppColors.error,
                 label: 'Excluir para todos',
-                onTap: () => Navigator.of(context).pop(_MessageAction.deleteForEveryone),
+                onTap: () =>
+                    Navigator.of(context).pop(_MessageAction.deleteForEveryone),
               ),
             ],
           ),

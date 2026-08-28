@@ -83,8 +83,7 @@ class VoiceRecorderController extends ChangeNotifier {
       return false; // never two simultaneous recordings
     }
     if (!await ensurePermission()) {
-      _lastError =
-          'Permissão do microfone necessária para gravar áudio.';
+      _lastError = 'Permissão do microfone necessária para gravar áudio.';
       _state = VoiceRecorderState.error;
       notifyListeners();
       return false;
@@ -109,7 +108,8 @@ class VoiceRecorderController extends ChangeNotifier {
       _stopwatch
         ..reset()
         ..start();
-      _ampSub = recorder.onAmplitudeChanged(const Duration(milliseconds: 100))
+      _ampSub = recorder
+          .onAmplitudeChanged(const Duration(milliseconds: 100))
           .listen((a) {
         // map ~(0..N dBFS) into a display curve; floor it so idle looks like
         // a steady capture rather than full silence.
@@ -142,7 +142,8 @@ class VoiceRecorderController extends ChangeNotifier {
   /// Cancels and discards the current capture (drag right / interruption).
   Future<void> cancel() async {
     if (kDebugMode) {
-      debugPrint('[voice] recording cancelled (${_stopwatch.elapsed.inMilliseconds}ms)');
+      debugPrint(
+          '[voice] recording cancelled (${_stopwatch.elapsed.inMilliseconds}ms)');
     }
     final recorder = _recorder;
     _ampSub?.cancel();
@@ -209,6 +210,24 @@ class VoiceRecorderController extends ChangeNotifier {
     if (_state == VoiceRecorderState.error) {
       _state = VoiceRecorderState.idle;
       _lastError = null;
+      notifyListeners();
+    }
+  }
+
+  /// Returns the controller to IDLE after an upload attempt finishes — the
+  /// capture ended and its file was already consumed, so the lingering
+  /// SENDING state must not block the next recording (the press-start
+  /// guard rejects anything that is not idle/error). Safe no-op if already idle.
+
+  void resetToIdle() {
+    if (_state == VoiceRecorderState.idle) {
+      return;
+    }
+    if (_state == VoiceRecorderState.sending ||
+        _state == VoiceRecorderState.error) {
+      _state = VoiceRecorderState.idle;
+      _lastError = null;
+      _amplitude = 0;
       notifyListeners();
     }
   }

@@ -233,6 +233,37 @@ void main() {
       expect(find.text('gravando áudio'), findsNothing);
     });
 
+    testWidgets('mic button stays mounted after a tap (no stuck capture state)',
+        (tester) async {
+      final state = await seededChat(messages: const []);
+      await pumpMatrixApp(
+        tester,
+        ConversationScreen(
+          args: const ConversationRouteArgs(
+            conversationId: 'u0|u2',
+            otherUserId: 'u2',
+            otherNickname: 'joao',
+          ),
+        ),
+        state: state,
+      );
+      await tester.pumpAndSettle();
+      // The mic button exists next to the compose field.
+
+      expect(find.byIcon(Icons.mic_rounded), findsOneWidget);
+      // A plain tap only shows the "hold to record" hint — the composer
+      // keeps the text field, no recording bar (no stuck "sending" state).
+      await tester.tap(find.byIcon(Icons.mic_rounded));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.text('segure para gravar áudio'), findsOneWidget);
+      expect(find.text('Escreva sua mensagem...'), findsOneWidget);
+      expect(find.text('enviando audio...'), findsNothing);
+      expect(find.byIcon(Icons.mic_rounded), findsOneWidget);
+
+
+    });
+
     testWidgets('recording indicator auto-hides after 8s even without a stop frame',
         (tester) async {
       final state = await seededChat(messages: const []);
