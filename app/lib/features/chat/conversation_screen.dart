@@ -1586,7 +1586,7 @@ class _Composer extends StatefulWidget {
 class _ComposerState extends State<_Composer> {
   @override
   Widget build(BuildContext context) {
-    final recording = widget.recorder.isRecording;
+    final recording = widget.recorder.isRecording || widget.voiceSending;
     return Container(
       decoration: BoxDecoration(
         color: AppColors.navBarBackground,
@@ -1611,6 +1611,7 @@ class _ComposerState extends State<_Composer> {
                   dragDx: widget.dragDx,
                   dragDy: widget.dragDy,
                   cancelZone: widget.dragCancelZone,
+                  sending: widget.voiceSending,
                   onTap: widget.onMicTapLocked,
                 )
               : Row(
@@ -1781,7 +1782,8 @@ class _RecordingBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final amp = recorder.amplitude;
     final bars = <Widget>[];
-    for (var i = 0; i < 28; i++) {
+    if (!sending) {
+      for (var i = 0; i < 28; i++) {
       // Weighted toward the center so the on-mic "pulse" reads naturally.
       final core = 1 - ((i - 13.5).abs() / 13.5);
       final h = 6 + (amp * 30 * (0.4 + 0.6 * core)).clamp(2.0, 34.0);
@@ -1797,6 +1799,7 @@ class _RecordingBar extends StatelessWidget {
           borderRadius: BorderRadius.circular(2),
         ),
       ));
+      }
     }
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
@@ -1820,12 +1823,14 @@ class _RecordingBar extends StatelessWidget {
             child: Row(
               children: [
                 Icon(
-                  locking
-                      ? Icons.lock_rounded
-                      : (cancelZone ? Icons.cancel_rounded : Icons.graphic_eq_rounded),
+                  sending
+                      ? Icons.cloud_upload_rounded
+                      : locking
+                          ? Icons.lock_rounded
+                          : (cancelZone ? Icons.cancel_rounded : Icons.graphic_eq_rounded),
                   color: cancelZone
                       ? AppColors.error
-                      : (locking ? AppColors.techWhite : AppColors.electricBlue),
+                      : (sending || locking ? AppColors.techWhite : AppColors.electricBlue),
                   size: 18,
                 ),
                 const SizedBox(width: 10),
@@ -1833,7 +1838,28 @@ class _RecordingBar extends StatelessWidget {
                   child: Center(
                     child: AnimatedSwitcher(
                       duration: const Duration(milliseconds: 160),
-                      child: cancelZone
+                      child: sending
+                          ? const Row(
+                              key: ValueKey('sending'),
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                SizedBox(
+                                  width: 12,
+                                  height: 12,
+                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                ),
+                                const SizedBox(width: 8),
+                                const Text(
+                                  'enviando audio...',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: AppColors.electricBlue,
+                                    fontFamily: 'JetBrainsMono',
+                                  ),
+                                ),
+                              ],
+                            )
+                          : cancelZone
                           ? const Padding(
                               key: ValueKey('cancel'),
                               padding: EdgeInsets.zero,
@@ -1888,19 +1914,28 @@ class _RecordingBar extends StatelessWidget {
                 shape: BoxShape.circle,
                 color: cancelZone
                     ? AppColors.error
-                    : (locking ? AppColors.primaryBlue : AppColors.electricBlue),
+                    : (sending
+                        ? AppColors.nightBlue
+                        : (locking ? AppColors.primaryBlue : AppColors.electricBlue)),
                 boxShadow: [BoxShadow(color: AppColors.glowSmall, blurRadius: 8)],
               ),
               child: AnimatedSwitcher(
                 duration: const Duration(milliseconds: 160),
-                child: Icon(
-                  locking
-                      ? Icons.send_rounded
-                      : (cancelZone ? Icons.close_rounded : Icons.mic_rounded),
-                  key: ValueKey(locking ? 'send' : (cancelZone ? 'cancel' : 'mic')),
-                  color: AppColors.techWhite,
-                  size: 22,
-                ),
+                child: sending
+                    ? const SizedBox(
+                        key: ValueKey('uploading'),
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2.5, color: AppColors.techWhite),
+                      )
+                    : Icon(
+                        locking
+                            ? Icons.send_rounded
+                            : (cancelZone ? Icons.close_rounded : Icons.mic_rounded),
+                        key: ValueKey(locking ? 'send' : (cancelZone ? 'cancel' : 'mic')),
+                        color: AppColors.techWhite,
+                        size: 22,
+                      ),
               ),
             ),
           ),

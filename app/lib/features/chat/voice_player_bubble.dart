@@ -5,6 +5,7 @@ import 'package:just_audio/just_audio.dart';
 
 import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_dimensions.dart';
+import '../../data/api_config.dart';
 import '../../models/conversation.dart';
 
 /// The inline voice-message player inside a chat bubble.
@@ -67,8 +68,13 @@ class _VoicePlayerBubbleState extends State<VoicePlayerBubble> {
       // player — the whole row is a "Ver conversa" affordance already.
       return;
     }
-    final url = widget.message.audioUrl;
-    if (url == null || url.isEmpty) return;
+    // The server may return a RELATIVE url (`/static/audio/x.m4a`) when no
+    // public base URL is configured (the default). Never hand that to
+    // just_audio directly — resolve against the API base so playback works for
+    // the sender and the recipient and survives app restarts.
+    final raw = widget.message.audioUrl;
+    if (raw == null || raw.isEmpty) return;
+    final url = ApiConfig.resolveUrl(raw);
     if (_playing) {
       await _player?.pause();
       return;
@@ -91,7 +97,8 @@ class _VoicePlayerBubbleState extends State<VoicePlayerBubble> {
       final start = _duration;
       _position = start <= Duration.zero ? Duration.zero : _position;
       await _player!.play();
-    } catch (_) {
+    } catch (e) {
+      debugPrint('[voice] playback failed for $url: $e');
       if (!mounted) return;
       setState(() {
         _loading = false;

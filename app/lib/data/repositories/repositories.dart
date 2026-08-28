@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 
 import '../../models/comment.dart';
 import '../../models/conversation.dart';
@@ -446,8 +447,13 @@ class ChatRepository {
       '/api/conversations/$conversationId/voice?durationMs=$durationMs',
       file: multipart,
     );
-    return ChatMessageDto.fromJson(json['message'] as Map<String, dynamic>)
-        .toModel();
+    final raw = json['message'] as Map<String, dynamic>;
+    if (kDebugMode) {
+      debugPrint('[voice] upload OK — id=${raw['id']} '
+          'type=${raw['type']} url=${raw['audioUrl']} '
+          'duration=${raw['durationMs']}ms');
+    }
+    return ChatMessageDto.fromJson(raw).toModel();
   }
 
   /// Marks all messages FROM THE OTHER SIDE as read (clears the unread badge).

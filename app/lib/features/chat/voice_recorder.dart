@@ -120,6 +120,7 @@ class VoiceRecorderController extends ChangeNotifier {
       _state = VoiceRecorderState.recording;
       _lastError = null;
       notifyListeners();
+      if (kDebugMode) debugPrint('[voice] recording started → $path');
       return true;
     } catch (e) {
       await _tryRelease(recorder);
@@ -140,6 +141,9 @@ class VoiceRecorderController extends ChangeNotifier {
 
   /// Cancels and discards the current capture (drag right / interruption).
   Future<void> cancel() async {
+    if (kDebugMode) {
+      debugPrint('[voice] recording cancelled (${_stopwatch.elapsed.inMilliseconds}ms)');
+    }
     final recorder = _recorder;
     _ampSub?.cancel();
     _ampSub = null;
@@ -176,11 +180,20 @@ class VoiceRecorderController extends ChangeNotifier {
       await recorder.dispose();
       final finalPath = (stopped ?? '').isNotEmpty ? stopped! : path;
       final file = File(finalPath);
-      if (!await file.exists() || await file.length() < 1024) {
+      final length = await file.length();
+      if (!await file.exists() || length < 1024) {
+        if (kDebugMode) {
+          debugPrint('[voice] finish rejected — missing or too small '
+              '(exists=${await file.exists()}, bytes=$length, path=$finalPath)');
+        }
         // Too tiny to be a real capture — reject.
         _state = VoiceRecorderState.idle;
         notifyListeners();
         return null;
+      }
+      if (kDebugMode) {
+        debugPrint('[voice] recording finished → $finalPath '
+            '($length bytes, ${_stopwatch.elapsed.inMilliseconds}ms)');
       }
       return file;
     } catch (_) {
