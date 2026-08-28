@@ -1763,6 +1763,7 @@ class _RecordingBar extends StatelessWidget {
     required this.dragDy,
     required this.cancelZone,
     required this.onTap,
+    required this.sending,
   });
 
   final VoiceRecorderController recorder;
@@ -1777,6 +1778,12 @@ class _RecordingBar extends StatelessWidget {
 
   final bool cancelZone;
   final VoidCallback onTap;
+
+
+  /// Whetherthe recorded take is being uploaded/sent (spinner + "enviando
+  /// audio..."), replacing the live waveform with a sending state.
+
+  final bool sending;
 
   @override
   Widget build(BuildContext context) {
@@ -1848,8 +1855,8 @@ class _RecordingBar extends StatelessWidget {
                                   height: 12,
                                   child: CircularProgressIndicator(strokeWidth: 2),
                                 ),
-                                const SizedBox(width: 8),
-                                const Text(
+                                SizedBox(width: 8),
+                                Text(
                                   'enviando audio...',
                                   style: TextStyle(
                                     fontSize: 12,
@@ -1922,7 +1929,7 @@ class _RecordingBar extends StatelessWidget {
               child: AnimatedSwitcher(
                 duration: const Duration(milliseconds: 160),
                 child: sending
-                    ? const SizedBox(
+                    ? SizedBox(
                         key: ValueKey('uploading'),
                         width: 18,
                         height: 18,
