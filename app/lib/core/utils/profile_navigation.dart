@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../app/routes.dart';
+import '../../data/search_history_store.dart';
 import '../../models/matrix_user.dart';
 
 /// Real user ids of the profiles currently visible in the navigation stack
@@ -40,6 +41,19 @@ void openUserProfile(BuildContext context, MatrixUser user) {
   if (user.id.isEmpty) return;
   if (isProfileOpen(user.id)) return;
   Navigator.of(context).pushNamed(AppRoutes.profile, arguments: user.nickname);
+}
+
+/// Opens a profile from the local search history (a [SearchHistoryEntry]
+/// snapshot that carries the real user id + nickname). Same no-op guard as
+/// [openUserProfile] — never pushes a duplicate route for an id already
+/// presented on screen.
+void openUserProfileFromHistory(
+  BuildContext context,
+  SearchHistoryEntry entry,
+) {
+  if (entry.id.isEmpty || entry.nickname.isEmpty) return;
+  if (isProfileOpen(entry.id)) return;
+  Navigator.of(context).pushNamed(AppRoutes.profile, arguments: entry.nickname);
 }
 
 /// Opens a profile from a lightweight author payload (feed post, comment)

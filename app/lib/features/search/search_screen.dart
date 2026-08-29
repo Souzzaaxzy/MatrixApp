@@ -1,9 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_dimensions.dart';
 import '../../app/theme/app_text_styles.dart';
 import '../../core/utils/profile_navigation.dart';
+import '../../data/search_history_store.dart';
+import '../../models/cosmetic_item.dart';
 import '../../core/widgets/app_state_scope.dart';
 import '../../core/widgets/empty_state.dart';
 import '../../core/widgets/framed_avatar.dart';
@@ -16,7 +20,11 @@ import '../../models/matrix_user.dart';
 
 /// MATRIX search — backend search by nickname.
 class SearchScreen extends StatefulWidget {
-  const SearchScreen({super.key});
+  const SearchScreen({super.key, this.historyStore});
+
+  /// Injectable history store (widget tests stand it in with an in-memory
+  /// fake). Null → real persistent store (per-user secure storage).
+  final SearchHistoryStore? historyStore;
 
   @override
   State<SearchScreen> createState() => _SearchScreenState();
@@ -25,12 +33,23 @@ class SearchScreen extends StatefulWidget {
 class _SearchScreenState extends State<SearchScreen> {
   final _controller = TextEditingController();
   List<MatrixUser> _results = const [];
+  List<SearchHistoryEntry> _history = const [];
   bool _loading = false;
   bool _searched = false;
+
+  /// The session user whose history is shown (isolated per account).
+  String? _historyUserId;
+  bool _historyLoaded = false;
+  late final SearchHistoryStore _historyStore =
+      widget.historyStore ?? SearchHistoryStore();
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    if (!_historyLoaded) {
+      _historyLoaded = true;
+      unawaited(_loadHistory());
+    }
     if (!_searched) {
       _search('');
     }
@@ -64,6 +83,33 @@ class _SearchScreenState extends State<SearchScreen> {
 
   void _openUser(MatrixUser user) {
     openUserProfile(context, user);
+  }
+
+  Future<void> _loadHistory() async {
+    final session = AppStateScope.maybeOf(context)?.currentUser;
+    if (session == null) return;
+    _historyUserId = session.id;
+
+    try {
+      final entries = await _historyStore.load(session.id);
+      if (!mounted) return;
+      setState(() => _history = entries);
+    } catch (_) {
+      // Best-effort: search history is cosmetic.
+
+
+
+    }
+  }
+
+  /// Removes a single history entry(immediate, persisted, others untouched).
+  Future<void> _removeHistoryEntry(SearchHistoryEntry entry) async {
+    final userId = _historyUserId;
+    if (userId == null || entry.id.isEmpty) return;
+    setState(() => {
+      _history = _history.where((e) => e.id != entry.id).toList();
+    });
+    unawaited(_historyStore.remove(userId, entry.id));
   }
 
   @override
@@ -103,6 +149,77 @@ class _SearchScreenState extends State<SearchScreen> {
               ),
             ),
           ),
+          if (_history.isNotEmpty)
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  AppDimensions.spaceLg,
+                  AppDimensions.spaceLg,
+                  AppDimensions.spaceLg,
+                  AppDimensions.spaceSm,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'HISTÓRICO',
+                      style: AppTextStyles.label,
+                    ),
+                    const SizedBox(height: AppDimensions.spaceSm),
+                    for (final entry in _history)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: AppDimensions.spaceSm),
+                        child: MatrixCard(
+                          margin: EdgeInsets.zero,
+                          onTap: () {
+                            openUserProfileFromHistory(context, entry);
+                          },
+                          child: Row(
+                            children: [
+                              FramedAvatar(
+                                frame: entry.frameId != null
+                                    ? CosmeticItem(
+                                        id: entry.frameId!,
+                                        slot: CosmeticItem.avatarFrame,
+                                        name: entry.frameId!,
+                                        assetUrl: entry.frameAsset ?? '',
+                                      )
+                                    : null,
+                                size: 42,
+                                child: UserAvatar(
+                                  name: entry.nickname,
+                                  seed: entry.nickname,
+                                  imageUrl: entry.avatarUrl,
+                                  size: 36,
+                                ),
+                              ),
+                              const SizedBox(width: AppDimensions.spaceMd),
+                              Expanded(
+                                child: NicknameRenderer(
+                                  entry.nickname,
+                                  baseStyle: AppTextStyles.h3,
+                                  background: AppColors.cardSurface,
+                                  nameColor: entry.nameColor,
+                                ),
+                              ),
+                              IconButton(
+                                tooltip: 'Remover do histórico',
+                                icon: Icon(
+                                  Icons.close_rounded,
+                                  color: AppColors.holographicBlue,
+                                  size: 22,
+                                ),
+                                onPressed: () => _removeHistoryEntry(entry),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    const SizedBox(height: AppDimensions.spaceMd),
+                  ],
+                ),
+              ),
+            ),
           if (_loading && results.isEmpty)
             const SliverFillRemaining(
               hasScrollBody: false,

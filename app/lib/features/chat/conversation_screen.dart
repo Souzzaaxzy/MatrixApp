@@ -1613,6 +1613,7 @@ class _ComposerState extends State<_Composer> {
         widget.recorder.state == VoiceRecorderState.recording ||
             widget.recorder.state == VoiceRecorderState.locked;
     final barShown = captureActive || widget.voiceSending;
+    final hasText = widget.controller.text.trim().isNotEmpty;
     return Container(
       decoration: BoxDecoration(
         color: AppColors.navBarBackground,
@@ -1669,7 +1670,7 @@ class _ComposerState extends State<_Composer> {
                 locking: widget.dragLocked,
                 cancelZone: widget.dragCancelZone,
               ),
-              if (!barShown) ...[
+              if (!barShown && hasText) ...[
                 const SizedBox(width: AppDimensions.spaceSm),
                 _SendButton(
                   enabled: widget.enabled && !widget.sending,
@@ -1701,10 +1702,11 @@ class _SendButton extends StatelessWidget {
     final canSend = enabled && !sending;
     return GestureDetector(
       onTap: canSend ? onTap : null,
+      behavior: HitTestBehavior.opaque,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
-        width: 44,
-        height: 44,
+        width: 56,
+        height: 56,
         alignment: Alignment.center,
         decoration: BoxDecoration(
           color: canSend ? AppColors.primaryBlue : AppColors.deepBlue,
@@ -1802,14 +1804,15 @@ class _MicButton extends StatelessWidget {
       onLongPressStart: enabled ? onLongPressStart : null,
       onLongPressEnd: enabled ? (details) => onLongPressEnd() : null,
       onLongPressMoveUpdate: enabled ? (d) => onDrag(d.offsetFromOrigin) : null,
+      behavior: HitTestBehavior.opaque,
       // The long-press recognizer wins over the tap, so a SHORT tap fires
       // onTap (the "segure para gravar" hint / locked "send")and a HOLD
-      // starts recording; the recording surface itself never owns gestures.
+      // starts recording;the recording surface itself never owns gestures.
 
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 160),
-        width: 44,
-        height: 44,
+        width: 56,
+        height: 56,
         alignment: Alignment.center,
         decoration: BoxDecoration(
           shape: BoxShape.circle,

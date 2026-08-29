@@ -70,9 +70,17 @@ class VoiceRecorderController extends ChangeNotifier {
   }
 
   /// True when the platform reports the mic granted. Asks once if needed.
+  /// Denied (non-permanent) and permanently-denied both fail; the caller
+  /// shows [lastError], which tells the user to enable the mic in system
+  /// settings when the OS won't ask again (permanently denied).
   Future<bool> ensurePermission() async {
     final status = await Permission.microphone.request();
-    return status.isGranted;
+    if (status.isGranted) return true;
+    _lastError = status.isPermanentlyDenied
+        ? 'A permissão do microfone está bloqueada. '
+            'Habilite nas configurações do sistema para gravar áudio.'
+        : 'Permissão do microfone necessária para gravar áudio.';
+    return false;
   }
 
   /// Starts capturing. Returns false when the permission was denied.
@@ -83,7 +91,8 @@ class VoiceRecorderController extends ChangeNotifier {
       return false; // never two simultaneous recordings
     }
     if (!await ensurePermission()) {
-      _lastError = 'Permissão do microfone necessária para gravar áudio.';
+      // [ensurePermission] já definiu [_lastError] com a mensagem
+      // específica (negada vs bloqueada permanentemente).
       _state = VoiceRecorderState.error;
       notifyListeners();
       return false;

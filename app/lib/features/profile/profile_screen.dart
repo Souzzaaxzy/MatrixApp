@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/gestures.dart' show LongPressGestureRecognizer;
 import 'package:flutter/material.dart';
@@ -7,6 +9,7 @@ import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_dimensions.dart';
 import '../../app/theme/app_text_styles.dart';
 import '../../core/utils/profile_navigation.dart';
+import '../../data/search_history_store.dart';
 import '../../core/widgets/nickname_renderer.dart';
 import '../../core/widgets/app_state_scope.dart';
 import '../../core/widgets/empty_state.dart';
@@ -97,6 +100,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (loaded != null) {
         _shownUserId = loaded.id;
         markProfileOpen(loaded.id);
+        // Visiting ANOTHER user's profile records it in the search history
+        // (own profile is never recorded; separate per-account on device)..
+        if (!_isTab && loaded.id != state.currentUser?.id) {
+
+          unawaited(_recordSearchHistory(loaded));
+        }
       }
     } on ApiException catch (e) {
       if (!mounted) return;
@@ -109,6 +118,27 @@ class _ProfileScreenState extends State<ProfileScreen> {
       );
     }
   }
+
+  /// Records a profile visit in the per-user search history (best-effort;
+  /// storage failures never break the screen).
+  Future<void> _recordSearchHistory(MatrixUser user) async {
+    final session = AppStateScope.of(context).currentUser;
+    if (session == null || user.id.isEmpty) return;
+    try {
+      await SearchHistoryStore().add(session.id, SearchHistoryEntry(
+        id: user.id,
+        nickname: user.nickname,
+        avatarUrl: user.avatarUrl,
+        nameColor: user.nameColor,
+        frameId: user.frameId,
+        frameAsset: user.frameAsset,
+      ));
+    } catch (_) {
+      // Best-effort: history persistence is cosmetic.
+
+    }
+  }
+
 
   Future<void> _openEditProfile() async {
     await Navigator.of(context).pushNamed(AppRoutes.editProfile);

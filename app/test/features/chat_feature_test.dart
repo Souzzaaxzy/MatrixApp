@@ -142,6 +142,94 @@ void main() {
       expect(field.controller!.text, isEmpty);
     });
 
+    testWidgets('send button is hidden while the field is empty', (tester) async {
+      final state = await seededChat(messages: const []);
+      await pumpMatrixApp(
+        tester,
+        ConversationScreen(
+          args: const ConversationRouteArgs(
+            conversationId: 'u0|u2',
+            otherUserId: 'u2',
+            otherNickname: 'joao',
+          ),
+        ),
+        state: state,
+      );
+      await tester.pumpAndSettle();
+      // Empty field:the mic is visible, the send arrow is hidden..
+      expect(find.byIcon(Icons.mic_rounded), findsOneWidget);
+      expect(find.byIcon(Icons.arrow_forward_rounded), findsNothing);
+      await tester.enterText(find.byType(TextField).last, 'oi');
+      await tester.pump();
+      // Typing makes the send button appear immediately..
+      expect(find.byIcon(Icons.arrow_forward_rounded), findsOneWidget);
+      await tester.enterText(find.byType(TextField).last, '   ');
+      await tester.pump();
+      // Whitespace-only does not count; send arrow stays hidden..
+      expect(find.byIcon(Icons.arrow_forward_rounded), findsNothing);
+      await tester.enterText(find.byType(TextField).last, 'oi');
+      await tester.pump();
+      await tester.tap(find.byIcon(Icons.arrow_forward_rounded));
+      await tester.pump();
+      await tester.pump();
+      // After sending:the input cleared and the button hides again..
+      expect(find.byIcon(Icons.arrow_forward_rounded), findsNothing);
+      expect(find.text('Escreva sua mensagem...'), findsOneWidget);
+    });
+    testWidgets('send and mic buttons have a generous touch target', (tester) async {
+      final state = await seededChat(messages: const []);
+      await pumpMatrixApp(
+        tester,
+        ConversationScreen(
+          args: const ConversationRouteArgs(
+            conversationId: 'u0|u2',
+            otherUserId: 'u2',
+            otherNickname: 'joao',
+          ),
+        ),
+        state: state,
+      );
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).last, 'oi');
+      await tester.pump();
+      Size sizeOf(IconData icon) {
+        final finder = find.ancestor(
+          of: find.byIcon(icon),
+          matching: find.byType(AnimatedContainer),
+        );
+        return tester.getSize(finder.first);
+      }
+      expect(sizeOf(Icons.arrow_forward_rounded).height, greaterThanOrEqualTo(52));
+      expect(sizeOf(Icons.mic_rounded).height, greaterThanOrEqualTo(52));
+    });
+    testWidgets('incoming message whilethe conversation is open does not notify natively', (tester) async {
+      final state = await seededChat(messages: const []);
+      await pumpMatrixApp(
+        tester,
+        ConversationScreen(
+          args: const ConversationRouteArgs(
+            conversationId: 'u0|u2',
+            otherUserId: 'u2',
+            otherNickname: 'joao',
+          ),
+        ),
+        state: state,
+      );
+      await tester.pumpAndSettle();
+      // The thread live-receives the frame while open; no native push fires..
+      state.handleIncomingChatMessage(ChatMessage(
+        id: 'r1',
+        conversationId: 'u0|u2',
+        senderId: 'u2',
+        content: 'nova msg',
+        createdAt: DateTime(2024, 1, 1, 22, 30),
+        mine: false,
+      ));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(find.text('nova msg'), findsOneWidget);
+    });
+
     testWidgets('realtime typing shows "digitando..." below the nickname',
         (tester) async {
       final state = await seededChat(messages: const []);
@@ -353,7 +441,7 @@ void main() {
       );
       await tester.pumpAndSettle();
       void push(ChatMessage m) => state.handleIncomingChatMessage(m);
-      // normals g1..g3 -> reply (g4,, replyTo set) -> normal g5 starts a fresh
+      // normals g1..g3 -> reply (g4, replyTo set) -> normal g5 starts a fresh
       // group;then voice g6 -> normal g7 starts another group.
 
       push(ChatMessage(id: 'g1', conversationId: 'u0|u2', senderId: 'u2', content: 'a', createdAt: DateTime(2024, 1, 1, 22, 1), mine: false));
