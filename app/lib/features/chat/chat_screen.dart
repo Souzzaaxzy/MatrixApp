@@ -61,8 +61,19 @@ class _ChatScreenState extends State<ChatScreen> {
       if (!mounted) return;
       final state = AppStateScope.maybeOf(context);
       if (state == null) return;
-      _chatSub = state.onChatIncoming.listen((_) => _onRealtime());
+      _chatSub = state.onChatIncoming.listen((_) {
+        // [AppState] already patched the cached conversation's preview and
+        // unread badge synchronously (no HTTP). A full refetch here caused
+        // 1–2s of stale preview (and could regress the local patch when a
+        // slower response completes late). A light rebuild is all the list
+        // needs to visually pick the cache up immediately..
+        if (mounted) setState(() {});
+      });
       _deletedSub = state.onChatMessageDeleted.listen((_) {
+        // Deleting a message changes the last VISIBLE preview — only the
+        // server can re-derive that (soft-deleted rows must not show), so this
+        // path keeps its single server-side refetch..
+
         if (mounted) _loadConversations(state);
       });
       // Re-sync the friends row when a friendship changes elsewhere (e.g. a
@@ -107,13 +118,6 @@ class _ChatScreenState extends State<ChatScreen> {
     } catch (_) {
       // Friends list best-effort; conversations still render.
     }
-  }
-
-  void _onRealtime() {
-    // A realtime chat message arrived → refresh list + unread badge.
-    final state = AppStateScope.maybeOf(context);
-    if (state == null) return;
-    _loadConversations(state);
   }
 
   /// Long-press on a conversation → "Excluir conversa" (for ME only). The

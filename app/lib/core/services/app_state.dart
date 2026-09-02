@@ -1036,6 +1036,9 @@ class AppState extends ChangeNotifier {
     final message = await _chat.send(conversationId, content,
         replyToMessageId: replyToMessageId);
     _applyChatMessage(message, otherUser: otherUser ?? _peerOf(conversationId));
+    // Wake the Chat tab synchronously so its preview shows the sent message
+    // immediately — no need to wait for a tab switch or a full refetch.
+    notifyListeners();
     return message;
   }
 
@@ -1051,6 +1054,9 @@ class AppState extends ChangeNotifier {
     final message = await _chat.sendVoice(conversationId, audioFile,
         durationMs: durationMs);
     _applyChatMessage(message, otherUser: otherUser ?? _peerOf(conversationId));
+    // Same synchronous wake-up as [sendChatMessage]: the audio preview
+    // must appear on the list without waiting for a refetch.
+    notifyListeners();
     return message;
   }
 
@@ -1289,6 +1295,7 @@ void handleIncomingChatMessage(ChatMessage message, {ChatUser? peer}) {
         _conversations[0] =
             _conversations[0].copyWith(unreadCount: c.unreadCount + 1);
       }
+      _recomputeUnreadBadge();
       return;
     }
     // Conversation not cached yet: if we know the peer, synthesize a preview
@@ -1311,6 +1318,7 @@ void handleIncomingChatMessage(ChatMessage message, {ChatUser? peer}) {
           updatedAt: message.createdAt,
         ),
       );
+      _recomputeUnreadBadge();
     }
   }
 

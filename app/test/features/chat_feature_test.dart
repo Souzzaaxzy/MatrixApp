@@ -748,4 +748,77 @@ void main() {
       expect(find.textContaining('Oi'), findsOneWidget);
     });
   });
+
+  group('Sincronização da última mensagem', () {
+    testWidgets('sending patches the list preview immediately (no refetch)',
+        (tester) async {
+      final state = await seededChat(messages: ['Oi!']);
+      await pumpMatrixApp(tester, const ChatScreen(), state: state);
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Oi!'), findsOneWidget);
+
+      // Send via the state — the Chat tab must show the sent preview with the
+      // "Você:" prefix on the very next pump (synchronous cache patch +
+      // notifyListeners; no HTTP round-trip in between).
+      final peer = lastSeededRepos!.store.users['u2']!.toChatUser();
+      await state.sendChatMessage('u0|u2', 'tudo bem?', otherUser: peer);
+
+      await tester.pump();
+      expect(find.textContaining('Você: tudo bem?'), findsOneWidget);
+      // The older preview is gone — only the newest message shows..
+      expect(find.textContaining('Oi!'), findsNothing);
+    });
+
+    testWidgets('realtime incoming patches the preview instantly over the old one',
+        (tester) async {
+      final state = await seededChat(messages: ['Oi!']);
+      await pumpMatrixApp(tester, const ChatScreen(), state: state);
+      await tester.pumpAndSettle();
+
+      // A realtime frame arrives → without any refresh the tile must show
+      // the peer's newest message immediately (and demote the old preview).
+      state.handleIncomingChatMessage(ChatMessage(
+        id: 'rx9',
+        conversationId: 'u0|u2',
+        senderId: 'u2',
+        createdAt: DateTime(2024, 1, 1, 22, 1),
+        content: 'não sei.',
+        mine: false,
+      ));
+      await tester.pump();
+
+      expect(find.textContaining('não sei.'), findsOneWidget);
+      expect(find.textContaining('Oi!'), findsNothing);
+    });
+
+    test('incoming bumps the unread badge； mark-read clears it', () async {
+      final state = await seededChat(messages: const []);
+      await state.loadConversations();
+
+      // The local aggregate is recomputed synchronously on realtime — no
+      // HTTP refetch needed for the bottom-bar badge..
+      state.handleIncomingChatMessage(ChatMessage(
+        id: 'rx10',
+        conversationId: 'u0|u2',
+        senderId: 'u2',
+        createdAt: DateTime(2024, 1, 1, 22, 1),
+        content: 'oi',
+        mine: false,
+      ));
+      expect(state.unreadConversations, equals(1));
+
+      // Reading the conversation zeroes the cached badge immediately..
+      await state.markConversationRead('u0|u2');
+      expect(state.unreadConversations, equals(0));
+    });
+
+    test('own sends never bump the unread badge', () async {
+      final state = await seededChat(messages: const []);
+      await state.loadConversations();
+
+      await state.sendChatMessage('u0|u2', 'minha mensagem');
+      // Sending a message is self-made → no unread increment..
+      expect(state.unreadConversations, equals(0));
+    });
+  });
 }
