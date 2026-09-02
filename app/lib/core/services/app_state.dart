@@ -5,8 +5,10 @@ import 'package:flutter/foundation.dart';
 
 import '../../data/api_config.dart';
 import '../../data/repositories/repositories.dart';
+import '../../data/search_history_store.dart';
 import '../../data/services.dart';
 import '../../models/akame_message.dart';
+import '../../models/search_history_entry.dart';
 import '../../models/comment.dart';
 import '../../models/conversation.dart';
 import '../../models/cosmetic_item.dart';
@@ -26,12 +28,24 @@ class AppState extends ChangeNotifier {
   /// When [repositories] is null (production), the real repositories from
   /// [Services.instance] are used. Tests inject an in-memory set so the
   /// optimistic-update / caching logic can be exercised without a network.
-  AppState({Repositories? repositories})
+  AppState({Repositories? repositories, SearchHistoryStore? searchHistoryStore})
       : _repos = repositories,
+        _searchHistoryStore = searchHistoryStore,
         _akameMessages = MockDataService.initialAkameMessages();
 
   final Repositories? _repos;
+
+  /// Injected (tests) or lazily-created (production) per-user history store.
+  SearchHistoryStore? _searchHistoryStore;
+
   List<AkameMessage> _akameMessages = [];
+  /// Per-user visited-profile history ("Pesquisas recentes"), newest first.
+
+  /// Persisted locally per session user via [SearchHistoryStore]; cleared on
+  /// logout/account deletion so one account never sees another's history.v
+  final List<SearchHistoryEntry> _searchHistory = [];
+  bool _searchHistoryLoaded = false;
+
   MatrixUser? _currentUser;
   String? _feedCursor;
   bool _loadingFeed = false;
@@ -137,6 +151,78 @@ class AppState extends ChangeNotifier {
   /// Private chat getters.
   List<Conversation> get conversations => List.unmodifiable(_conversations);
   bool get isLoadingConversations => _loadingConversations;
+
+  /// Per-user visited-profile history (newest first). Empty until the first
+  /// [loadSearchHistory] completes — the getter is stable for the UI (no
+  /// partial list while the store is being read).
+  List<SearchHistoryEntry> get searchHistory =>
+      _searchHistoryLoaded ? List.unmodifiable(_searchHistory) : const [];
+
+  /// The per-user history store. Used only when the app is running with the
+  /// real Services singleton (never in tests,w which inject repositories and
+  /// don't initialize Services). When available it is localand kept in an
+  /// instance field so repeated calls don't rebuild it.
+
+  SearchHistoryStore? _historyStore() {
+    final injected = _searchHistoryStore;
+    if (injected != null) return injected;
+    if (_repos != null && !Services.isInitialized) return null;
+    return _searchHistoryStore ??= SearchHistoryStore();
+  }
+
+  /// Loads the session user's persisted search history (newest first.v
+  void loadSearchHistory() {
+    final userId = _currentUser?.id;
+    if (userId == null || userId.isEmpty) return;
+    unawaited(() async {
+      final store = _historyStore();
+      if (store == null) return;
+      final entries = await store.read(userId);
+      if (!_disposed) {
+        _searchHistory
+          ..clear()
+          ..addAll(entries);
+        _searchHistoryLoaded = true;
+        notifyListeners();
+      }
+    }());
+  }
+
+  /// Registers a visited profile in the history (newest first, deduped by id.v
+  /// Does nothing for the session user's own profile or for unloaded guest
+  /// users (id missing.v Returns immediately — persistence is best-effort.v
+  void recordProfileVisit(MatrixUser user) {
+    final userId = user.id;
+    if (userId.isEmpty || _currentUser == null || userId == _currentUser!.id) return;
+    _searchHistory.removeWhere((e) => e.userId == userId);
+    _searchHistory.insert(0, SearchHistoryEntry.fromUser(user));
+    _searchHistoryLoaded = true;
+    _persistSearchHistory();
+    notifyListeners();
+  }
+
+  /// Removes one entry from the history (UI + persistence immediately,no
+  /// refresh required.v
+  void removeSearchHistory(String userId) {
+    _searchHistory.removeWhere((e) => e.userId == userId);
+    if (_searchHistoryLoaded) {
+      unawaited(_persistNow());
+    }
+    notifyListeners();
+  }
+
+  void _persistSearchHistory() {
+    if (!_searchHistoryLoaded) return;
+    unawaited(_persistNow());
+  }
+
+  Future<void> _persistNow() async {
+    final userId = _currentUser?.id;
+    if (userId == null || userId.isEmpty) return;
+    final store = _historyStore();
+    if (store == null) return;
+    await store.write(userId, List.of(_searchHistory));
+  }
   int get unreadConversations => _unreadConversations;
 
   /// Cosmetics equipped by the session user (slot → item). Empty means
@@ -178,6 +264,7 @@ class AppState extends ChangeNotifier {
       _currentUser = (await _auth.me()).toModel();
       notifyListeners();
       _syncPush();
+      loadSearchHistory();
       return true;
     } on ApiException catch (e) {
       if (e.isUnauthorized) {
@@ -195,6 +282,7 @@ class AppState extends ChangeNotifier {
     _currentUser = dto.user.toModel();
     notifyListeners();
     _syncPush();
+    loadSearchHistory();
   }
 
   /// Registers a new account and logs in. Returns the one-time recovery
@@ -210,6 +298,7 @@ class AppState extends ChangeNotifier {
     _currentUser = dto.user.toModel();
     notifyListeners();
     _syncPush();
+    loadSearchHistory();
     return dto.recoveryCode ?? '';
   }
 
@@ -259,6 +348,7 @@ class AppState extends ChangeNotifier {
   }
 
   void _clearSessionCaches() {
+    _clearSearchHistory();
     _currentUser = null;
     _posts.clear();
     _profiles.clear();
@@ -1234,6 +1324,20 @@ void handleIncomingChatMessage(ChatMessage message, {ChatUser? peer}) {
   void _clearConversations() {
     _conversations.clear();
     _unreadConversations = 0;
+  }
+
+  /// Clears the session user's search history (local only — the server has no
+  /// concept of it.v Called from logout / account deletion so accounts never
+  /// borrow each other's history.v
+  void _clearSearchHistory() {
+    _searchHistory.clear();
+    _searchHistoryLoaded = false;
+    final userId = _currentUser?.id;
+    final store = _historyStore();
+    _searchHistoryStore = null;
+    if (userId != null && userId.isNotEmpty && store != null) {
+      unawaited(store.clear(userId));
+    }
   }
 
   @override

@@ -12,7 +12,9 @@ import '../../core/widgets/matrix_card.dart';
 import '../../core/widgets/matrix_text_field.dart';
 import '../../core/widgets/nickname_renderer.dart';
 import '../../core/widgets/user_avatar.dart';
+import '../../models/cosmetic_item.dart';
 import '../../models/matrix_user.dart';
+import '../../models/search_history_entry.dart';
 
 /// MATRIX search — backend search by nickname.
 class SearchScreen extends StatefulWidget {
@@ -66,9 +68,114 @@ class _SearchScreenState extends State<SearchScreen> {
     openUserProfile(context, user);
   }
 
+  void _openHistoryEntry(SearchHistoryEntry entry) {
+    _openUser(entry.toUser());
+  }
+
+  void _removeHistory(SearchHistoryEntry entry) {
+    final state = AppStateScope.of(context);
+    state.removeSearchHistory(entry.userId);
+  }
+
+  Widget _userRow(MatrixUser user) {
+    return MatrixCard(
+      margin: const EdgeInsets.symmetric(vertical: AppDimensions.spaceSm),
+      onTap: () => _openUser(user),
+      child: Row(
+        children: [
+          FramedAvatar(
+            frame: user.frame,
+            size: 42,
+            child: UserAvatar(
+              name: user.nickname,
+              seed: user.avatarSeed ?? user.nickname,
+              imageUrl: user.avatarUrl,
+              size: 36,
+            ),
+          ),
+          const SizedBox(width: AppDimensions.spaceMd),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                NicknameRenderer(
+                  user.nickname,
+                  baseStyle: AppTextStyles.h3,
+                  background: AppColors.cardSurface,
+                  nameColor: user.nameColor,
+                ),
+              ],
+            ),
+          ),
+          const HudLabel(text: 'USER', dot: false),
+        ],
+      ),
+    );
+  }
+
+  Widget _historySection(List<SearchHistoryEntry> history) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(top: AppDimensions.spaceMd,
+              bottom: AppDimensions.spaceSm),
+          child: HudLabel(text: 'PESQUISAS RECENTES', dot: false),
+        ),
+        ...history.map((entry) {
+          return MatrixCard(
+            margin: const EdgeInsets.symmetric(vertical: AppDimensions.spaceSm),
+            onTap: () => _openHistoryEntry(entry),
+            child: Row(
+              children: [
+                FramedAvatar(
+                  frame: entry.frameId == null
+                      ? null
+                      : CosmeticItem(
+                          id: entry.frameId!,
+                          slot: CosmeticItem.avatarFrame,
+                          name: entry.frameId!,
+                          assetUrl: entry.frameAsset ?? '',
+                        ),
+                  size: 42,
+                  child: UserAvatar(
+                    name: entry.nickname,
+                    seed: entry.avatarSeed ?? entry.nickname,
+                    imageUrl: entry.avatarUrl,
+                    size: 36,
+                  ),
+                ),
+                const SizedBox(width: AppDimensions.spaceMd),
+                Expanded(
+                  child: NicknameRenderer(
+                    entry.nickname,
+                    baseStyle: AppTextStyles.h3,
+                    background: AppColors.cardSurface,
+                    nameColor: entry.nameColor,
+                  ),
+                ),
+                IconButton(
+                  onPressed: () => _removeHistory(entry),
+                  tooltip: 'Remover do histórico',
+                  icon: Icon(Icons.close_rounded,
+                      color: AppColors.deepBlue, size: 20),
+                  constraints: const BoxConstraints(),
+                  padding: const EdgeInsets.all(AppDimensions.spaceSm),
+                ),
+              ],
+            ),
+          );
+        }),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final state = AppStateScope.of(context);
     final results = _results;
+    final query = _controller.text.trim();
+    final history = query.isEmpty ? state.searchHistory : const <SearchHistoryEntry>[];
 
     return Scaffold(
       backgroundColor: AppColors.absoluteBlack,
@@ -108,6 +215,15 @@ class _SearchScreenState extends State<SearchScreen> {
               hasScrollBody: false,
               child: Center(child: HudLabel(text: 'SEARCHING...', dot: true)),
             )
+          else if (history.isNotEmpty)
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppDimensions.spaceLg,
+                ),
+                child: _historySection(history),
+              ),
+            )
           else if (results.isEmpty && _searched)
             const SliverFillRemaining(
               hasScrollBody: false,
@@ -125,42 +241,7 @@ class _SearchScreenState extends State<SearchScreen> {
               ),
               sliver: SliverList.builder(
                 itemCount: results.length,
-                itemBuilder: (context, i) {
-                  final user = results[i];
-                  return MatrixCard(
-                    margin: const EdgeInsets.symmetric(vertical: AppDimensions.spaceSm),
-                    onTap: () => _openUser(user),
-                    child: Row(
-                      children: [
-                        FramedAvatar(
-                          frame: user.frame,
-                          size: 42,
-                          child: UserAvatar(
-                            name: user.nickname,
-                            seed: user.avatarSeed ?? user.nickname,
-                            imageUrl: user.avatarUrl,
-                            size: 36,
-                          ),
-                        ),
-                        const SizedBox(width: AppDimensions.spaceMd),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              NicknameRenderer(
-                                user.nickname,
-                                baseStyle: AppTextStyles.h3,
-                                background: AppColors.cardSurface,
-                                nameColor: user.nameColor,
-                              ),
-                            ],
-                          ),
-                        ),
-                        const HudLabel(text: 'USER', dot: false),
-                      ],
-                    ),
-                  );
-                },
+                itemBuilder: (context, i) => _userRow(results[i]),
               ),
             ),
           const SliverToBoxAdapter(

@@ -97,6 +97,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (loaded != null) {
         _shownUserId = loaded.id;
         markProfileOpen(loaded.id);
+        // The user effectively VISITED this profile → remember it in the
+        // "Pesquisas recentes" history (never the session user's own).
+        if (!_isOwn) {
+          state.recordProfileVisit(loaded);
+        }
       }
     } on ApiException catch (e) {
       if (!mounted) return;
