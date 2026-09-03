@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:audio_session/audio_session.dart';
 import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
 
@@ -39,6 +40,7 @@ class _VoicePlayerBubbleState extends State<VoicePlayerBubble> {
   Duration _duration = Duration.zero;
   bool _loading = false;
   bool _playing = false;
+  bool _completed = false;
 
   static AudioPlayer? _activePlayer; // only one voice message plays at once
 
@@ -58,9 +60,24 @@ class _VoicePlayerBubbleState extends State<VoicePlayerBubble> {
     _posSub?.cancel();
     _stateSub?.cancel();
     _durSub?.cancel();
+    if (_audioSessionActive) {
+      _audioSessionActive = false;
+      unawaited(_releaseAudioSession());
+    }
     _player?.dispose();
     super.dispose();
   }
+
+  Future<void> _releaseAudioSession() async {
+    try {
+      final session = await AudioSession.instance;
+      await session.setActive(false);
+    } catch (_) {
+      // Best-effort teardown — nothing else to do..
+    }
+  }
+
+  bool get _atEnd => _completed;
 
   Future<void> _toggle() async {
     if (widget.compact) {
@@ -80,25 +97,52 @@ class _VoicePlayerBubbleState extends State<VoicePlayerBubble> {
       return;
     }
     // Resume an existing player or start a fresh one.
-    _player ??= AudioPlayer();
+    _player ??= AudioPlayer(
+      // The remote server usually has no public base URL configured (the
+      // default so we serve `UrlAudioSource`s (streaming) — that is what the
+      // byte-seeking [AudioLoadConfiguration] below targets..
+      handleAudioSessionActivation: false,
+      audioLoadConfiguration: const AudioLoadConfiguration(
+        androidLoadControl: AndroidLoadControl(
+          minBufferDuration: Duration.zero,
+          maxBufferDuration: Duration(seconds: 60),
+          bufferForPlaybackDuration: Duration.zero,
+          bufferForPlaybackAfterRebufferDuration: Duration.zero,
+        ),
+      ),
+    );
     await _ensureSubs();
+    // The audio session is owned here (none of the just_audio players may
+    // fight the native focus) — activate once on first playback and keep it,
+    // deactivating only on dispose..
+    await _ensureAudioSession();
     try {
       if (_player!.playing) {
         await _player!.stop();
       }
-      setState(() => _loading = true);
-      await _player!.setUrl(url);
-      setState(() => _loading = false);
-      // Only one tile plays at a time — stop any other active bubble.
+      if (_player!.audioSource == null) {
+        setState(() => _loading = true);
+        await _player!.setUrl(url);
+      }
+      // Replay after completion:the just_audio position stays at the end, so
+      // rewind to zero before (re)playing — otherwise the bar would start
+      // full and the tint immediately show "done" instead of "playing"。
+      // (A mid-play pause keeps its position — calling play() resumes it.)
+      if (_completed) {
+        await _player!.seek(Duration.zero);
+        _position = Duration.zero;
+      }
+      setState(() {
+        _loading = false;
+        _completed = false;
+      });
+      // Only one tile plays at a time — stop any other active bubble..
       if (_activePlayer != null && _activePlayer != _player) {
         await _activePlayer!.pause();
       }
       _activePlayer = _player;
-      final start = _duration;
-      _position = start <= Duration.zero ? Duration.zero : _position;
       await _player!.play();
     } catch (e) {
-      debugPrint('[voice] playback failed for $url: $e');
       if (!mounted) return;
       setState(() {
         _loading = false;
@@ -107,9 +151,29 @@ class _VoicePlayerBubbleState extends State<VoicePlayerBubble> {
     }
   }
 
+  bool _audioSessionActive = false;
+
+  Future<void> _ensureAudioSession() async {
+    if (_audioSessionActive) return;
+    try {
+      final session = await AudioSession.instance;
+      await session.configure(const AudioSessionConfiguration.music());
+      await session.setActive(true);
+      _audioSessionActive = true;
+    } catch (e) {
+      // Headless tests/unsupported platforms fall back to classic behavior..
+    }
+  }
+
   Future<void> _ensureSubs() async {
     _posSub ??= _player!.positionStream.listen((d) {
       if (!mounted) return;
+      // On completion the platform emits one last trailing event with the
+      // position pinned at the END (the full duration), usually AFTER the
+      // player-state stream already flipped us back to "play" and reset the
+      // bar — so ignore it or the progress would snap back to full and the
+      // button would appear "done" until the next rebuild.
+      if (_atEnd) return;
       setState(() => _position = d);
     });
     _durSub ??= _player!.durationStream.listen((d) {
@@ -121,10 +185,16 @@ class _VoicePlayerBubbleState extends State<VoicePlayerBubble> {
       setState(() {
         _playing = s.playing;
         _loading = s.processingState == ProcessingState.buffering;
+        if (s.processingState == ProcessingState.completed) {
+          // Snap the button back to play and rewind the bar, so the next tap
+          // replays from zero instead of showing a stale "paused at the end"..
+          if (!_completed) {
+            _position = Duration.zero;
+            _completed = true;
+          }
+          _playing = false;
+        }
       });
-      if (s.processingState == ProcessingState.completed) {
-        setState(() => _position = _duration);
-      }
     });
   }
 
@@ -133,12 +203,12 @@ class _VoicePlayerBubbleState extends State<VoicePlayerBubble> {
     final mine = widget.mine;
     final fg = mine ? AppColors.techWhite : AppColors.holographicBlue;
     final fallbackSeconds = Duration(
-            milliseconds: (widget.message.durationMs ?? _duration.inMilliseconds))
+            milliseconds:
+                (widget.message.durationMs ?? _duration.inMilliseconds))
         .inSeconds;
     final width = _duration.inMilliseconds <= 0
         ? 120.0
-        : 120.0 +
-            (_duration.inSeconds.clamp(3, 60) * 1.6);
+        : 120.0 + (_duration.inSeconds.clamp(3, 60) * 1.6);
     final progress = _duration.inMilliseconds <= 0
         ? 0.0
         : (_position.inMilliseconds / _duration.inMilliseconds).clamp(0.0, 1.0);
@@ -181,9 +251,9 @@ class _VoicePlayerBubbleState extends State<VoicePlayerBubble> {
                 child: LinearProgressIndicator(
                   value: progress,
                   minHeight: 5,
-                  backgroundColor:
-                      mine ? AppColors.techWhite.withValues(alpha: 0.25)
-                          : AppColors.absoluteBlack.withValues(alpha: 0.35),
+                  backgroundColor: mine
+                      ? AppColors.techWhite.withValues(alpha: 0.25)
+                      : AppColors.absoluteBlack.withValues(alpha: 0.35),
                   valueColor: AlwaysStoppedAnimation<Color>(
                       mine ? AppColors.techWhite : AppColors.electricBlue),
                 ),
