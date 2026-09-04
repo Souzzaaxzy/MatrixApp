@@ -57,7 +57,7 @@ class FakeRecordChannels {
 
 
 
-    for (final namein <String>[
+    for (final name in <String>[
       'com.llfbandit.record/events/$recorderId',
       'com.llfbandit.record/eventsRecord/$recorderId',
     ]) {
