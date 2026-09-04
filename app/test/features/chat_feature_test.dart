@@ -134,12 +134,174 @@ void main() {
       );
       await tester.pumpAndSettle();
       await tester.enterText(find.byType(TextField).last, 'Vamos conversar!');
+      // The send button appears synchronously once the field has text (Part 5).
+      await tester.pump();
       await tester.tap(find.byIcon(Icons.arrow_forward_rounded));
       await tester.pump();
       await tester.pump();
       expect(find.text('Vamos conversar!'), findsOneWidget);
       final field = tester.widget<TextField>(find.byType(TextField).last);
       expect(field.controller!.text, isEmpty);
+    });
+
+    testWidgets(
+        'send button hidden while field is empty empty and transitions with text',
+        (tester) async {
+      final state = await seededChat(messages: const []);
+      await pumpMatrixApp(
+        tester,
+        ConversationScreen(
+          args: const ConversationRouteArgs(
+            conversationId: 'u0|u2',
+            otherUserId: 'u2',
+            otherNickname: 'joao',
+          ),
+        ),
+        state: state,
+      );
+      await tester.pumpAndSettle();
+
+      // Empty field → no send button (oculto, Part 5)..
+      expect(find.byIcon(Icons.arrow_forward_rounded), findsNothing);
+
+      // One letter → button appears immediately (same frame after pump).
+      await tester.enterText(find.byType(TextField).last, 'o');
+      await tester.pump();
+      expect(find.byIcon(Icons.arrow_forward_rounded), findsOneWidget);
+
+      // Long text → stays visible..
+      await tester.enterText(find.byType(TextField).last, 'o' * 80);
+      await tester.pump();
+      expect(find.byIcon(Icons.arrow_forward_rounded), findsOneWidget);
+
+      // Erase everything → button disappears immediately. (Clearing the
+      // whole string in one shot also covers paste-then-select-all-delete.)
+      await tester.enterText(find.byType(TextField).last, '');
+      await tester.pump();
+      expect(find.byIcon(Icons.arrow_forward_rounded), findsNothing);
+
+      // Typing again reappears it without any refresh..
+      await tester.enterText(find.byType(TextField).last, 'novamente');
+      await tester.pump();
+      expect(find.byIcon(Icons.arrow_forward_rounded), findsOneWidget);
+    });
+
+    testWidgets('after sendthe field clearsand the send button vanishes',
+        (tester) async {
+      final state = await seededChat(messages: const []);
+      await pumpMatrixApp(
+        tester,
+        ConversationScreen(
+          args: const ConversationRouteArgs(
+            conversationId: 'u0|u2',
+            otherUserId: 'u2',
+            otherNickname: 'joao',
+          ),
+        ),
+        state: state,
+      );
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).last, 'mensagem');
+      await tester.pump();
+      expect(find.byIcon(Icons.arrow_forward_rounded), findsOneWidget);
+      await tester.tap(find.byIcon(Icons.arrow_forward_rounded));
+      await tester.pump();
+      await tester.pump();
+      // The message is appendedand the composer is back to empty with no send..
+      expect(find.text('mensagem'), findsOneWidget);
+      expect(find.byIcon(Icons.arrow_forward_rounded), findsNothing);
+
+      // After send,typing a fresh message immediately re-shows the button..
+      await tester.enterText(find.byType(TextField).last, 'outra');
+      await tester.pump();
+      expect(find.byIcon(Icons.arrow_forward_rounded), findsOneWidget);
+    });
+
+    testWidgets('mic and send buttons keep adequate touch targets (Part 4)',
+        (tester) async {
+      final state = await seededChat(messages: const []);
+      await pumpMatrixApp(
+        tester,
+        ConversationScreen(
+          args: const ConversationRouteArgs(
+            conversationId: 'u0|u2',
+            otherUserId: 'u2',
+            otherNickname: 'joao',
+          ),
+        ),
+        state: state,
+      );
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byType(TextField).last, 'texto');
+      await tester.pump();
+
+      // The mic (always mounted)   e the conditional send button are 50×50..
+      // Measure the BUTTON (the AnimatedContainer holding the icon), not
+      // the icon glyph itself (which is smaller).
+      final micButton = find
+          .ancestor(
+            of: find.byIcon(Icons.mic_rounded),
+            matching: find.byType(AnimatedContainer),
+          )
+          .first;
+      final micSize = tester.getSize(micButton);
+      expect(micSize.width, 50);
+      expect(micSize.height, 50);
+
+      final sendButton = find
+          .ancestor(
+            of: find.byIcon(Icons.arrow_forward_rounded),
+            matching: find.byType(AnimatedContainer),
+          )
+          .first;
+      final sendSize = tester.getSize(sendButton);
+      expect(sendSize.width, 50);
+      expect(sendSize.height, 50);
+    });
+
+    testWidgets('keyboard resize re-pins the follow-bottom position',
+        (tester) async {
+      // Enough messages to make the thread scrollable. The conversation
+      // opens pinned to the newest message; changing the viewport (as when
+      // the keyboard slides in) must NOT leave the newest bubble hidden
+      // under the composer — the scroll re-pins to the new bottom when feverend
+      // was following it.
+
+      final messages = List.generate(
+        40,
+        (i) => i.isEven ? 'minha $i' : 'dela $i',
+      );
+      final state = await seededChat(messages: messages);
+      await pumpMatrixApp(
+        tester,
+        ConversationScreen(
+          args: const ConversationRouteArgs(
+            conversationId: 'u0|u2',
+            otherUserId: 'u2',
+            otherNickname: 'joao',
+          ),
+        ),
+        state: state,
+      );
+      await tester.pumpAndSettle();
+
+      // Simulate the keyboard shrinking the viewport (resize the window).
+      final originalSize = tester.view.physicalSize;
+
+      tester.view.physicalSize = Size(
+        originalSize.width,
+        originalSize.height - 300 * tester.view.devicePixelRatio,
+      );
+      addTearDown(tester.view.resetPhysicalSize);
+      await tester.pump();
+      await tester.pump();
+      await tester.pump();
+      await tester.pump();
+
+      // The newest bubble stays visible (scroll pinned to the bottom)..
+      expect(find.text('minha 38').hitTestable(), findsOneWidget);
+      expect(find.text('dela 39').hitTestable(), findsOneWidget);
     });
 
     testWidgets('realtime typing shows "digitando..." below the nickname',
@@ -260,11 +422,10 @@ void main() {
       expect(find.text('Escreva sua mensagem...'), findsOneWidget);
       expect(find.text('enviando audio...'), findsNothing);
       expect(find.byIcon(Icons.mic_rounded), findsOneWidget);
-
-
     });
 
-    testWidgets('recording indicator auto-hides after 8s even without a stop frame',
+    testWidgets(
+        'recording indicator auto-hides after 8s even without a stop frame',
         (tester) async {
       final state = await seededChat(messages: const []);
       await pumpMatrixApp(
@@ -306,10 +467,7 @@ void main() {
       await tester.pumpAndSettle();
       // Push seven consecutive NORMAL peer texts (m1..m7) live.
 
-
-
-      for (var i =  1; i <=  7; i++) {
-
+      for (var i = 1; i <= 7; i++) {
         state.handleIncomingChatMessage(ChatMessage(
           id: 'g$i',
           conversationId: 'u0|u2',
@@ -325,8 +483,6 @@ void main() {
 
       expect(find.byKey(const ValueKey('peer-avatar-g1')), findsOneWidget);
 
-
-
       expect(find.byKey(const ValueKey('peer-avatar-g6')), findsOneWidget);
 
       expect(find.byKey(const ValueKey('peer-avatar-g2')), findsNothing);
@@ -337,7 +493,8 @@ void main() {
       expect(find.byKey(const ValueKey('peer-avatar-g7')), findsNothing);
     });
 
-    testWidgets('reply and voice always show the avatar and start a fresh group',
+    testWidgets(
+        'reply and voice always show the avatar and start a fresh group',
         (tester) async {
       final state = await seededChat(messages: const []);
       await pumpMatrixApp(
@@ -356,17 +513,33 @@ void main() {
       // normals g1..g3 -> reply (g4,, replyTo set) -> normal g5 starts a fresh
       // group;then voice g6 -> normal g7 starts another group.
 
-      push(ChatMessage(id: 'g1', conversationId: 'u0|u2', senderId: 'u2', content: 'a', createdAt: DateTime(2024, 1, 1, 22, 1), mine: false));
-      push(ChatMessage(id: 'g2', conversationId: 'u0|u2', senderId: 'u2', content: 'b', createdAt: DateTime(2024, 1, 1, 22, 2), mine: false));
-      push(ChatMessage(id: 'g3', conversationId: 'u0|u2', senderId: 'u2', content: 'c', createdAt: DateTime(2024, 1, 1, 22, 3), mine: false));
+      push(ChatMessage(
+          id: 'g1',
+          conversationId: 'u0|u2',
+          senderId: 'u2',
+          content: 'a',
+          createdAt: DateTime(2024, 1, 1, 22, 1),
+          mine: false));
+      push(ChatMessage(
+          id: 'g2',
+          conversationId: 'u0|u2',
+          senderId: 'u2',
+          content: 'b',
+          createdAt: DateTime(2024, 1, 1, 22, 2),
+          mine: false));
+      push(ChatMessage(
+          id: 'g3',
+          conversationId: 'u0|u2',
+          senderId: 'u2',
+          content: 'c',
+          createdAt: DateTime(2024, 1, 1, 22, 3),
+          mine: false));
       push(ChatMessage(
         id: 'g4',
         conversationId: 'u0|u2',
-
         senderId: 'u2',
         content: 'd',
-
-        createdAt: DateTime(2024, 1, 1,  22, 4),
+        createdAt: DateTime(2024, 1, 1, 22, 4),
         mine: false,
         replyTo: const ReplyInfo(
           id: 'g2',
@@ -376,19 +549,31 @@ void main() {
           exists: true,
         ),
       ));
-      push(ChatMessage(id: 'g5', conversationId: 'u0|u2', senderId: 'u2', content: 'e', createdAt: DateTime(2024, 1,  1,  22,  5), mine: false));
+      push(ChatMessage(
+          id: 'g5',
+          conversationId: 'u0|u2',
+          senderId: 'u2',
+          content: 'e',
+          createdAt: DateTime(2024, 1, 1, 22, 5),
+          mine: false));
       push(ChatMessage(
         id: 'g6',
         conversationId: 'u0|u2',
         senderId: 'u2',
         content: '',
-        createdAt: DateTime(2024, 1,  1,  22,  6),
+        createdAt: DateTime(2024, 1, 1, 22, 6),
         mine: false,
         type: 'voice',
         audioUrl: 'file:///tmp/m6.m4a',
         durationMs: 3000,
       ));
-      push(ChatMessage(id: 'g7', conversationId: 'u0|u2', senderId: 'u2', content: 'f', createdAt: DateTime(2024, 1,  1,  22,  7), mine: false));
+      push(ChatMessage(
+          id: 'g7',
+          conversationId: 'u0|u2',
+          senderId: 'u2',
+          content: 'f',
+          createdAt: DateTime(2024, 1, 1, 22, 7),
+          mine: false));
       await tester.pumpAndSettle();
       // Avatar mandatory on the reply and the voice themselves.
       expect(find.byKey(const ValueKey('peer-avatar-g4')), findsOneWidget);
@@ -400,7 +585,6 @@ void main() {
       expect(find.byKey(const ValueKey('peer-avatar-g7')), findsNothing);
       // g1..g3 are the first 3 of group 1 → only g1 has the avatar.
 
-
       expect(find.byKey(const ValueKey('peer-avatar-g1')), findsOneWidget);
       expect(find.byKey(const ValueKey('peer-avatar-g2')), findsNothing);
       expect(find.byKey(const ValueKey('peer-avatar-g3')), findsNothing);
@@ -408,7 +592,8 @@ void main() {
 
     testWidgets('own message swiped right→left opens reply composer',
         (tester) async {
-      final state = await seededChat(messages: ['Minha própria', 'Oi!']); // m0 = mine
+      final state =
+          await seededChat(messages: ['Minha própria', 'Oi!']); // m0 = mine
       await pumpMatrixApp(
         tester,
         ConversationScreen(
@@ -424,9 +609,8 @@ void main() {
       // m0 is a bubble sent by THE SESSION USER (mine=true) — swipe it
       // right→left (negative dx) to activate the reply composer.
 
-
-
-      await tester.drag(find.text('Minha própria'), const Offset(-140, 0), warnIfMissed: false);
+      await tester.drag(find.text('Minha própria'), const Offset(-140, 0),
+          warnIfMissed: false);
       await tester.pumpAndSettle();
       expect(find.textContaining('Respondendo a mensagem'), findsOneWidget);
 
@@ -437,7 +621,6 @@ void main() {
 
     testWidgets('watches realtime incoming messagesand appends to the right',
         (tester) async {
-
       final state = await seededChat(messages: ['Oi!']); // m0 = mine
       await pumpMatrixApp(
         tester,
@@ -472,14 +655,15 @@ void main() {
       expect(leftMessage.dx, lessThan(rightMessage.dx));
       expect(
         leftMessage.dx,
-        lessThan(tester.view.physicalSize.width /
-            tester.view.devicePixelRatio /
-            2),
+        lessThan(
+            tester.view.physicalSize.width / tester.view.devicePixelRatio / 2),
       );
     });
 
-    testWidgets('swiping a message activates the reply composer', (tester) async {
-      final state = await seededChat(messages: ['Olá!', 'Oi!']); // m0 mine, m1 theirs
+    testWidgets('swiping a message activates the reply composer',
+        (tester) async {
+      final state =
+          await seededChat(messages: ['Olá!', 'Oi!']); // m0 mine, m1 theirs
       await pumpMatrixApp(
         tester,
         ConversationScreen(
@@ -496,8 +680,7 @@ void main() {
       // The receiver's bubble "Oi!" is at index 1 (swipe → reply it).
       final target = find.text('Oi!');
       expect(target, findsOneWidget);
-      await tester.drag(target, const Offset(140, 0),
-          warnIfMissed: false);
+      await tester.drag(target, const Offset(140, 0), warnIfMissed: false);
       await tester.pumpAndSettle();
 
       // Reply composer opens with a preview of the swiped message.
@@ -510,7 +693,8 @@ void main() {
       expect(find.textContaining('Respondendo a mensagem'), findsNothing);
     });
 
-    testWidgets('sending a reply persists the reply-to preview inside the bubble',
+    testWidgets(
+        'sending a reply persists the reply-to preview inside the bubble',
         (tester) async {
       final state = await seededChat(messages: ['Olá!', 'Oi!']); // m1 = theirs
       await pumpMatrixApp(
@@ -527,12 +711,14 @@ void main() {
       await tester.pumpAndSettle();
 
       // Swipe the peer's message ("Oi!") to set it as the reply target.
-      await tester.drag(find.text('Oi!'), const Offset(140, 0), warnIfMissed: false);
+      await tester.drag(find.text('Oi!'), const Offset(140, 0),
+          warnIfMissed: false);
       await tester.pumpAndSettle();
       expect(find.textContaining('Respondendo a mensagem'), findsOneWidget);
 
       // Send the reply.
       await tester.enterText(find.byType(TextField).last, 'tudo ótimo!');
+      await tester.pump();
       await tester.tap(find.byIcon(Icons.arrow_forward_rounded));
       await tester.pump();
       await tester.pump();
@@ -548,7 +734,8 @@ void main() {
       );
     });
 
-    testWidgets('shows "enviado" inside my newest bubble and flips to '
+    testWidgets(
+        'shows "enviado" inside my newest bubble and flips to '
         '"visto agora" when read', (tester) async {
       final state = await seededChat(messages: const []);
       await pumpMatrixApp(
@@ -566,6 +753,7 @@ void main() {
 
       // Send my message → it is the last, so "enviado" shows inside it.
       await tester.enterText(find.byType(TextField).last, 'oi');
+      await tester.pump();
       await tester.tap(find.byIcon(Icons.arrow_forward_rounded));
       await tester.pump();
       await tester.pump();
@@ -573,7 +761,8 @@ void main() {
       expect(find.text('visto agora'), findsNothing);
 
       // Peer read receipt arrives → flips to "visto agora".
-      state.handleIncomingChatRead(const ChatReadEvent(conversationId: 'u0|u2'));
+      state
+          .handleIncomingChatRead(const ChatReadEvent(conversationId: 'u0|u2'));
       await tester.pump();
       expect(find.text('visto agora'), findsOneWidget);
       expect(find.text('enviado'), findsNothing);
@@ -651,7 +840,8 @@ void main() {
       expect(lastSeededRepos!.store.messageHides, contains('u0|u2|m0|u0'));
     });
 
-    testWidgets('Excluir para todos removes the message for both sides + realtime',
+    testWidgets(
+        'Excluir para todos removes the message for both sides + realtime',
         (tester) async {
       final state = await seededChat(messages: ['Oi']);
       await pumpMatrixApp(
@@ -733,7 +923,8 @@ void main() {
       await tester.pumpAndSettle();
 
       // Conversation disappeared from MY list and the hide is persisted.
-      expect(find.textContaining('Suas conversas aparecerão aqui.'), findsOneWidget);
+      expect(find.textContaining('Suas conversas aparecerão aqui.'),
+          findsOneWidget);
       expect(lastSeededRepos!.store.conversationHides, contains('u0|u2|u0'));
     });
 
@@ -769,7 +960,8 @@ void main() {
       expect(find.textContaining('Oi!'), findsNothing);
     });
 
-    testWidgets('realtime incoming patches the preview instantly over the old one',
+    testWidgets(
+        'realtime incoming patches the preview instantly over the old one',
         (tester) async {
       final state = await seededChat(messages: ['Oi!']);
       await pumpMatrixApp(tester, const ChatScreen(), state: state);
@@ -819,6 +1011,70 @@ void main() {
       await state.sendChatMessage('u0|u2', 'minha mensagem');
       // Sending a message is self-made → no unread increment..
       expect(state.unreadConversations, equals(0));
+    });
+
+    testWidgets('rapid successive sends keep the newest preview on top',
+        (tester) async {
+      final state = await seededChat(messages: ['primeira']);
+      await pumpMatrixApp(tester, const ChatScreen(), state: state);
+      await tester.pumpAndSettle();
+      expect(find.textContaining('primeira'), findsOneWidget);
+
+      // Fireware several sends in a row — every one must patch the preview
+      // synchronously (no refetch, no debounce)。The list keeps showing the
+      // newest message and the older previews are gone..
+      final peer = lastSeededRepos!.store.users['u2']!.toChatUser();
+      for (final text in ['segunda', 'terceira', 'quarta']) {
+        await state.sendChatMessage('u0|u2', text, otherUser: peer);
+        await tester.pump();
+        expect(find.textContaining('Você: $text'), findsOneWidget);
+      }
+      expect(find.textContaining('primeira'), findsNothing);
+      expect(find.textContaining('segunda'), findsNothing);
+    });
+
+    testWidgets('rapid successive realtime frames patch the preview instantly',
+        (tester) async {
+      final state = await seededChat(messages: ['primeira']);
+      await pumpMatrixApp(tester, const ChatScreen(), state: state);
+      await tester.pumpAndSettle();
+
+      // Multiple incoming frames in quick succession — the list preview
+      // updates synchronously with each one and never falls back to stale..
+      for (final text in ['segunda', 'terceira']) {
+        state.handleIncomingChatMessage(ChatMessage(
+          id: 'rx$text',
+          conversationId: 'u0|u2',
+          senderId: 'u2',
+          createdAt: DateTime(2024, 1, 1, 22, 1),
+          content: text,
+          mine: false,
+        ));
+        await tester.pump();
+        expect(find.textContaining(text), findsOneWidget);
+      }
+      expect(find.textContaining('primeira'), findsNothing);
+    });
+
+    testWidgets('leaving and returning to the chat keeps the last preview',
+        (tester) async {
+      final state = await seededChat(messages: ['Oi!']);
+      await pumpMatrixApp(tester, const ChatScreen(), state: state);
+      await tester.pumpAndSettle();
+
+      // Send while inside the conversation…
+      final peer = lastSeededRepos!.store.users['u2']!.toChatUser();
+      await state.sendChatMessage('u0|u2', 'tudo bem?', otherUser: peer);
+      await tester.pump();
+      expect(find.textContaining('tudo bem?'), findsOneWidget);
+
+      // …then leave the Chat tab and come back — the cached patch must
+      // still be there (no refetch required, no stale server round-trip)。
+      await tester.pumpWidget(const SizedBox());
+      await tester.pump();
+      await pumpMatrixApp(tester, const ChatScreen(), state: state);
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Você: tudo bem?'), findsOneWidget);
     });
   });
 }

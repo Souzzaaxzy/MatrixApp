@@ -662,12 +662,25 @@ class _ConversationScreenState extends State<ConversationScreen>
   }
 
   void _scrollListener() {
-    // Near the bottom → follow new messages; near the top → load older.
+    // Near the bottom -> follow new messages; near the top -> load older.
     final pos = _scroll.position;
     _followBottom = pos.pixels >= pos.maxScrollExtent - 80;
     if (pos.pixels <= pos.minScrollExtent + 40 && _hasMore) {
       _loadOlderMessages();
     }
+  }
+
+  /// Keyboard show/hide (or window/metrics change) - re-pin to the bottom
+  /// ONLY when the user was already following the newest message, so the
+  /// composer never covers the latest bubble, while mid-thread positions
+  /// are preserved (no forced jump).
+  @override
+  void didChangeMetrics() {
+    super.didChangeMetrics();
+    if (!mounted || !_scroll.hasClients || !_followBottom) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _followBottom) _jumpToBottom();
+    });
   }
 
   void _openPeerProfile() {
@@ -1603,6 +1616,37 @@ class _Composer extends StatefulWidget {
 }
 
 class _ComposerState extends State<_Composer> {
+  /// Whether the input currently has any (non-whitespace? no — any) text.
+
+  /// The send button visibility is driven DIRECTLY by the field content — no
+  /// delay, no refresh, no rebuild-on-focus. An empty field hides it
+  /// instantly;the first keystroke reveals it synchronously in the same
+  /// frame. After send (or erase-all) it disappears again immediately.
+
+  bool _hasText = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _hasText = widget.controller.text.isNotEmpty;
+    // Listen to the controller directly (not just onChanged) so external
+    // clears (e.g. after send) and paste events update the flag instantly.
+    widget.controller.addListener(_onControllerChanged);
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_onControllerChanged);
+    super.dispose();
+  }
+
+  void _onControllerChanged() {
+    final hasText = widget.controller.text.isNotEmpty;
+    if (hasText != _hasText) {
+      setState(() => _hasText = hasText);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     // The mic button stays mounted in every state (idle/recording/locked/
@@ -1613,6 +1657,10 @@ class _ComposerState extends State<_Composer> {
         widget.recorder.state == VoiceRecorderState.recording ||
             widget.recorder.state == VoiceRecorderState.locked;
     final barShown = captureActive || widget.voiceSending;
+    // Hidden (and skipped from layout) while the field is empty — the send
+    // button appears the instant the user types anything and vanishes when
+    // they erase it all. In the voice-recording surfaces it stays hidden too.
+    final showSend = !barShown && _hasText;
     return Container(
       decoration: BoxDecoration(
         color: AppColors.navBarBackground,
@@ -1669,7 +1717,7 @@ class _ComposerState extends State<_Composer> {
                 locking: widget.dragLocked,
                 cancelZone: widget.dragCancelZone,
               ),
-              if (!barShown) ...[
+              if (showSend) ...[
                 const SizedBox(width: AppDimensions.spaceSm),
                 _SendButton(
                   enabled: widget.enabled && !widget.sending,
@@ -1703,8 +1751,8 @@ class _SendButton extends StatelessWidget {
       onTap: canSend ? onTap : null,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
-        width: 44,
-        height: 44,
+        width: 50,
+        height: 50,
         alignment: Alignment.center,
         decoration: BoxDecoration(
           color: canSend ? AppColors.primaryBlue : AppColors.deepBlue,
@@ -1715,8 +1763,8 @@ class _SendButton extends StatelessWidget {
         ),
         child: sending
             ? SizedBox(
-                width: 18,
-                height: 18,
+                width: 20,
+                height: 20,
                 child: CircularProgressIndicator(
                   strokeWidth: 2.5,
                   color: AppColors.techWhite,
@@ -1726,7 +1774,7 @@ class _SendButton extends StatelessWidget {
                 Icons.arrow_forward_rounded,
                 color:
                     canSend ? AppColors.techWhite : AppColors.holographicBlue,
-                size: 22,
+                size: 25,
               ),
       ),
     );
@@ -1808,8 +1856,8 @@ class _MicButton extends StatelessWidget {
 
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 160),
-        width: 44,
-        height: 44,
+        width: 50,
+        height: 50,
         alignment: Alignment.center,
         decoration: BoxDecoration(
           shape: BoxShape.circle,
@@ -1833,8 +1881,8 @@ class _MicButton extends StatelessWidget {
         ),
         child: showingSpinner
             ? SizedBox(
-                width: 18,
-                height: 18,
+                width: 20,
+                height: 20,
                 child: CircularProgressIndicator(
                   strokeWidth: 2.5,
                   color: AppColors.techWhite,
@@ -1847,7 +1895,7 @@ class _MicButton extends StatelessWidget {
                     : (recordingActive
                         ? AppColors.electricBlue
                         : AppColors.techWhite),
-                size: 22,
+                size: 25,
               ),
       ),
     );
