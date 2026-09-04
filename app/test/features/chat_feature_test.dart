@@ -7,6 +7,7 @@ import 'package:matrix_app/features/chat/conversation_screen.dart';
 import 'package:matrix_app/features/profile/profile_screen.dart';
 import 'package:matrix_app/models/conversation.dart';
 
+import '../helpers/fake_record_channel.dart';
 import '../helpers/fake_repositories.dart';
 import '../helpers/test_app.dart';
 
@@ -396,7 +397,9 @@ void main() {
     });
 
     testWidgets('mic button stays mounted after a tap (no stuck capture state)',
-        (tester) async {
+      (tester) async {
+        final fake = FakeRecordChannels.install();
+        addTearDown(fake.cleanup);
       final state = await seededChat(messages: const []);
       await pumpMatrixApp(
         tester,

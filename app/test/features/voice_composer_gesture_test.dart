@@ -50,7 +50,7 @@ void main() {
       expect(find.text('gravando áudio'), findsOneWidget);
       await gesture.up();
       await tester.pump(const Duration(milliseconds: 300));
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 300));
       expect(find.text('gravando áudio'), findsNothing);
       expect(find.text('Escreva sua mensagem...'), findsOneWidget);
       expect(fake.recordedPaths, hasLength(1));
@@ -111,7 +111,7 @@ void main() {
       expect(find.byIcon(Icons.send_rounded), findsOneWidget);
       expect(find.byIcon(Icons.mic_rounded), findsNothing);
       await tester.tap(find.byIcon(Icons.send_rounded));
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 300));
       expect(fake.recordedPaths, hasLength(1));
       expect(find.byType(VoicePlayerBubble), findsOneWidget);
     });
@@ -152,7 +152,7 @@ void main() {
       expect(find.text('gravando áudio'), findsOneWidget);
       expect(fake.recordedPaths, isEmpty);
       await tester.tap(find.byIcon(Icons.send_rounded));
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 300));
       expect(fake.recordedPaths, hasLength(1));
       expect(find.byType(VoicePlayerBubble), findsOneWidget);
     });

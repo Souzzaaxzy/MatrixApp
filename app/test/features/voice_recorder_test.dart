@@ -19,7 +19,7 @@ void main() {
 
     test('permission granted → start() moves IDLE→RECORDING', () async {
       final controller = VoiceRecorderController();
-      addTearDown(controller.dispose);
+      addTearDown(controller.cancel);
 
       expect(controller.state, VoiceRecorderState.idle);
       expect(await controller.start(), isTrue);
@@ -29,9 +29,10 @@ void main() {
 
     test('plain finish() sends the captured file (IDLE→RECORDING→SENDING→IDLE)', () async {
       final controller = VoiceRecorderController();
-      addTearDown(controller.dispose);
+      addTearDown(controller.cancel);
 
       await controller.start();
+      controller.lock();
       await controller.finish();
       expect(controller.state, VoiceRecorderState.sending);
       expect(fake.recordedPaths, hasLength(1));
@@ -39,7 +40,7 @@ void main() {
 
     test('locked take: lock() then finish() produces exactly ONE file', () async {
       final controller = VoiceRecorderController();
-      addTearDown(controller.dispose);
+      addTearDown(controller.cancel);
 
       await controller.start();
       controller.lock();
@@ -57,7 +58,7 @@ void main() {
 
     test('cancel() discards the capture and returns IDLE', () async {
       final controller = VoiceRecorderController();
-      addTearDown(controller.dispose);
+      addTearDown(controller.cancel);
 
       await controller.start();
       expect(fake.activePath, isNotNull);
@@ -72,7 +73,7 @@ void main() {
         () async {
       fake.permissionGranted = false;
       final controller = VoiceRecorderController();
-      addTearDown(controller.dispose);
+      addTearDown(controller.cancel);
 
       expect(await controller.start(), isFalse);
       expect(controller.state, VoiceRecorderState.error);
@@ -85,7 +86,7 @@ void main() {
       fake.permissionGranted = false;
       fake.denyPermanently = true;
       final controller = VoiceRecorderController();
-      addTearDown(controller.dispose);
+      addTearDown(controller.cancel);
 
       expect(await controller.start(), isFalse);
       expect(controller.permanentlyDenied, isTrue);
