@@ -97,7 +97,14 @@ class FakeRecordChannels {
   }
 
   Future<Object?> _handleRecord(MethodCall call) async {
-    debugPrint('[FAKE-REC] ${call.method}');
+    debugPrint('[FAKE-REC] >> ${call.method}');
+    final r = await _handleRecordInner(call);
+    debugPrint('[FAKE-REC] << ${call.method} -> ${r.runtimeType}');
+    return r;
+  }
+
+  Future<Object?> _handleRecordInner(MethodCall call) async {
+    debugPrint('[FAKE-REC] -- ${call.method}');
     final args = call.arguments as Map<String, dynamic>;
     switch (call.method) {
       case 'create':
