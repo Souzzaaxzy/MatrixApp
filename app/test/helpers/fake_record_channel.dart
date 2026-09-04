@@ -105,7 +105,9 @@ class FakeRecordChannels {
 
   Future<Object?> _handleRecordInner(MethodCall call) async {
     debugPrint('[FAKE-REC] -- ${call.method}');
-    final args = call.arguments as Map<String, dynamic>;
+    final args = call.arguments is Map
+        ? Map<String,dynamic>.from(call.arguments as Map)
+        : <String,dynamic>{};
     switch (call.method) {
       case 'create':
       final recorderId = args['recorderId'] as String?;
