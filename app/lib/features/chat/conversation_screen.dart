@@ -378,7 +378,7 @@ class _ConversationScreenState extends State<ConversationScreen>
       );
       _appendMessage(message);
       unawaited(_state!.markConversationRead(conversationId));
-      debugPrint("[voice] _sendVoice: after finish file=${file == null ? "null" : file.path}");
+      debugPrint("[voice] _sendVoice: after finish file=${file.path}");
     } on ApiException {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
