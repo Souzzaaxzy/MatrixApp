@@ -40,15 +40,26 @@ class FakeRecordChannels {
     messenger.setMockMethodCallHandler(
         const MethodChannel('plugins.flutter.io/path_provider'),
         fake._handlePathProvider);
-    // The `record` package listens to per-recorder event channels (state
-    // transitions + amplitude samples). Tests never emit, but the channel must
-    // accept the subscription or `start()` raises a decode error in tests..
-    // Per-recorder event channels (state + amplitude) are suffixed with
-    // a runtime id, so adalah listen via an inline handler that swallows
-    // everything (tests never emit events).
-    for (final name in const <String>[
-      'com.llfbandit.record/events',
-      'com.llfbandit.record/eventsRecord',
+    // The per-recorder event channels (state + amplitude) only exist once the
+    // recorder id is known (it arrives as the `recorderId` arg of `create`),
+    // so they are mocked dynamically in [FakeRecordChannels._installEventMocks].
+    return fake;
+  }
+
+  /// Registers the per-recorder event channels (state + amplitude) when the
+  /// recorder id is known. Swallows everything — tests never emit.
+
+
+  void _installEventMocks(String recorderId) {
+
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+
+
+
+    for (final namein <String>[
+      'com.llfbandit.record/events/$recorderId',
+      'com.llfbandit.record/eventsRecord/$recorderId',
     ]) {
       messenger.setMockStreamHandler(
         EventChannel(name),
@@ -58,7 +69,6 @@ class FakeRecordChannels {
         ),
       );
     }
-    return fake;
   }
 
   FakeRecordChannels._();
@@ -90,6 +100,10 @@ class FakeRecordChannels {
     final args = call.arguments as Map<String, dynamic>;
     switch (call.method) {
       case 'create':
+      final recorderId = args['recorderId'] as String?;
+        if (recorderId != null && recorderId.isNotEmpty) {
+          _installEventMocks(recorderId);
+        }
         return null;
       case 'hasPermission':
         return permissionGranted;
