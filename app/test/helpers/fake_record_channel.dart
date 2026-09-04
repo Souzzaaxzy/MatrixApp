@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -42,18 +43,22 @@ class FakeRecordChannels {
     // The `record` package listens to per-recorder event channels (state
     // transitions + amplitude samples). Tests never emit, but the channel must
     // accept the subscription or `start()` raises a decode error in tests..
-    messenger.setMockStreamHandler(
-      const EventChannel('com.llfbandit.record/events'),
-      fake._handleRecordEvents);
-    messenger.setMockStreamHandler(
-      const EventChannel('com.llfbandit.record/eventsRecord'),
-      fake._handleRecordEvents);
+    // Per-recorder event channels (state + amplitude) are suffixed with
+    // a runtime id, so adalah listen via an inline handler that swallows
+    // everything (tests never emit events).
+    for (final name in const <String>[
+      'com.llfbandit.record/events',
+      'com.llfbandit.record/eventsRecord',
+    ]) {
+      messenger.setMockStreamHandler(
+        EventChannel(name),
+        MockStreamHandler.inline(
+          onListen: (args, events) => events.endOfStream(),
+          onCancel: (args) {},
+        ),
+      );
+    }
     return fake;
-  }
-
-  /// Swallows event-channel subscriptions (no events fire in tests).
-  Stream<dynamic> _handleRecordEvents(Stream<dynamic> events) async* {
-    yield* const Stream.empty();
   }
 
   FakeRecordChannels._();
