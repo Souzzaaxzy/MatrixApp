@@ -91,6 +91,7 @@ class FakeRecordChannels {
       case 'openAppSettings':
         return true;
       default:
+        debugPrint('[FAKE-UNKNOWN-PERM] ${call.method}');
         return null;
     }
   }
@@ -136,6 +137,7 @@ class FakeRecordChannels {
       case 'dispose':
         return null;
       default:
+        debugPrint('[FAKE-UNKNOWN-REC] ${call.method}');
         return null;
     }
   }
@@ -146,6 +148,7 @@ class FakeRecordChannels {
       case 'getTemporaryDirectory':
         return '/tmp';
       default:
+        debugPrint('[FAKE-UNKNOWN-PATH] ${call.method}');
         return null;
     }
   }
