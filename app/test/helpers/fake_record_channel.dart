@@ -75,7 +75,7 @@ class FakeRecordChannels {
             call.arguments is List ? (call.arguments as List) : null;
         final permissionId =
             (args != null && args.isNotEmpty) ? args.first as int : 7;
-        return <String, dynamic>{permissionId.toString(): value};
+        return <int, int>{permissionId: value};
       case 'shouldShowRequestPermissionRationale':
         return false;
       case 'openAppSettings':
@@ -127,6 +127,7 @@ class FakeRecordChannels {
   }
 
   Future<Object?> _handlePathProvider(MethodCall call) async {
+    debugPrint('[FAKE-PATH] ${call.method}');
     switch (call.method) {
       case 'getTemporaryDirectory':
         return '/tmp';
