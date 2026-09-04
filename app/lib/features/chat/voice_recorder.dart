@@ -130,6 +130,9 @@ class VoiceRecorderController extends ChangeNotifier {
       if (kDebugMode) debugPrint('[voice] recording started → $path');
       return true;
     } catch (e) {
+        if (kDebugMode) {
+          debugPrint('[voice] start error: $e\n' + '${StackTrace.current}');
+        }
       await _tryRelease(recorder);
       _recorder = null;
       _lastError = 'Não foi possível iniciar a gravação.';
