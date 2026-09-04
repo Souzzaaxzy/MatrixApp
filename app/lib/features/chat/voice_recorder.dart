@@ -31,8 +31,13 @@ class VoiceRecorderController extends ChangeNotifier {
   double _amplitude = 0; // 0..1 normalized, drives the waveform bars
   final Stopwatch _stopwatch = Stopwatch();
 
+  /// True when the OS reports the mic permanently denied — the app cannot
+  /// re-request,so the UI must point the user at system settings..
+  bool _permanentlyDenied = false;
+
   VoiceRecorderState get state => _state;
   String? get lastError => _lastError;
+  bool get permanentlyDenied => _permanentlyDenied;
 
   /// Normalized capture level (0..1). Best-effort — some devices report a
   /// flat value; the waveform still renders (attenuated noise floor).
@@ -72,16 +77,18 @@ class VoiceRecorderController extends ChangeNotifier {
   /// True when the platform reports the mic granted. Asks once if needed.
   Future<bool> ensurePermission() async {
     final status = await Permission.microphone.request();
+    _permanentlyDenied = status.isPermanentlyDenied;
     return status.isGranted;
   }
 
-  /// Starts capturing. Returns false when the permission was denied.
+  /// Starts capturing. Returns false when the permission was denied..
   Future<bool> start() async {
     if (_state == VoiceRecorderState.recording ||
         _state == VoiceRecorderState.locked ||
         _state == VoiceRecorderState.sending) {
       return false; // never two simultaneous recordings
     }
+    _permanentlyDenied = false;
     if (!await ensurePermission()) {
       _lastError = 'Permissão do microfone necessária para gravar áudio.';
       _state = VoiceRecorderState.error;
@@ -139,20 +146,40 @@ class VoiceRecorderController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Cancels and discards the current capture (drag right / interruption).
+  /// Cancels and discards the current capture (drag left / interruption). The
+  /// platform's `cancel()` deletes the temp file (never left behind) — only
+  /// used when no sticky path is needed (a plain stop would leak the file).
   Future<void> cancel() async {
     if (kDebugMode) {
       debugPrint(
           '[voice] recording cancelled (${_stopwatch.elapsed.inMilliseconds}ms)');
     }
     final recorder = _recorder;
+    final path = _path;
     _ampSub?.cancel();
     _ampSub = null;
     _stopwatch.stop();
     _recorder = null;
     _path = null;
-    if (recorder != null) await _tryRelease(recorder);
+    if (recorder != null) {
+      try {
+        await recorder.cancel(); // deletes the platform-side temp file..
+      } catch (_) {
+        // Platform may already be released — fall back to stop+dispose..
+        await _tryRelease(recorder);
+      }
+      // Best-effort local cleanup for any file the platform left behind.
+      final file = path == null ? null : File(path);
+      if (file != null) {
+        try {
+          if (await file.exists()) await file.delete();
+        } catch (_) {
+          // Already gone — nothing else to do..
+        }
+      }
+    }
     _state = VoiceRecorderState.idle;
+    _permanentlyDenied = false;
     _amplitude = 0;
     notifyListeners();
   }
@@ -227,6 +254,7 @@ class VoiceRecorderController extends ChangeNotifier {
         _state == VoiceRecorderState.error) {
       _state = VoiceRecorderState.idle;
       _lastError = null;
+      _permanentlyDenied = false;
       _amplitude = 0;
       notifyListeners();
     }

@@ -56,14 +56,19 @@ class _VoicePlayerBubbleState extends State<VoicePlayerBubble> {
 
   @override
   void dispose() {
-    if (_player == _activePlayer) _activePlayer = null;
+    // Tear down the shared audio focus ONLY when the ACTIVE bubble goes away
+    // (an idle bubble that merely activated the session earlier must not mute
+    // another bubble still playing — it stays until the active one disposes).
+    if (_player == _activePlayer) {
+      _activePlayer = null;
+      if (_audioSessionActive) {
+        _audioSessionActive = false;
+        unawaited(_releaseAudioSession());
+      }
+    }
     _posSub?.cancel();
     _stateSub?.cancel();
     _durSub?.cancel();
-    if (_audioSessionActive) {
-      _audioSessionActive = false;
-      unawaited(_releaseAudioSession());
-    }
     _player?.dispose();
     super.dispose();
   }
@@ -146,8 +151,15 @@ class _VoicePlayerBubbleState extends State<VoicePlayerBubble> {
       if (!mounted) return;
       setState(() {
         _loading = false;
+        _playing = false;
         _duration = Duration(milliseconds: (widget.message.durationMs ?? 0));
       });
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(const SnackBar(
+          content: Text('Não foi possível reproduzir o áudio.'),
+          duration: Duration(seconds: 2),
+        ));
     }
   }
 

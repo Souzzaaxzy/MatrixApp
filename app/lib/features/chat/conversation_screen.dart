@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 import '../../app/routes.dart';
 import '../../app/theme/app_colors.dart';
@@ -74,7 +75,12 @@ class _ConversationScreenState extends State<ConversationScreen>
   bool _voiceSending = false;
   double _dragDy = 0; // vertical live gesture displacement (up = negative)
   bool _recordingSignaled =
-      false; // whether the peer was told were are recording
+      false; // whetherthe peer was told were are recording
+  bool _micFingerHeld =
+      false; // whetherthe user's finger is still down on the mic button
+  Timer? _holdTimer;
+  bool _holdConfirmed = false;
+  bool _micErrorShown = false;
 
   StreamSubscription<ChatMessage>? _chatSub;
   StreamSubscription<ChatTypingEvent>? _typingSub;
@@ -201,6 +207,7 @@ class _ConversationScreenState extends State<ConversationScreen>
     }
     _typingAutoClear?.cancel();
     _typingSendDebounce?.cancel();
+    _holdTimer?.cancel();
     if (_typingLastSent) {
       final id = _conversationId;
       if (id.isNotEmpty) _state?.sendTyping(id, false);
@@ -357,6 +364,7 @@ class _ConversationScreenState extends State<ConversationScreen>
     if (!mounted) return;
     if (file == null) {
       setState(() => _voiceSending = false);
+      _recorder.resetToIdle();
       return;
     }
     final durationMs = _recorder.elapsed.inMilliseconds.clamp(1000, 60000);
@@ -384,6 +392,10 @@ class _ConversationScreenState extends State<ConversationScreen>
       }
     } finally {
       if (mounted) setState(() => _voiceSending = false);
+      // A finished capture was consumed by the upload attempt (or failed
+      // before sending) — always return the controller to IDLE so the next
+      // hold can start a fresh take (never leave the recorder stuck in SENDING).
+      _recorder.resetToIdle();
     }
   }
 
@@ -736,31 +748,37 @@ class _ConversationScreenState extends State<ConversationScreen>
                     child: child,
                   ),
                 ),
-                child: conversation == null
-                    ? const SizedBox(key: ValueKey('idle'), width: 0, height: 0)
-                    : _peerRecording
-                        ? _RecordingIndicator(
-                            key: const ValueKey('recording'),
-                            typing: false,
-                          )
-                        : _peerTyping
-                            ? const _RecordingIndicator(
-                                key: ValueKey('typing'),
-                                typing: true,
+                child: _recorder.isRecording
+                    ? const _RecordingIndicator(
+                        key: ValueKey('self-recording'),
+                        typing: false,
+                      )
+                    : conversation == null
+                        ? const SizedBox(
+                            key: ValueKey('idle'), width: 0, height: 0)
+                        : _peerRecording
+                            ? _RecordingIndicator(
+                                key: const ValueKey('recording'),
+                                typing: false,
                               )
-                            : const SizedBox(
-                                key: ValueKey('idle'),
-                                width: 0,
-                                height: 0,
-                              ),
+                            : _peerTyping
+                                ? const _RecordingIndicator(
+                                    key: ValueKey('typing'),
+                                    typing: true,
+                                  )
+                                : const SizedBox(
+                                    key: ValueKey('idle'),
+                                    width: 0,
+                                    height: 0,
+                                  ),
               ),
             ],
           ),
         ),
         titleTextStyle:
             AppTextStyles.h3.copyWith(fontSize: 19, color: AppColors.techWhite),
-        toolbarHeight:
-            kToolbarHeight + ((_peerRecording || _peerTyping) ? 18 : 0),
+        toolbarHeight: kToolbarHeight +
+            ((_recorder.isRecording || _peerRecording || _peerTyping) ? 18 : 0),
       ),
       body: SafeArea(
         child: Column(
@@ -792,9 +810,8 @@ class _ConversationScreenState extends State<ConversationScreen>
               enabled: conversation != null,
               onChanged: _onInputChanged,
               onSend: _send,
-              onTapMic: _onMicTap,
-              onMicLongPressStart: _onMicPressStart,
-              onMicLongPressEnd: _onMicRelease,
+              onPointerDown: _onMicPointerDown,
+              onPointerUp: _onMicPointerUp,
               onMicDragUpdate: _onMicDrag,
               recorder: _recorder,
               dragDx: _dragDx,
@@ -839,7 +856,9 @@ class _ConversationScreenState extends State<ConversationScreen>
   // The button can never leave the screen (displacement is clamped to keep it
   // inside the composer area).
 
-  Future<void> _onMicTap() async {
+  /// Pointer-down on the mic button. Recording starts IMMEDIATELY (no long-
+  /// press delay) so a plain hold→release always sends without extra taps..
+  void _onMicPointerDown() async {
     if (_recorder.state == VoiceRecorderState.recording ||
         _recorder.state == VoiceRecorderState.locked) {
       // Locked take: the stable mic button now wears the send icon — a tap
@@ -847,20 +866,6 @@ class _ConversationScreenState extends State<ConversationScreen>
       if (_dragLocked) await _sendVoice();
       return;
     }
-    if (mounted) {
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(
-          const SnackBar(
-            content: Text('segure para gravar áudio'),
-            duration: Duration(seconds: 2),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-    }
-  }
-
-  Future<void> _onMicPressStart(LongPressStartDetails details) async {
     if (_recorder.state != VoiceRecorderState.idle &&
         _recorder.state != VoiceRecorderState.error) {
       return; // already capturing / processing — never start a second one
@@ -869,12 +874,26 @@ class _ConversationScreenState extends State<ConversationScreen>
     _dragDx = 0;
     _dragDy = 0;
     _recordingSignaled = false;
+    _micErrorShown = false;
+    _holdConfirmed = false;
+    _micFingerHeld = true;
+    _holdTimer?.cancel();
+    // The hold-confirm timer distinguishes a quick tap from a real hold. It
+    // runs on the TEST fake clock (pump(300ms) fires it; a quick tap lifts
+    // before 250ms so it never starts). A real hold→release sends the take;
+    // a quick tap just cancels the empty capture and shows the hint..
+    _holdTimer = Timer(const Duration(milliseconds: 250), () {
+      if (mounted) setState(() => _holdConfirmed = true);
+    });
     final ok = await _recorder.start();
     if (ok && mounted) {
+      if (!_micFingerHeld && !_dragLocked) {
+        _dragLocked =
+            true; // finger already lifted by permission grant — lock it
+        _recorder.lock();
+        setState(() {});
+      }
       _recordingSignaled = true;
-      // Tell the peer the capture started (ephemeral realtime frame — best
-      // effort; failed signals don't kill the recording). Also stops the
-      // "digitando..." if it was showing (we no longer are typing).s
       final id = _conversationId;
       if (id.isNotEmpty) {
         _state?.sendRecording(id, true);
@@ -884,15 +903,21 @@ class _ConversationScreenState extends State<ConversationScreen>
           _state?.sendTyping(id, false);
         }
       }
-    }
-    if (!ok && mounted) {
-      // Permission denied or capture failed. Show a clear message once.
+    } else if (mounted) {
+      _micErrorShown = true;
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
         ..showSnackBar(SnackBar(
           content: Text(_recorder.lastError ??
               'Permissão do microfone necessária para gravar áudio.'),
           duration: const Duration(seconds: 3),
+          action: _recorder.permanentlyDenied
+              ? SnackBarAction(
+                  label: 'Configurações',
+                  textColor: AppColors.electricBlue,
+                  onPressed: () => unawaited(openAppSettings()),
+                )
+              : null,
         ));
     }
   }
@@ -925,24 +950,32 @@ class _ConversationScreenState extends State<ConversationScreen>
     if (mounted) setState(() {});
   }
 
-  Future<void> _onMicRelease() async {
+  /// Pointer-up / cancel on the mic button. A real held capture (confirmed by
+  /// the 250ms hold timer) sends; a quick tap cancels the empty capture and
+  /// shows the hold-to-record hint instead; the locked take keeps recording
+  /// until the send affordance is tapped.
+  void _onMicPointerUp() async {
+    _micFingerHeld = false;
+    _holdTimer?.cancel();
     if (_recorder.state == VoiceRecorderState.recording && !_dragLocked) {
-      // Plain press-and-release with NO lock → send the take (matches
-      // WhatsApp-style short holds). Cancelled drags already reset state.
-
-      _dragDx = 0;
-      _dragDy = 0;
-      await _sendVoice();
-      return;
-    }
-    if (_dragLocked) {
-      // Release after LOCK: nothing to do — the take keeps recording until
-      // the "send" button is tapped. Reset the drag visuals anyway.s
-      if (mounted) {
-        setState(() {
-          _dragDx = 0;
-          _dragDy = 0;
-        });
+      if (_holdConfirmed) {
+        _dragDx = 0;
+        _dragDy = 0;
+        await _sendVoice();
+      } else {
+        await _cancelMic();
+        if (mounted && !_micErrorShown) {
+          ScaffoldMessenger.of(context)
+            ..hideCurrentSnackBar()
+            ..showSnackBar(
+              const SnackBar(
+                content: Text('segure para gravar áudio'),
+                duration: Duration(seconds: 2),
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+        }
+        _micErrorShown = false;
       }
       return;
     }
@@ -955,6 +988,7 @@ class _ConversationScreenState extends State<ConversationScreen>
   }
 
   Future<void> _cancelMic() async {
+    _micFingerHeld = false;
     await _recorder.cancel();
     if (_recordingSignaled) {
       _recordingSignaled = false;
@@ -1577,9 +1611,8 @@ class _Composer extends StatefulWidget {
     required this.enabled,
     required this.onChanged,
     required this.onSend,
-    required this.onTapMic,
-    required this.onMicLongPressStart,
-    required this.onMicLongPressEnd,
+    required this.onPointerDown,
+    required this.onPointerUp,
     required this.onMicDragUpdate,
     required this.recorder,
     required this.dragDx,
@@ -1595,10 +1628,9 @@ class _Composer extends StatefulWidget {
   final ValueChanged<String> onChanged;
   final VoidCallback onSend;
 
-  /// Tap (short) → "segure para gravar áudio". Long-press starts recording.
-  final VoidCallback onTapMic;
-  final void Function(LongPressStartDetails) onMicLongPressStart;
-  final VoidCallback onMicLongPressEnd;
+  /// Pointer-down starts recording immediately; pointer-up sends (or cancels on quick tap..
+  final VoidCallback onPointerDown;
+  final VoidCallback onPointerUp;
   final void Function(Offset delta) onMicDragUpdate;
   final VoiceRecorderController recorder;
   final double dragDx;
@@ -1707,9 +1739,8 @@ class _ComposerState extends State<_Composer> {
               ),
               const SizedBox(width: AppDimensions.spaceSm),
               _MicButton(
-                onTap: widget.onTapMic,
-                onLongPressStart: widget.onMicLongPressStart,
-                onLongPressEnd: widget.onMicLongPressEnd,
+                onPointerDown: widget.onPointerDown,
+                onPointerUp: widget.onPointerUp,
                 onDrag: widget.onMicDragUpdate,
                 enabled: widget.enabled && !widget.voiceSending,
                 state: widget.recorder.state,
@@ -1789,11 +1820,10 @@ class _SendButton extends StatelessWidget {
 /// whole hold→release→send sequence (the classic "stuck gravando" bug).
 /// Its surface reflects the recorder state: idle→mic, recording→glowing
 /// recording mic, locked→send icon (tap to send,, uploading→spinner.
-class _MicButton extends StatelessWidget {
+class _MicButton extends StatefulWidget {
   const _MicButton({
-    required this.onTap,
-    required this.onLongPressStart,
-    required this.onLongPressEnd,
+    required this.onPointerDown,
+    required this.onPointerUp,
     required this.onDrag,
     required this.enabled,
     required this.state,
@@ -1802,31 +1832,30 @@ class _MicButton extends StatelessWidget {
     required this.cancelZone,
   });
 
-  final VoidCallback onTap;
-
-  final void Function(LongPressStartDetails) onLongPressStart;
-
-  final VoidCallback onLongPressEnd;
-
+  final VoidCallback onPointerDown;
+  final VoidCallback onPointerUp;
   final void Function(Offset delta) onDrag;
-
   final bool enabled;
-
   final VoiceRecorderState state;
-
   final bool sending;
-
   final bool locking;
-
   final bool cancelZone;
 
   @override
+  State<_MicButton> createState() => _MicButtonState();
+}
+
+class _MicButtonState extends State<_MicButton> {
+  Offset? _lastPointer;
+
+  @override
   Widget build(BuildContext context) {
-    final showingSpinner = sending;
-    final showingLockedSend = locking && !sending;
-    final showingCancel = cancelZone && !locking && !sending;
-    final recordingActive = state == VoiceRecorderState.recording ||
-        state == VoiceRecorderState.locked;
+    final showingSpinner = widget.sending;
+    final showingLockedSend = widget.locking && !widget.sending;
+    final showingCancel =
+        widget.cancelZone && !widget.locking && !widget.sending;
+    final recordingActive = widget.state == VoiceRecorderState.recording ||
+        widget.state == VoiceRecorderState.locked;
     final Color bg;
     final IconData? icon;
     if (showingSpinner) {
@@ -1845,15 +1874,22 @@ class _MicButton extends StatelessWidget {
       bg = AppColors.nightBlue;
       icon = Icons.mic_rounded;
     }
-    return GestureDetector(
-      onTap: enabled ? onTap : null,
-      onLongPressStart: enabled ? onLongPressStart : null,
-      onLongPressEnd: enabled ? (details) => onLongPressEnd() : null,
-      onLongPressMoveUpdate: enabled ? (d) => onDrag(d.offsetFromOrigin) : null,
-      // The long-press recognizer wins over the tap, so a SHORT tap fires
-      // onTap (the "segure para gravar" hint / locked "send")and a HOLD
-      // starts recording; the recording surface itself never owns gestures.
-
+    return Listener(
+      onPointerDown: widget.enabled
+          ? (e) {
+              _lastPointer = e.localPosition;
+              widget.onPointerDown();
+            }
+          : null,
+      onPointerMove: widget.enabled
+          ? (e) {
+              final prev = _lastPointer;
+              _lastPointer = e.localPosition;
+              if (prev != null) widget.onDrag(e.localPosition - prev);
+            }
+          : null,
+      onPointerUp: widget.enabled ? (e) => widget.onPointerUp() : null,
+      onPointerCancel: widget.enabled ? (e) => widget.onPointerUp() : null,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 160),
         width: 50,
