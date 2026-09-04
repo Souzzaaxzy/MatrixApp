@@ -131,7 +131,8 @@ class VoiceRecorderController extends ChangeNotifier {
       return true;
     } catch (e) {
         if (kDebugMode) {
-          debugPrint('[voice] start error: $e\n' + '${StackTrace.current}');
+          debugPrint('[voice] start error: $e\n'
+        '${StackTrace.current}');
         }
       await _tryRelease(recorder);
       _recorder = null;
