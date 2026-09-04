@@ -353,6 +353,7 @@ class _ConversationScreenState extends State<ConversationScreen>
       _dragDx = 0;
       _dragDy = 0;
     });
+      debugPrint("[voice] _sendVoice: calling finish state=${_recorder.state}");
     final file = await _recorder.finish();
     // The capture ended (regardless of outcome) — tell rise peer so the
     // "gravando áudio" hint clears immediately, even when we cannot send.s
@@ -377,6 +378,7 @@ class _ConversationScreenState extends State<ConversationScreen>
       );
       _appendMessage(message);
       unawaited(_state!.markConversationRead(conversationId));
+      debugPrint("[voice] _sendVoice: after finish file=${file == null ? "null" : file.path}");
     } on ApiException {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -391,6 +393,7 @@ class _ConversationScreenState extends State<ConversationScreen>
         );
       }
     } finally {
+      debugPrint("[voice] _sendVoice: sending=false state=${_recorder.state}");
       if (mounted) setState(() => _voiceSending = false);
       // A finished capture was consumed by the upload attempt (or failed
       // before sending) — always return the controller to IDLE so the next
