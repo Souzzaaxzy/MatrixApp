@@ -39,12 +39,27 @@ class FakeRecordChannels {
     messenger.setMockMethodCallHandler(
         const MethodChannel('plugins.flutter.io/path_provider'),
         fake._handlePathProvider);
+    // The `record` package listens to per-recorder event channels (state
+    // transitions + amplitude samples). Tests never emit, but the channel must
+    // accept the subscription or `start()` raises a decode error in tests..
+    messenger.setMockStreamHandler(
+      const EventChannel('com.llfbandit.record/events'),
+      fake._handleRecordEvents);
+    messenger.setMockStreamHandler(
+      const EventChannel('com.llfbandit.record/eventsRecord'),
+      fake._handleRecordEvents);
     return fake;
+  }
+
+  /// Swallows event-channel subscriptions (no events fire in tests).
+  Stream<dynamic> _handleRecordEvents(Stream<dynamic> events) async* {
+    yield* const Stream.empty();
   }
 
   FakeRecordChannels._();
 
   Future<Object?> _handlePermission(MethodCall call) async {
+    debugPrint('[FAKE-PERM] ${call.method}');
     switch (call.method) {
       case 'checkPermissionStatus':
         if (denyPermanently) return 4;
@@ -55,7 +70,7 @@ class FakeRecordChannels {
             call.arguments is List ? (call.arguments as List) : null;
         final permissionId =
             (args != null && args.isNotEmpty) ? args.first as int : 7;
-        return <int, int>{permissionId: value};
+        return <String, dynamic>{permissionId.toString(): value};
       case 'shouldShowRequestPermissionRationale':
         return false;
       case 'openAppSettings':
@@ -66,6 +81,7 @@ class FakeRecordChannels {
   }
 
   Future<Object?> _handleRecord(MethodCall call) async {
+    debugPrint('[FAKE-REC] ${call.method}');
     final args = call.arguments as Map<String, dynamic>;
     switch (call.method) {
       case 'create':
