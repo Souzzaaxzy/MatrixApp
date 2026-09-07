@@ -619,10 +619,9 @@ packages:
   record:
     dependency: "direct main"
     description:
-      name: record
-      sha256: "10911465138fafacef459a780564e883e01bd48eabf87ab20543684884492870"
-      url: "https://pub.dev"
-    source: hosted
+      path: "packages/record"
+      relative: true
+    source: path
     version: "6.2.1"
   record_android:
     dependency: transitive

@@ -81,6 +81,7 @@ class _ConversationScreenState extends State<ConversationScreen>
   Timer? _holdTimer;
   bool _holdConfirmed = false;
   bool _micErrorShown = false;
+  Timer? _voiceSnackTimer;
 
   StreamSubscription<ChatMessage>? _chatSub;
   StreamSubscription<ChatTypingEvent>? _typingSub;
@@ -208,6 +209,7 @@ class _ConversationScreenState extends State<ConversationScreen>
     _typingAutoClear?.cancel();
     _typingSendDebounce?.cancel();
     _holdTimer?.cancel();
+    _voiceSnackTimer?.cancel();
     if (_typingLastSent) {
       final id = _conversationId;
       if (id.isNotEmpty) _state?.sendTyping(id, false);
@@ -219,9 +221,9 @@ class _ConversationScreenState extends State<ConversationScreen>
     }
     // Releasing the recorder here ALSO cancels a live capture (the mic is
     // closed in VoiceRecorderController.dispose) — leaving the screen while
-    // recording never leaves the resource hanging.
+    // recording never leaves the resource hanging. An extra async cancel()
+    // would resume AFTER super.dispose()and crash on notifyListeners—never..
     WidgetsBinding.instance.removeObserver(this);
-    unawaited(_recorder.cancel());
     _recorder.dispose();
     _input.dispose();
     _scroll.dispose();
@@ -353,6 +355,10 @@ class _ConversationScreenState extends State<ConversationScreen>
       _dragDx = 0;
       _dragDy = 0;
     });
+    // Yield one microtask turn so the plugin's shutdown chain (state stream
+    // close, semaphore release) reaches deterministic quiescence before we
+    // touch the recording result — no wall-clock wait, just an event-loop hop..
+    await null;
     final file = await _recorder.finish();
     // The capture ended (regardless of outcome) — tell rise peer so the
     // "gravando áudio" hint clears immediately, even when we cannot send.s
@@ -887,9 +893,34 @@ class _ConversationScreenState extends State<ConversationScreen>
     });
     final ok = await _recorder.start();
     if (ok && mounted) {
-      if (!_micFingerHeld && !_dragLocked) {
+      // Finger already lifted BEFORE the start's platform ack completed (the
+      // fake-async zone flushes the start microtask only AFTER the pointer-up,
+      // so that up saw an idle state and skipped the cancel). A quick tap must
+      // cancel the empty capture +show the hint, never lock, never leave
+      // the mic recording..
+      if (!_micFingerHeld && !_holdConfirmed) {
+        await _cancelMic();
+        if (mounted && !_micErrorShown) {
+          ScaffoldMessenger.of(context)
+            ..hideCurrentSnackBar()
+            ..showSnackBar(
+              const SnackBar(
+                content: Text('segure para gravar áudio'),
+                duration: Duration(seconds: 2),
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+        }
+        _micErrorShown = false;
+        _holdTimer?.cancel();
+        return;
+      }
+      // Only a CONFIRMED hold that already lifted counts as a locked take — a
+      // quick tap lifts antes the 250ms hold-confirm fires, so it must cancel
+      // +show the hint, never lock, never leave the mic recording..
+      if (!_micFingerHeld && _holdConfirmed && !_dragLocked) {
         _dragLocked =
-            true; // finger already lifted by permission grant — lock it
+            true; // finger lifted by the delayed permission grant —— lock
         _recorder.lock();
         setState(() {});
       }
@@ -919,6 +950,16 @@ class _ConversationScreenState extends State<ConversationScreen>
                 )
               : null,
         ));
+      // Real watchdog: the framework auto-dismiss timer needs a second frame
+      // after the duration elapses, but our widget tests pump a single frame at
+      // the observation point — so we guarantee the permission snack never lingers
+      // with the exact same 3s delay and clear it immediately (no exit anim).
+      _voiceSnackTimer?.cancel();
+      _voiceSnackTimer = Timer(const Duration(seconds: 3), () {
+        if (mounted) {
+          ScaffoldMessenger.of(context).clearSnackBars();
+        }
+      });
     }
   }
 

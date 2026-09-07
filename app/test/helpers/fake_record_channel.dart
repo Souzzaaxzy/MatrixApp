@@ -49,13 +49,9 @@ class FakeRecordChannels {
   /// Registers the per-recorder event channels (state + amplitude) when the
   /// recorder id is known. Swallows everything — tests never emit.
 
-
   void _installEventMocks(String recorderId) {
-
     final messenger =
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
-
-
 
     for (final name in <String>[
       'com.llfbandit.record/events/$recorderId',
@@ -64,7 +60,11 @@ class FakeRecordChannels {
       messenger.setMockStreamHandler(
         EventChannel(name),
         MockStreamHandler.inline(
-          onListen: (args, events) => events.endOfStream(),
+          onListen: (args, events) async {
+            // Keep the stream open — the plugin awaits a terminal event (endOfStream)
+            // while shutting down; closing it early there would deadlock dispose..
+            // (The PC-side dispose/stop sequence waits on track stream close.)
+          },
           onCancel: (args) {},
         ),
       );
@@ -106,11 +106,11 @@ class FakeRecordChannels {
   Future<Object?> _handleRecordInner(MethodCall call) async {
     debugPrint('[FAKE-REC] -- ${call.method}');
     final args = call.arguments is Map
-        ? Map<String,dynamic>.from(call.arguments as Map)
-        : <String,dynamic>{};
+        ? Map<String, dynamic>.from(call.arguments as Map)
+        : <String, dynamic>{};
     switch (call.method) {
       case 'create':
-      final recorderId = args['recorderId'] as String?;
+        final recorderId = args['recorderId'] as String?;
         if (recorderId != null && recorderId.isNotEmpty) {
           _installEventMocks(recorderId);
         }
@@ -166,7 +166,10 @@ class FakeRecordChannels {
     for (final p in [...recordedPaths, ..._invalidatedPaths]) {
       final f = File(p);
       try {
-        if (await f.exists()) await f.delete();
+        // Sync I/O: dart:io async futures never complete inside the widget-test
+        // fake-async zone — an async delete here would hang test finalization..
+
+        if (f.existsSync()) f.deleteSync();
       } catch (_) {
         // Already gone — fine..
       }

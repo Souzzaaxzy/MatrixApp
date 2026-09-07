@@ -51,10 +51,14 @@ void main() {
       await gesture.up();
       await tester.pump(const Duration(milliseconds: 300));
       await tester.pump(const Duration(milliseconds: 300));
+      // The captured voice message is wired straight into the active thread —
+      // the send affordance replaces the composer's input hint while the final
+      // message is displayed as a player bubble (no draft-to-send flow).
       expect(find.text('gravando áudio'), findsNothing);
-      expect(find.text('Escreva sua mensagem...'), findsOneWidget);
+      expect(find.text('Enviando voz...'), findsNothing);
       expect(fake.recordedPaths, hasLength(1));
       expect(find.byType(VoicePlayerBubble), findsOneWidget);
+      expect(find.byIcon(Icons.send_rounded), findsNothing);
     });
     testWidgets('plain tap shows hold-to-record hint without capturing',
         (tester) async {

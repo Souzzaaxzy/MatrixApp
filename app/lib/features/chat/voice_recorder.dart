@@ -130,10 +130,10 @@ class VoiceRecorderController extends ChangeNotifier {
       if (kDebugMode) debugPrint('[voice] recording started → $path');
       return true;
     } catch (e) {
-        if (kDebugMode) {
-          debugPrint('[voice] start error: $e\n'
-        '${StackTrace.current}');
-        }
+      if (kDebugMode) {
+        debugPrint('[voice] start error: $e\n'
+            '${StackTrace.current}');
+      }
       await _tryRelease(recorder);
       _recorder = null;
       _lastError = 'Não foi possível iniciar a gravação.';
@@ -169,14 +169,26 @@ class VoiceRecorderController extends ChangeNotifier {
       try {
         await recorder.cancel(); // deletes the platform-side temp file..
       } catch (_) {
-        // Platform may already be released — fall back to stop+dispose..
-        await _tryRelease(recorder);
+        // Platform ack failed — fall back to stop+dispose..
+        try {
+          await _tryRelease(recorder);
+        } catch (_) {}
+      }
+      // Always release the platform recorder afterwards: a bare `cancel()`
+      // only stops the native side — the plug-in's periodic amplitude timer and
+      // state-stream listener would otherwise stay alive, leaking past the
+      // fake-async widget-test clock and holding the mic open on real devices..
+      try {
+        await recorder.dispose();
+      } catch (_) {
+        // Already released — nothing else to do..
       }
       // Best-effort local cleanup for any file the platform left behind.
+      // Sync I/O: async delete would stall the fake-async zone of widget tests.
       final file = path == null ? null : File(path);
       if (file != null) {
         try {
-          if (await file.exists()) await file.delete();
+          if (file.existsSync()) file.deleteSync();
         } catch (_) {
           // Already gone — nothing else to do..
         }
@@ -212,11 +224,16 @@ class VoiceRecorderController extends ChangeNotifier {
       await recorder.dispose();
       final finalPath = (stopped ?? '').isNotEmpty ? stopped! : path;
       final file = File(finalPath);
-      final length = await file.length();
-      if (!await file.exists() || length < 1024) {
+      // Synchronous stat: dart:io async futures never complete inside the
+      // widget-test fake-async zone (the real event loop isn't pumped), so
+      // async exists()/length() would silently stall the send flow — andea the
+      // same result deterministically on every platform with a micro-cost.
+      final exists = file.existsSync();
+      final length = exists ? file.lengthSync() : 0;
+      if (!exists || length < 1024) {
         if (kDebugMode) {
           debugPrint('[voice] finish rejected — missing or too small '
-              '(exists=${await file.exists()}, bytes=$length, path=$finalPath)');
+              '(exists=$exists, bytes=$length, path=$finalPath)');
         }
         // Too tiny to be a real capture — reject.
         _state = VoiceRecorderState.idle;

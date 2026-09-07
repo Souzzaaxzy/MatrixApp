@@ -25,25 +25,24 @@ mixin _StateMixin {
 
     _semaphore.acquire().whenComplete(
       () {
-          try {
-        _stateStreamSubscription = platform.onStateChanged(recorderId).listen(
-          (state) {
-            if (_stateStreamCtrl case final ctrl? when ctrl.hasListener) {
-              ctrl.add(state);
-            }
+        try {
+          _stateStreamSubscription = platform.onStateChanged(recorderId).listen(
+            (state) {
+              if (_stateStreamCtrl case final ctrl? when ctrl.hasListener) {
+                ctrl.add(state);
+              }
 
-            onStateChanged(state);
-          },
-          onError: (error) {
-            if (_stateStreamCtrl case final ctrl? when ctrl.hasListener) {
-              ctrl.addError(error);
-            }
-          },
-        );
-
-          } finally {
-            _semaphore.release();
-          }
+              onStateChanged(state);
+            },
+            onError: (error) {
+              if (_stateStreamCtrl case final ctrl? when ctrl.hasListener) {
+                ctrl.addError(error);
+              }
+            },
+          );
+        } finally {
+          _semaphore.release();
+        }
       },
     );
 
@@ -52,8 +51,11 @@ mixin _StateMixin {
 
   /// Disposes state stream resources.
   Future<void> _disposeState() async {
-    await _stateStreamSubscription?.cancel();
-    await _stateStreamCtrl?.close();
+    final ctrl = _stateStreamCtrl;
     _stateStreamCtrl = null;
+    final sub = _stateStreamSubscription;
+    _stateStreamSubscription = null;
+    unawaited(sub?.cancel());
+    unawaited(ctrl?.close());
   }
 }

@@ -70,9 +70,7 @@ class AudioRecorder with _AmplitudeMixin, _StateMixin, _StreamMixin {
   Future<String?> stop() {
     return _safeCall(() async {
       final path = await _platform.stop(_recorderId);
-
       await _stopRecordStream();
-
       return path;
     });
   }
