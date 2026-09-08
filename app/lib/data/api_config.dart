@@ -21,10 +21,14 @@ class ApiConfig {
   /// dentro do servidor/emulador.
   ///
   /// Prioridade: `--dart-define=API_BASE_URL=...` (o CI injeta a partir do
-  /// secret API_BASE_URL) → esta constante. Sem barra final.
+  /// secret API_BASE_URL) → este default (URL real do servidor atual). Sem barra final.
+  ///
+  /// URL atual do ServidorMtx (Bronxys/Pterodactyl): `http://189.121.200.99:3000`
+  /// (confirmada pelo log do servidor em 08/09/2026). Se o painel mudar
+  /// o IP/porta, atualize a URL aqui e no secret API_BASE_URL do CI.
   static const String _productionUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: '',
+    defaultValue: 'http://189.121.200.99:3000',
   );
 
   static String get baseUrl {
