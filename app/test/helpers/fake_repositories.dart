@@ -88,6 +88,16 @@ class FakeStore {
   /// soft-deleted messages (deletedAt set).
   final List<String> deletedEverywhere = [];
 
+  /// Groups (fake): id -> group header/list state.
+  final Map<String, GroupConversation> groups = {};
+
+  /// Group messages by group id (fake persistence).
+  late final Map<String, List<ChatMessage>> groupMessagesById = {};
+
+  /// Groups hidden FOR the current user (`groupId|userId`) — mirrors the
+  /// server's GroupHidden rows.
+  final List<String> groupHides = [];
+
   FakeStore() {
     users = {
       'u0': MatrixUser(
@@ -215,7 +225,6 @@ class _FakeAuthRepository implements AuthRepository {
       refreshToken: 'fake-refresh',
       user: AuthUserDto(
         id: user.id,
-        
         nickname: user.nickname,
         avatarUrl: user.avatarUrl,
         bio: user.bio,
@@ -235,7 +244,6 @@ class _FakeAuthRepository implements AuthRepository {
       refreshToken: 'fake-refresh',
       user: AuthUserDto(
         id: u.id,
-        
         nickname: u.nickname,
         avatarUrl: u.avatarUrl,
         bio: u.bio,
@@ -255,7 +263,6 @@ class _FakeAuthRepository implements AuthRepository {
     final u = _store.currentUser;
     return AuthUserDto(
       id: u.id,
-      
       nickname: u.nickname,
       avatarUrl: u.avatarUrl,
       bio: u.bio,
@@ -488,9 +495,7 @@ class _FakeUserRepository implements UserRepository {
     final users = _store.users.values.toList();
     if (query.trim().isEmpty) return users;
     final q = query.toLowerCase();
-    return users
-        .where((u) => u.nickname.toLowerCase().contains(q))
-        .toList();
+    return users.where((u) => u.nickname.toLowerCase().contains(q)).toList();
   }
 }
 
@@ -498,7 +503,8 @@ class _FakeUploadRepository implements UploadRepository {
   const _FakeUploadRepository();
 
   @override
-  Future<String> upload(File file) async => 'https://fake.matrix.app/u/test.png';
+  Future<String> upload(File file) async =>
+      'https://fake.matrix.app/u/test.png';
 }
 
 /// In-memory cosmetics: the session user "owns" everything they equip —
@@ -524,11 +530,10 @@ class _FakeCustomizationRepository implements CustomizationRepository {
   Future<CosmeticItem> equip(String itemId) async {
     // Mirror the server: the slot comes from the CATALOG item's own type;
     // unknown ids are rejected. NAME_COLOR entries equip freely.
-    final item = _store.catalog
-        .where((i) => i.id == itemId)
-        .firstOrNull;
+    final item = _store.catalog.where((i) => i.id == itemId).firstOrNull;
     if (item == null) {
-      throw const ApiException(statusCode: 404, message: 'Item não encontrado.');
+      throw const ApiException(
+          statusCode: 404, message: 'Item não encontrado.');
     }
     _store.equippedCosmetics[item.slot] = item;
     return item;
@@ -553,9 +558,8 @@ class _FakeCustomizationRepository implements CustomizationRepository {
       _store.equippedCosmetics.remove(slot);
       return;
     }
-    final item = _store.catalog
-        .where((i) => i.id == id && i.slot == slot)
-        .firstOrNull;
+    final item =
+        _store.catalog.where((i) => i.id == id && i.slot == slot).firstOrNull;
     if (item == null) {
       throw const ApiException(statusCode: 400, message: 'Item inválido.');
     }
@@ -621,7 +625,9 @@ class _FakeFriendRepository implements FriendRepository {
   @override
   Future<void> cancel(String userId) async {
     _store.friendRequests.removeWhere((key, r) =>
-        r.status == 'PENDING' && r.sender.id == _store.currentUserId && r.receiverId == userId);
+        r.status == 'PENDING' &&
+        r.sender.id == _store.currentUserId &&
+        r.receiverId == userId);
   }
 
   @override
@@ -648,7 +654,8 @@ class _FakeFriendRepository implements FriendRepository {
         ids.add(parts.firstWhere((id) => id != userId));
       }
     }
-    final all = ids.map((id) => _store.users[id]).whereType<MatrixUser>().toList();
+    final all =
+        ids.map((id) => _store.users[id]).whereType<MatrixUser>().toList();
     final start = (page - 1) * pageSize;
     final slice = start >= all.length
         ? <MatrixUser>[]
@@ -663,7 +670,8 @@ class _FakeNotificationRepository implements NotificationRepository {
   final FakeStore _store;
 
   @override
-  Future<({List<MatrixNotification> notifications, int unreadCount})> list() async {
+  Future<({List<MatrixNotification> notifications, int unreadCount})>
+      list() async {
     final items = List.of(_store.notifications);
     return (
       notifications: items,
@@ -698,8 +706,7 @@ class _FakeChatRepository implements ChatRepository {
 
   final FakeStore _store;
 
-  String _pairKey(String a, String b) =>
-      a.compareTo(b) < 0 ? '$a|$b' : '$b|$a';
+  String _pairKey(String a, String b) => a.compareTo(b) < 0 ? '$a|$b' : '$b|$a';
 
   List<ChatMessage> _messagesOf(String pair) =>
       List.of(_store.chatMessagesByPair[pair] ?? const []);
@@ -753,14 +760,16 @@ class _FakeChatRepository implements ChatRepository {
   Future<int> unreadCount() async => 0;
 
   @override
-  Future<void> deleteMessageForMe(String conversationId, String messageId) async {
+  Future<void> deleteMessageForMe(
+      String conversationId, String messageId) async {
     final pair = _pairFromConversationId(conversationId);
     if (pair == null) return;
     _store.messageHides.add('$pair|$messageId|${_store.currentUserId}');
   }
 
   @override
-  Future<void> deleteMessageForEveryone(String conversationId, String messageId) async {
+  Future<void> deleteMessageForEveryone(
+      String conversationId, String messageId) async {
     final pair = _pairFromConversationId(conversationId);
     if (pair == null) return;
     _store.deletedEverywhere.add('$pair|$messageId');
@@ -795,7 +804,8 @@ class _FakeChatRepository implements ChatRepository {
     }
     final other = _store.users[otherUserId];
     if (other == null) {
-      throw const ApiException(statusCode: 404, message: 'Usuário não encontrado.');
+      throw const ApiException(
+          statusCode: 404, message: 'Usuário não encontrado.');
     }
     final pair = _pairKey(me, otherUserId);
     final messages = _visibleMessages(pair, me);
@@ -888,7 +898,9 @@ class _FakeChatRepository implements ChatRepository {
       mine: true,
       replyTo: replyTo,
     );
-    _store.chatMessagesByPair.putIfAbsent(conversationId, () => []).add(message);
+    _store.chatMessagesByPair
+        .putIfAbsent(conversationId, () => [])
+        .add(message);
     return message;
   }
 
@@ -910,7 +922,9 @@ class _FakeChatRepository implements ChatRepository {
       audioUrl: 'memory://voice-${DateTime.now().microsecondsSinceEpoch}.m4a',
       durationMs: durationMs,
     );
-    _store.chatMessagesByPair.putIfAbsent(conversationId, () => []).add(message);
+    _store.chatMessagesByPair
+        .putIfAbsent(conversationId, () => [])
+        .add(message);
     return message;
   }
 
@@ -921,5 +935,171 @@ class _FakeChatRepository implements ChatRepository {
   void setTyping(String conversationId, bool typing) {}
   @override
   void setRecording(String conversationId, bool recording) {}
-}
 
+// ── Groups (fake) ──────────────────────────────────────────
+
+  @override
+  Future<List<GroupConversation>> groups() async {
+    final me = _store.currentUserId;
+    if (me == null) return const [];
+    final result = <GroupConversation>[];
+    _store.groups.forEach((groupId, g) {
+      if (_store.groupHides.contains('$groupId|$me')) return;
+      final messages = _store.groupMessagesById[groupId] ?? const [];
+      final visible = messages
+          .where((m) => !_store.deletedEverywhere.contains('g$groupId|${m.id}'))
+          .toList();
+      final last = visible.isNotEmpty ? visible.last : null;
+      result.add(g.copyWith(
+        lastMessage: last == null
+            ? null
+            : ConversationLastMessage(
+                id: last.id,
+                content: last.content,
+                senderId: last.senderId,
+                createdAt: last.createdAt,
+              ),
+        lastMine: last?.senderId == me,
+        unreadCount: 0,
+        updatedAt: last?.createdAt ?? g.updatedAt,
+      ));
+    });
+    result.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+    return result;
+  }
+
+  @override
+  Future<int> groupUnreadCount() async => 0;
+
+  @override
+  Future<GroupConversation> createGroup({
+    required String name,
+    String description = '',
+    String? avatarUrl,
+    List<String> participantIds = const [],
+  }) async {
+    final me = _store.currentUserId;
+    if (me == null) {
+      throw const ApiException(statusCode: 401, message: 'Não autenticado.');
+    }
+    if (name.trim().isEmpty) {
+      throw const ApiException(
+          statusCode: 422, message: 'Nome do grupo é obrigatório.');
+    }
+    final id = 'g${_store.groups.length + 1}';
+    final g = GroupConversation(
+      id: id,
+      group: GroupHeader(
+        id: id,
+        name: name.trim(),
+        avatarUrl: avatarUrl,
+        description: description,
+        createdById: me,
+        memberCount: participantIds.length + 1,
+      ),
+      lastMessage: null,
+      lastMine: false,
+      unreadCount: 0,
+      updatedAt: DateTime.now(),
+    );
+    _store.groups[id] = g;
+    _store.groupMessagesById[id] = [];
+    return g;
+  }
+
+  @override
+  Future<({List<ChatMessage> messages, bool hasMore})> groupMessages(
+    String groupId, {
+    String? before,
+    int limit = 30,
+  }) async {
+    final me = _store.currentUserId;
+    if (me == null) {
+      throw const ApiException(statusCode: 401, message: 'Não autenticado.');
+    }
+    if (!_store.groups.containsKey(groupId)) {
+      throw const ApiException(
+          statusCode: 404, message: 'Grupo não encontrado.');
+    }
+    final all =
+        List<ChatMessage>.of(_store.groupMessagesById[groupId] ?? const []);
+    if (before != null) {
+      final index = all.indexWhere((m) => m.id == before);
+      final from = index == -1 ? all.length : index;
+      final older = all.sublist(0, from);
+      final start = older.length > limit ? older.length - limit : 0;
+      return (messages: older.sublist(start), hasMore: start > 0);
+    }
+    final start = all.length > limit ? all.length - limit : 0;
+    return (messages: all.sublist(start), hasMore: start > 0);
+  }
+
+  @override
+  Future<ChatMessage> sendGroupMessage(
+    String groupId,
+    String content, {
+    String? replyToMessageId,
+  }) async {
+    final me = _store.currentUserId;
+    if (me == null || !_store.groups.containsKey(groupId)) {
+      throw const ApiException(statusCode: 403, message: 'Acesso negado.');
+    }
+    final message = ChatMessage(
+      id: 'gm${DateTime.now().microsecondsSinceEpoch}',
+      groupId: groupId,
+      conversationId: groupId,
+      senderId: me,
+      content: content,
+      createdAt: DateTime.now(),
+      mine: true,
+      replyTo: replyToMessageId == null ? null : null,
+    );
+    _store.groupMessagesById.putIfAbsent(groupId, () => []).add(message);
+    return message;
+  }
+
+  @override
+  Future<ChatMessage> sendGroupVoiceMessage(
+    String groupId,
+    File audioFile, {
+    required int durationMs,
+  }) async {
+    final me = _store.currentUserId;
+    final message = ChatMessage(
+      id: 'gv${DateTime.now().microsecondsSinceEpoch}',
+      groupId: groupId,
+      conversationId: groupId,
+      senderId: me!,
+      content: '🎤 Áudio',
+      createdAt: DateTime.now(),
+      mine: true,
+      type: 'voice',
+      audioUrl: 'memory://voice-${DateTime.now().microsecondsSinceEpoch}.m4a',
+      durationMs: durationMs,
+    );
+    _store.groupMessagesById.putIfAbsent(groupId, () => []).add(message);
+    return message;
+  }
+
+  @override
+  Future<void> markGroupRead(String groupId) async {}
+  @override
+  void setGroupTyping(String groupId, bool typing) {}
+  @override
+  void setGroupRecording(String groupId, bool recording) {}
+  @override
+  Future<void> deleteGroupMessageForMe(String groupId, String messageId) async {
+    _store.messageHides.add('g$groupId|$messageId|${_store.currentUserId}');
+  }
+
+  @override
+  Future<void> deleteGroupMessageForEveryone(
+      String groupId, String messageId) async {
+    _store.deletedEverywhere.add('g$groupId|$messageId');
+  }
+
+  @override
+  Future<void> hideGroup(String groupId) async {
+    _store.groupHides.add('$groupId|${_store.currentUserId}');
+  }
+}

@@ -45,11 +45,14 @@ class _MatrixAppState extends State<MatrixApp> {
   void _onChatMessageDeleted(Map<String, dynamic> data) {
     final state = _state;
     if (state == null) return;
-    final conversationId = data['conversationId'] as String? ?? '';
+    final groupId = data['groupId'] as String?;
+    final conversationId = data['conversationId'] as String?;
     final messageId = data['messageId'] as String? ?? '';
-    if (conversationId.isEmpty || messageId.isEmpty) return;
+    if (messageId.isEmpty) return;
+    if (conversationId == null && groupId == null) return;
     state.handleIncomingChatMessageDeleted(
       ChatMessageDeletedEvent(
+        groupId: groupId,
         conversationId: conversationId,
         messageId: messageId,
       ),
@@ -87,8 +90,7 @@ class _MatrixAppState extends State<MatrixApp> {
       if (rawPeer is Map<String, dynamic>) {
         peer = ChatUser(
           id: (rawPeer['id'] as String?) ?? message.senderId,
-          nickname:
-              (rawPeer['nickname'] as String?) ?? 'desconhecido',
+          nickname: (rawPeer['nickname'] as String?) ?? 'desconhecido',
           avatarUrl: rawPeer['avatarUrl'] as String?,
           nameColor: rawPeer['nameColor'] as String?,
           frameId: (rawPeer['frameId'] as String?) ??
@@ -106,9 +108,11 @@ class _MatrixAppState extends State<MatrixApp> {
   void _onChatTyping(Map<String, dynamic> data) {
     final state = _state;
     if (state == null) return;
-    final conversationId = data['conversationId'] as String? ?? '';
-    if (conversationId.isEmpty) return;
+    final groupId = data['groupId'] as String?;
+    final conversationId = data['conversationId'] as String?;
+    if (conversationId == null && groupId == null) return;
     state.handleIncomingChatTyping(ChatTypingEvent(
+      groupId: groupId,
       conversationId: conversationId,
       typing: (data['typing'] as bool?) ?? false,
     ));
@@ -119,9 +123,11 @@ class _MatrixAppState extends State<MatrixApp> {
   void _onChatRecording(Map<String, dynamic> data) {
     final state = _state;
     if (state == null) return;
-    final conversationId = data['conversationId'] as String? ?? '';
-    if (conversationId.isEmpty) return;
+    final groupId = data['groupId'] as String?;
+    final conversationId = data['conversationId'] as String?;
+    if (conversationId == null && groupId == null) return;
     state.handleIncomingChatRecording(ChatRecordingEvent(
+      groupId: groupId,
       conversationId: conversationId,
       recording: (data['recording'] as bool?) ?? false,
     ));
@@ -132,9 +138,12 @@ class _MatrixAppState extends State<MatrixApp> {
   void _onChatRead(Map<String, dynamic> data) {
     final state = _state;
     if (state == null) return;
-    final conversationId = data['conversationId'] as String? ?? '';
-    if (conversationId.isEmpty) return;
-    state.handleIncomingChatRead(ChatReadEvent(conversationId: conversationId));
+    final groupId = data['groupId'] as String?;
+    final conversationId = data['conversationId'] as String?;
+    if (conversationId == null && groupId == null) return;
+    state.handleIncomingChatRead(
+      ChatReadEvent(groupId: groupId, conversationId: conversationId),
+    );
   }
 
   /// Resolves the AppState from the navigator context whenever available.

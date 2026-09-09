@@ -10,6 +10,8 @@ import '../features/home/home_screen.dart';
 import '../features/post/post_detail_screen.dart';
 import '../features/chat/chat_screen.dart';
 import '../features/chat/conversation_screen.dart';
+import '../features/chat/create_group_screen.dart';
+import '../features/chat/group_conversation_screen.dart';
 import '../features/profile/edit_profile_screen.dart';
 import '../features/profile/profile_screen.dart';
 import '../features/splash/splash_screen.dart';
@@ -45,6 +47,13 @@ class AppRoutes {
   /// conversation id, the OTHER user's id, nickname + cosmetics). Pushed
   /// from Chat search/friends/conversations and from a profile "Mensagem".
   static const String conversation = '/home/chat/conversation';
+
+  /// A group conversation. Argument: [GroupConversationRouteArgs].
+  /// Pushed from the Chat tab's group tiles(right after group creation).
+  static const String groupConversation = '/home/chat/group';
+
+  /// Group creation — pushed from the Chat tab's "+" FAB.
+  static const String createGroup = '/home/chat/create-group';
 }
 
 /// Single route generator for the entire app. Every route resolves to a
@@ -90,16 +99,30 @@ Widget _buildPage(RouteSettings settings) {
     AppRoutes.editProfile => EditProfileScreen(),
     AppRoutes.customizations => CustomizationsScreen(),
     AppRoutes.postDetail => _postDetail(settings.arguments as String?),
-    AppRoutes.profile => ProfileScreen(nickname: _nicknameArg(settings.arguments)),
+    AppRoutes.profile =>
+      ProfileScreen(nickname: _nicknameArg(settings.arguments)),
     AppRoutes.chat => const ChatScreen(),
+    AppRoutes.createGroup => const CreateGroupScreen(),
+    AppRoutes.groupConversation =>
+      GroupConversationScreen(args: _groupArgs(settings.arguments)),
     AppRoutes.conversation =>
       ConversationScreen(args: _conversationArgs(settings.arguments)),
     _ => HomeScreen(), // defensive fallback — never a 404 page
   };
 }
 
+GroupConversationRouteArgs _groupArgs(Object? arg) {
+  if (arg is GroupConversationRouteArgs) return arg;
+
+  return GroupConversationRouteArgs(
+    groupId: '',
+    groupName: '',
+  );
+}
+
 ConversationRouteArgs _conversationArgs(Object? arg) {
   if (arg is ConversationRouteArgs) return arg;
+
   // Missing/malformed argument: render an empty safe fallback (the screen
   // shows a deterministic error instead of "Rota não encontrada").
   return ConversationRouteArgs(
@@ -110,7 +133,9 @@ ConversationRouteArgs _conversationArgs(Object? arg) {
 }
 
 Widget _postDetail(String? postId) {
-  if (postId != null && postId.isNotEmpty) return PostDetailScreen(postId: postId);
+  if (postId != null && postId.isNotEmpty) {
+    return PostDetailScreen(postId: postId);
+  }
   return HomeScreen();
 }
 

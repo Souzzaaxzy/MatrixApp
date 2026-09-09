@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../app/routes.dart';
 import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_dimensions.dart';
 import '../../app/theme/app_text_styles.dart';
@@ -216,11 +217,15 @@ class _ChatScreenState extends State<ChatScreen> {
   Widget build(BuildContext context) {
     final state = AppStateScope.of(context);
     final conversations = state.conversations;
+    final groups = state.groups;
 
     final hasQuery = _search.text.trim().isNotEmpty;
 
     return Scaffold(
       backgroundColor: AppColors.absoluteBlack,
+      floatingActionButton: _ChatFab(
+        onTap: () => Navigator.of(context).pushNamed(AppRoutes.createGroup),
+      ),
       body: CustomScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
         keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
@@ -355,6 +360,20 @@ class _ChatScreenState extends State<ChatScreen> {
               ),
             ),
             _conversationsBody(conversations),
+            if (groups.isNotEmpty) ...[
+              const SliverToBoxAdapter(
+                child: SizedBox(height: AppDimensions.spaceMd),
+              ),
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: AppDimensions.spaceLg,
+                      vertical: AppDimensions.spaceSm),
+                  child: HudLabel(text: '👥 GRUPOS'),
+                ),
+              ),
+              _groupsBody(groups),
+            ],
           ],
           const SliverToBoxAdapter(child: SizedBox(height: AppDimensions.spaceXxl)),
         ],
@@ -444,6 +463,26 @@ class _ChatScreenState extends State<ChatScreen> {
             conversation: conv,
             onTap: () => openChatConversation(context, conv),
             onLongPress: () => _confirmHideConversation(conv),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _groupsBody(List<GroupConversation> groups) {
+    if (groups.isEmpty) {
+      return const SliverToBoxAdapter(child: SizedBox.shrink());
+    }
+    return SliverPadding(
+      padding: const EdgeInsets.symmetric(horizontal: AppDimensions.spaceLg),
+      sliver: SliverList.builder(
+        itemCount: groups.length,
+        itemBuilder: (context, i) {
+          final g = groups[i];
+          return _GroupTile(
+            group: g,
+            onTap: () => openGroupConversation(
+                context, GroupConversationRouteArgs.fromGroup(g)),
           );
         },
       ),
@@ -650,6 +689,141 @@ class _AkameCard extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+/// The floating "+" button that opens group creation. It is anchored in the
+/// bottom-right of the Chat tab, visually consistent with the MATRIX HUD.
+class _ChatFab extends StatelessWidget {
+  const _ChatFab({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 20, bottom: 20),
+      child: GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: AnimatedScale(
+          scale: 1.0,
+          duration: const Duration(milliseconds: 120),
+          child: GlowContainer(
+            child: Container(
+              width: 56,
+              height: 56,
+              decoration: BoxDecoration(
+                color: AppColors.cardSurface,
+                borderRadius: BorderRadius.circular(AppDimensions.radiusLg),
+                border: Border.all(
+                  color: AppColors.electricBlue.withValues(alpha: 0.6),
+                  width: 1,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.electricBlue.withValues(alpha: 0.35),
+                    blurRadius: 18,
+                    spreadRadius: 1,
+                  ),
+                ],
+              ),
+              child: const Icon(
+                Icons.add_rounded,
+                color: AppColors.electricBlue,
+                size: 30,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A single GROUP conversation card — mirrors [ _ConversationTile] but renders
+/// the group's identity (photo + name) and the last message (with the real
+/// sender's nickname as the preview prefix, matching the required
+/// "[ FOTO ] Grupo MATRIX / M06: Tudo bem?" layout). Tapping it opens the
+/// SAME group conversation screen.
+//
+/// Unread badge/state lives in [GroupConversation.unreadCount] — the server
+/// persists it (same counter as private DMs).
+class _GroupTile extends StatelessWidget {
+  const _GroupTile({required this.group, required this.onTap});
+
+  final GroupConversation group;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final last = group.lastMessage;
+    final lastText = last == null
+        ? 'Sem mensagens ainda'
+        : '${group.lastMine ? 'Você: ' : ''}${last.senderNickname != null ? '${last.senderNickname}: ' : ''}${last.content}';
+    final time = last == null
+        ? ''
+        : chatListTime(last.createdAt);
+
+    return MatrixCard(
+      margin: const EdgeInsets.symmetric(vertical: AppDimensions.spaceSm),
+      onTap:onTap,
+      child: Row(
+        children: [
+          FramedAvatar(
+            frame: null,
+            size: 48,
+            child: UserAvatar(
+              name: group.group.name,
+              seed: group.group.name,
+              imageUrl: group.group.avatarUrl,
+              size: 42,
+            ),
+          ),
+          const SizedBox(width: AppDimensions.spaceMd),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                NicknameRenderer(
+                  group.group.name,
+                  baseStyle: AppTextStyles.h3.copyWith(fontSize: 15),
+                  background: AppColors.cardSurface,
+                  nameColor: null,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  lastText,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTextStyles.caption.copyWith(
+                    color: group.unreadCount > 0
+                        ? AppColors.techWhite
+                        : AppColors.holographicBlue,
+                    fontWeight: group.unreadCount > 0
+                        ? FontWeight.w700
+                        : FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (time.isNotEmpty) ...[
+            const SizedBox(width: AppDimensions.spaceSm),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(time, style: AppTextStyles.hud.copyWith(fontSize: 10)),
+                if (group.unreadCount > 0) ...[
+                  const SizedBox(height: 4),
+                  _UnreadDot(count: group.unreadCount),
+                ],
+              ],
+            ),
+          ],
+        ],
+      ),
     );
   }
 }

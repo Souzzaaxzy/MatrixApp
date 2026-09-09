@@ -86,5 +86,39 @@ void openChatConversation(
   BuildContext context,
   Conversation conversation,
 ) {
-  openConversation(context, ConversationRouteArgs.fromConversation(conversation));
+  openConversation(
+      context, ConversationRouteArgs.fromConversation(conversation));
+}
+
+/// Route arguments for a GROUP conversation screen.
+///
+/// Carries the persisted group metadata the screen needs to render its
+/// identity immediately (id,name,avatar); the header synchronizes with
+/// the server through the group list cache.
+class GroupConversationRouteArgs {
+  const GroupConversationRouteArgs({
+    required this.groupId,
+    required this.groupName,
+    this.groupAvatarUrl,
+  });
+
+  factory GroupConversationRouteArgs.fromGroup(GroupConversation g) =>
+      GroupConversationRouteArgs(
+        groupId: g.id,
+        groupName: g.group.name,
+        groupAvatarUrl: g.group.avatarUrl,
+      );
+
+  final String groupId;
+  final String groupName;
+  final String? groupAvatarUrl;
+}
+
+/// Pushes the group conversation screen. The group UI is a SEPARATE route
+/// (shared infrastructure: Message streams, repositories, voice stack —
+/// not a duplicated chat system).
+void openGroupConversation(
+    BuildContext context, GroupConversationRouteArgs args) {
+  if (args.groupId.isEmpty) return;
+  Navigator.of(context).pushNamed(AppRoutes.groupConversation, arguments: args);
 }

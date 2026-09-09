@@ -39,6 +39,7 @@ class AppState extends ChangeNotifier {
   SearchHistoryStore? _searchHistoryStore;
 
   List<AkameMessage> _akameMessages = [];
+
   /// Per-user visited-profile history ("Pesquisas recentes"), newest first.
 
   /// Persisted locally per session user via [SearchHistoryStore]; cleared on
@@ -88,6 +89,9 @@ class AppState extends ChangeNotifier {
 
   /// Private chat: the authenticated user's conversations (Chat tab).
   final List<Conversation> _conversations = [];
+
+  /// Group chats:the authenticated user's groups (Chat tab, merged with DMs).
+  final List<GroupConversation> _groups = [];
   bool _loadingConversations = false;
 
   /// Total unread conversations, shown as a badge on the 💬 Chat tab.
@@ -117,7 +121,8 @@ class AppState extends ChangeNotifier {
 
   /// Emits when a message in a conversation is deleted FOR EVERYONE by the
   /// peer (realtime). Open conversation screens remove the bubble live.
-  final _chatMessageDeleted = StreamController<ChatMessageDeletedEvent>.broadcast();
+  final _chatMessageDeleted =
+      StreamController<ChatMessageDeletedEvent>.broadcast();
   Stream<ChatMessageDeletedEvent> get onChatMessageDeleted =>
       _chatMessageDeleted.stream;
 
@@ -144,12 +149,15 @@ class AppState extends ChangeNotifier {
     if (key == null) return null;
     return _profiles[key.toLowerCase()];
   }
-  List<MatrixNotification> get notifications => List.unmodifiable(_notifications);
+
+  List<MatrixNotification> get notifications =>
+      List.unmodifiable(_notifications);
   int get unreadNotifications => _notifications.where((n) => !n.read).length;
   bool get isLoadingNotifications => _loadingNotifications;
 
   /// Private chat getters.
   List<Conversation> get conversations => List.unmodifiable(_conversations);
+  List<GroupConversation> get groups => List.unmodifiable(_groups);
   bool get isLoadingConversations => _loadingConversations;
 
   /// Per-user visited-profile history (newest first). Empty until the first
@@ -193,7 +201,9 @@ class AppState extends ChangeNotifier {
   /// users (id missing.v Returns immediately — persistence is best-effort.v
   void recordProfileVisit(MatrixUser user) {
     final userId = user.id;
-    if (userId.isEmpty || _currentUser == null || userId == _currentUser!.id) return;
+    if (userId.isEmpty || _currentUser == null || userId == _currentUser!.id) {
+      return;
+    }
     _searchHistory.removeWhere((e) => e.userId == userId);
     _searchHistory.insert(0, SearchHistoryEntry.fromUser(user));
     _searchHistoryLoaded = true;
@@ -223,6 +233,7 @@ class AppState extends ChangeNotifier {
     if (store == null) return;
     await store.write(userId, List.of(_searchHistory));
   }
+
   int get unreadConversations => _unreadConversations;
 
   /// Cosmetics equipped by the session user (slot → item). Empty means
@@ -232,7 +243,8 @@ class AppState extends ChangeNotifier {
 
   /// The official nickname color palette (server catalog), empty until
   /// [loadNameColorCatalog] completes.
-  List<CosmeticItem> get nameColorCatalog => List.unmodifiable(_nameColorCatalog);
+  List<CosmeticItem> get nameColorCatalog =>
+      List.unmodifiable(_nameColorCatalog);
 
   /// The official profile frame catalog (server), empty until
   /// [loadFrameCatalog] completes.
@@ -277,7 +289,8 @@ class AppState extends ChangeNotifier {
   }
 
   /// Logs in with a nickname + password.
-  Future<void> login({required String nickname, required String password}) async {
+  Future<void> login(
+      {required String nickname, required String password}) async {
     final dto = await _auth.login(nickname: nickname, password: password);
     _currentUser = dto.user.toModel();
     notifyListeners();
@@ -512,8 +525,7 @@ class AppState extends ChangeNotifier {
     final profile = _profiles[key];
     if (profile != null) {
       _profiles[key] = profile.copyWith(
-        user: profile.user
-            .copyWith(postsCount: profile.user.postsCount + 1),
+        user: profile.user.copyWith(postsCount: profile.user.postsCount + 1),
         posts: [post, ...profile.posts],
       );
     }
@@ -846,7 +858,8 @@ class AppState extends ChangeNotifier {
       if (!isMine && !isOther) return profile;
       return profile.copyWith(
         user: profile.user.copyWith(
-          friendsCount: (profile.user.friendsCount - 1).clamp(0, 1 << 31).toInt(),
+          friendsCount:
+              (profile.user.friendsCount - 1).clamp(0, 1 << 31).toInt(),
         ),
         friendship: Friendship.none,
       );
@@ -875,8 +888,8 @@ class AppState extends ChangeNotifier {
       final isSender = uid == senderId;
       if (!isMine && !isSender) return profile;
       return profile.copyWith(
-        user: profile.user
-            .copyWith(friendsCount: profile.user.friendsCount + 1),
+        user:
+            profile.user.copyWith(friendsCount: profile.user.friendsCount + 1),
         friendship: isSender ? Friendship.friends : profile.friendship,
       );
     });
@@ -991,6 +1004,10 @@ class AppState extends ChangeNotifier {
       _conversations
         ..clear()
         ..addAll(list);
+      final groupList = await _chat.groups();
+      _groups
+        ..clear()
+        ..addAll(groupList);
     } finally {
       _loadingConversations = false;
       notifyListeners();
@@ -1001,7 +1018,9 @@ class AppState extends ChangeNotifier {
   /// real-time message arrives or the tab reopens).
   Future<void> refreshUnreadConversations() async {
     try {
-      _unreadConversations = await _chat.unreadCount();
+      final dm = await _chat.unreadCount();
+      final grp = await _chat.groupUnreadCount();
+      _unreadConversations = dm + grp;
     } catch (_) {
       // Best-effort: keep the last known badge on failure.
     }
@@ -1021,6 +1040,42 @@ class AppState extends ChangeNotifier {
     int limit = 30,
   }) {
     return _chat.messages(conversationId, before: before, limit: limit);
+  }
+
+  /// Latest messages of a group (same paginated, chronological shape as
+  /// private chat — with the real sender embedded in each bubble).
+  Future<({List<ChatMessage> messages, bool hasMore})> loadGroupMessages(
+    String groupId, {
+    String? before,
+    int limit = 30,
+  }) {
+    return _chat.groupMessages(groupId, before: before, limit: limit);
+  }
+
+  /// Creates a group on the server (name required; description/foto optional;
+  /// participants selected by the user — friends only, enforced server-side).
+  /// The creator is added as OWNER automatically by the server. The returned
+  /// group is inserted into the cached list immediately so it shows up in the
+  /// Chat tab without a refetch.
+
+  Future<GroupConversation> createGroup({
+    required String name,
+    String description = '',
+    String? avatarUrl,
+    List<String> participantIds = const [],
+  }) async {
+    final group = await _chat.createGroup(
+      name: name,
+      description: description,
+      avatarUrl: avatarUrl,
+      participantIds: participantIds,
+    );
+    _groups
+      ..removeWhere((g) => g.id == group.id)
+      ..insert(0, group);
+    _recomputeUnreadBadge();
+    notifyListeners();
+    return group;
   }
 
   /// Sends a chat message and, on success, optimistically records it in the
@@ -1061,9 +1116,44 @@ class AppState extends ChangeNotifier {
   }
 
   /// Signals the peer that the session user is (or stopped) typing. Ephemeral
-  /// and best-effort — the UI calls it from the composer's onChange.
   void sendTyping(String conversationId, bool typing) {
     _chat.setTyping(conversationId, typing);
+  }
+
+  /// and best-effort — the UI calls it from the composer's onChange.
+
+  /// Sends a GROUP message and, on success, optimistically records it in the
+  /// cached group's last-message slot (the server's response is authoritative).
+  Future<ChatMessage> sendGroupChatMessage(
+    String groupId,
+    String content, {
+    String? replyToMessageId,
+  }) async {
+    final message = await _chat.sendGroupMessage(groupId, content,
+        replyToMessageId: replyToMessageId);
+    _applyChatMessage(message);
+    notifyListeners();
+    return message;
+  }
+
+  /// Sends a recorded VOICE message to a GROUP (same rules as DMs).
+  Future<ChatMessage> sendGroupVoiceMessage(
+    String groupId,
+    File audioFile, {
+    required int durationMs,
+  }) async {
+    final message = await _chat.sendGroupVoiceMessage(groupId, audioFile,
+        durationMs: durationMs);
+    _applyChatMessage(message);
+    notifyListeners();
+    return message;
+  }
+
+  /// Signals the other members that the session user is (or stopped) typing in
+  /// a group. Ephemeral + best-effort.
+
+  void sendGroupTyping(String groupId, bool typing) {
+    _chat.setGroupTyping(groupId, typing);
   }
 
   /// A real-time `chat_typing` frame arrived → forward to open conversations.
@@ -1078,8 +1168,14 @@ class AppState extends ChangeNotifier {
   /// message. Ephemeral + best-effort, like [sendTyping].
 
   void sendRecording(String conversationId, bool recording) {
-
     _chat.setRecording(conversationId, recording);
+  }
+
+  /// Signals the other members that the session user is (or stopped) recording a
+  /// voice message in a group. Ephemeral + best-effort.
+
+  void sendGroupRecording(String groupId, bool recording) {
+    _chat.setGroupRecording(groupId, recording);
   }
 
   /// A real-time `chat_read` frame arrived → the peer read my messages. Flip
@@ -1140,7 +1236,8 @@ class AppState extends ChangeNotifier {
 
   /// "Excluir mensagem para mim" — server-persisted (survives restarts).
   /// The open conversation screen removes the bubble locally after success.
-  Future<bool> deleteChatMessageForMe(String conversationId, String messageId) async {
+  Future<bool> deleteChatMessageForMe(
+      String conversationId, String messageId) async {
     try {
       await _chat.deleteMessageForMe(conversationId, messageId);
       notifyListeners();
@@ -1166,6 +1263,61 @@ class AppState extends ChangeNotifier {
       return true;
     } catch (_) {
       return false;
+    }
+  }
+
+  /// "Excluir mensagem para mim" (group — same hide semantics as DMs).
+  Future<bool> deleteGroupMessageForMe(String groupId, String messageId) async {
+    try {
+      await _chat.deleteGroupMessageForMe(groupId, messageId);
+      notifyListeners();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// "Excluir mensagem para todos" (group — server-authoritative; the other
+  /// members get a realtime `chat_message_deleted` frame wired to this app).
+  Future<bool> deleteGroupMessageForEveryone(
+    String groupId,
+    String messageId,
+  ) async {
+    try {
+      await _chat.deleteGroupMessageForEveryone(groupId, messageId);
+      unawaited(_refreshGroupPreview(groupId));
+      notifyListeners();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Best-effort refresh of a cached group's last-visible-message preview
+  /// after a "delete for everyone" so the Chat tab stays in sync.
+
+  Future<void> _refreshGroupPreview(String groupId) async {
+    try {
+      final idx = _groups.indexWhere((g) => g.id == groupId);
+      if (idx == -1) return;
+      final page = await _chat.groupMessages(groupId, limit: 1);
+      final last = page.messages.isNotEmpty ? page.messages.last : null;
+      final g = _groups[idx];
+      _groups[idx] = g.copyWith(
+        lastMessage: last == null
+            ? null
+            : ConversationLastMessage(
+                id: last.id,
+                content: last.content,
+                senderId: last.senderId,
+                senderNickname: last.sender?.nickname,
+                createdAt: last.createdAt,
+              ),
+        lastMine: last?.senderId == _currentUser?.id,
+      );
+      notifyListeners();
+    } catch (_) {
+      // Best-effort:the next list load refreshes it anyway.
     }
   }
 
@@ -1230,6 +1382,41 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Marks a GROUP as read by the session user and clears its unread badge from
+  /// the local cache. Server clears the per-member unread counter too.)
+  Future<void> markGroupRead(String groupId) async {
+    try {
+      await _chat.markGroupRead(groupId);
+    } catch (_) {
+      // Best-effort: reading is not fatal.
+    }
+    var modified = false;
+    for (var i = 0; i < _groups.length; i++) {
+      if (_groups[i].id == groupId && _groups[i].unreadCount > 0) {
+        final g = _groups[i];
+        _groups[i] = g.copyWith(unreadCount: 0);
+        modified = true;
+      }
+    }
+    if (modified) _recomputeUnreadBadge();
+    notifyListeners();
+  }
+
+  /// "Sair do grupo" — removes the group from the local list immediately and
+  /// tells server this member wants chat hidden(non-destructive leave;the
+  /// server keeps the membership so re-invites/re-adds just resurface it).
+  Future<bool> hideGroup(String groupId) async {
+    try {
+      await _chat.hideGroup(groupId);
+      _groups.removeWhere((g) => g.id == groupId);
+      _recomputeUnreadBadge();
+      notifyListeners();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// A real-time chat message arrived on the WebSocket. If it belongs to a
   /// conversation we have cached, update that conversation (last message +
   /// unread badge); the peer (needed for the preview) is the message sender
@@ -1241,17 +1428,65 @@ class AppState extends ChangeNotifier {
   /// lets us synthesize a coherent entry with the sender's real avatar —
   /// otherwise the list refreshes on focus anyway.
   /// Emits on [onChatIncoming] for open conversation screens.
-void handleIncomingChatMessage(ChatMessage message, {ChatUser? peer}) {
+  void handleIncomingChatMessage(ChatMessage message, {ChatUser? peer}) {
     if (_disposed) return;
-    final cached = _conversations.indexWhere((c) => c.id == message.conversationId);
+    final groupId = message.groupId;
+    if (groupId != null) {
+      // Group message: route into the cached group list (if cached) as the
+      // sender badge is derived from `lastMine` (the sender is never "me" for
+      // an incoming realtime frame — sina self-made is implicit below).
+      final gidx = _groups.indexWhere((g) => g.id == groupId);
+      if (gidx != -1) {
+        _applyGroupMessage(message);
+      } else {
+        // Group not cached (e.g. app booted into the chat tab without opening
+        // the chat list): refresh the group list lazily so it appears, and let
+        // the next focus refetch fix the badge.
+        unawaited(loadConversations());
+      }
+      if (!_chatIncoming.isClosed) _chatIncoming.add(message);
+      notifyListeners();
+      return;
+    }
+    final cached =
+        _conversations.indexWhere((c) => c.id == message.conversationId!);
     if (cached != -1) {
-      final other = peer ?? _peerOf(message.conversationId);
+      final other = peer ?? _peerOf(message.conversationId!);
       _applyChatMessage(message, otherUser: other, selfMade: false);
     } else if (peer != null) {
       _applyChatMessage(message, otherUser: peer, selfMade: false);
     }
     if (!_chatIncoming.isClosed) _chatIncoming.add(message);
     notifyListeners();
+  }
+
+  /// Applies a GROUP message to the cached group's last-message slot and
+  /// bumps its unread badge when the message isn't ours (realtime frames are
+  /// never ours but self-sends arrive through [sendGroupChatMessage] already).
+  void _applyGroupMessage(ChatMessage message) {
+    for (var i = 0; i < _groups.length; i++) {
+      if (_groups[i].id != message.groupId) continue;
+      final g = _groups[i];
+      final last = ConversationLastMessage(
+        id: message.id,
+        content: message.content,
+        senderId: message.senderId,
+        createdAt: message.createdAt,
+        senderNickname: message.sender?.nickname,
+      );
+      _groups.removeAt(i);
+      _groups.insert(
+        0,
+        g.copyWith(
+          lastMessage: last,
+          lastMine: message.mine,
+          unreadCount: message.mine ? g.unreadCount : g.unreadCount + 1,
+          updatedAt: message.createdAt,
+        ),
+      );
+      _recomputeUnreadBadge();
+      return;
+    }
   }
 
   ChatUser? _peerOf(String conversationId) {
@@ -1305,7 +1540,7 @@ void handleIncomingChatMessage(ChatMessage message, {ChatUser? peer}) {
       _conversations.insert(
         0,
         Conversation(
-          id: message.conversationId,
+          id: message.conversationId!,
           otherUser: otherUser,
           lastMessage: ConversationLastMessage(
             id: message.id,
@@ -1325,12 +1560,14 @@ void handleIncomingChatMessage(ChatMessage message, {ChatUser? peer}) {
   /// Recomputes [_unreadConversations] from the cached conversations.
   void _recomputeUnreadBadge() {
     _unreadConversations =
-        _conversations.where((c) => c.unreadCount > 0).length;
+        _conversations.where((c) => c.unreadCount > 0).length +
+            _groups.where((g) => g.unreadCount > 0).length;
   }
 
   /// Clears the local conversation cache (called on logout).
   void _clearConversations() {
     _conversations.clear();
+    _groups.clear();
     _unreadConversations = 0;
   }
 
@@ -1365,35 +1602,56 @@ void handleIncomingChatMessage(ChatMessage message, {ChatUser? peer}) {
 /// A realtime peer-recording signal for a conversation (voice capture active).
 class ChatRecordingEvent {
   const ChatRecordingEvent({
-    required this.conversationId,
+    this.conversationId,
+    this.groupId,
     required this.recording,
   });
-
-  final String conversationId;
+  final String? conversationId;
+  final String? groupId;
   final bool recording;
+
+  String get chatId => groupId ?? conversationId ?? '';
 }
 
-/// A realtime peer-typing signal for a conversation.
-
+/// A realtime peer-typing signal for a conversation (or a group).
 class ChatTypingEvent {
-  const ChatTypingEvent({required this.conversationId, required this.typing});
-  final String conversationId;
+  const ChatTypingEvent({
+    this.conversationId,
+    this.groupId,
+    required this.typing,
+  });
+  final String? conversationId;
+  final String? groupId;
   final bool typing;
+
+  String get chatId => groupId ?? conversationId ?? '';
 }
 
-/// A realtime signal that the PEER read this conversation's messages.
+/// A realtime signal that the PEER read this conversation's messages (DMs:
+/// a peer read my messages; groups: a member opened the group, clearing
+/// their unread state). Either identifier may be present — DMs carry
+/// [conversationId], groups carry [groupId].
 class ChatReadEvent {
-  const ChatReadEvent({required this.conversationId});
-  final String conversationId;
+  const ChatReadEvent({
+    this.conversationId,
+    this.groupId,
+  });
+  final String? conversationId;
+  final String? groupId;
+
+  String get chatId => groupId ?? conversationId ?? '';
 }
 
-/// A realtime signal that a message was deleted FOR EVERYONE by the peer.
+/// A realtime signal that a message was deleted FOR EVERYONE by the peer
+/// (DM or group, identified by the nullable fields).
 class ChatMessageDeletedEvent {
   const ChatMessageDeletedEvent({
-    required this.conversationId,
+    this.conversationId,
+    this.groupId,
     required this.messageId,
   });
-  final String conversationId;
+  final String? conversationId;
+  final String? groupId;
   final String messageId;
 }
 

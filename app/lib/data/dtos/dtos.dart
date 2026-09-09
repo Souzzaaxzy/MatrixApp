@@ -494,15 +494,17 @@ class ConversationDto {
 
 class ConversationLastMessageDto {
   final String id;
-  final String content;
-  final String senderId;
-  final DateTime createdAt;
+   final String content;
+   final String senderId;
+   final DateTime createdAt;
+   final String? senderNickname;
 
-  const ConversationLastMessageDto({
+   const ConversationLastMessageDto({
     required this.id,
     required this.content,
     required this.senderId,
     required this.createdAt,
+    this.senderNickname,
   });
 
   ConversationLastMessage toModel() => ConversationLastMessage(
@@ -510,6 +512,7 @@ class ConversationLastMessageDto {
         content: content,
         senderId: senderId,
         createdAt: createdAt,
+        senderNickname: senderNickname,
       );
 
   factory ConversationLastMessageDto.fromJson(Map<String, dynamic> json) =>
@@ -518,6 +521,7 @@ class ConversationLastMessageDto {
         content: json['content'] as String,
         senderId: json['senderId'] as String,
         createdAt: DateTime.parse(json['createdAt'] as String),
+        senderNickname: json['senderNickname'] as String?,
       );
 }
 
@@ -526,7 +530,9 @@ class ConversationLastMessageDto {
 /// original message, resolved by the server).
 class ChatMessageDto {
   final String id;
-  final String conversationId;
+  final String? conversationId;
+  final String? groupId;
+  final ChatUserDto? sender;
   final String senderId;
   final String content;
   final DateTime createdAt;
@@ -539,7 +545,9 @@ class ChatMessageDto {
 
   const ChatMessageDto({
     required this.id,
-    required this.conversationId,
+    this.conversationId,
+    this.groupId,
+    this.sender,
     required this.senderId,
     required this.content,
     required this.createdAt,
@@ -554,6 +562,8 @@ class ChatMessageDto {
   ChatMessage toModel() => ChatMessage(
         id: id,
         conversationId: conversationId,
+        groupId: groupId,
+        sender: sender?.toModel(),
         senderId: senderId,
         content: content,
         createdAt: createdAt,
@@ -568,9 +578,14 @@ class ChatMessageDto {
   factory ChatMessageDto.fromJson(Map<String, dynamic> json) {
     final raw = json['readAt'];
     final replyRaw = json['replyTo'];
+    final senderRaw = json['sender'];
     return ChatMessageDto(
       id: json['id'] as String,
-      conversationId: json['conversationId'] as String,
+      conversationId: json['conversationId'] as String?,
+      groupId: json['groupId'] as String?,
+      sender: senderRaw is Map<String, dynamic>
+          ? ChatUserDto.fromJson(senderRaw)
+          : null,
       senderId: json['senderId'] as String,
       content: json['content'] as String,
       createdAt: DateTime.parse(json['createdAt'] as String),
@@ -620,6 +635,87 @@ class ReplyInfoDto {
       );
 }
 
+/// The group identity block embedded in group-list items. Mirrors the
+/// server's `GroupHeader` shape.
+class GroupHeaderDto {
+  final String id;
+  final String name;
+  final String? avatarUrl;
+  final String description;
+  final String createdById;
+  final int memberCount;
+
+  const GroupHeaderDto({
+    required this.id,
+    required this.name,
+    required this.avatarUrl,
+    required this.description,
+    required this.createdById,
+    required this.memberCount,
+  });
+
+  GroupHeader toModel() => GroupHeader(
+        id: id,
+        name: name,
+        avatarUrl: avatarUrl,
+        description: description,
+        createdById: createdById,
+        memberCount: memberCount,
+      );
+
+  factory GroupHeaderDto.fromJson(Map<String, dynamic> json) => GroupHeaderDto(
+        id: json['id'] as String,
+        name: json['name'] as String,
+        avatarUrl: json['avatarUrl'] as String?,
+        description: (json['description'] as String?) ?? '',
+        createdById: json['createdById'] as String,
+        memberCount: (json['memberCount'] as num?)?.toInt() ?? 0,
+      );
+}
+
+/// A group conversation (list item). Mirrors the server's
+/// `GroupConversationItem` shape so the Chat tab can render groups and DMs
+/// in the same merged, sorted list.
+class GroupConversationDto {
+  final String id;
+  final GroupHeaderDto group;
+  final ConversationLastMessageDto? lastMessage;
+  final bool lastMine;
+  final int unreadCount;
+  final DateTime updatedAt;
+
+  const GroupConversationDto({
+    required this.id,
+    required this.group,
+    this.lastMessage,
+    required this.lastMine,
+    required this.unreadCount,
+    required this.updatedAt,
+  });
+
+  GroupConversation toModel() => GroupConversation(
+        id: id,
+        group: group.toModel(),
+        lastMessage: lastMessage?.toModel(),
+        lastMine: lastMine,
+        unreadCount: unreadCount,
+        updatedAt: updatedAt,
+      );
+
+  factory GroupConversationDto.fromJson(Map<String, dynamic> json) {
+    final last = json['lastMessage'];
+    return GroupConversationDto(
+      id: json['id'] as String,
+      group: GroupHeaderDto.fromJson(json['group'] as Map<String, dynamic>),
+      lastMessage: last is Map<String, dynamic>
+          ? ConversationLastMessageDto.fromJson(last)
+          : null,
+      lastMine: (json['lastMine'] as bool?) ?? false,
+      unreadCount: (json['unreadCount'] as num?)?.toInt() ?? 0,
+      updatedAt: DateTime.parse(json['updatedAt'] as String),
+    );
+  }
+}
 /// A paginated messages page: the chronological batch plus whether older
 /// messages exist to paginate into (`before`).
 class MessagePageDto {

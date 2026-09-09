@@ -77,19 +77,29 @@ class ConversationLastMessage {
     required this.content,
     required this.senderId,
     required this.createdAt,
+    this.senderNickname,
   });
 
   final String id;
   final String content;
   final String senderId;
   final DateTime createdAt;
+
+  /// The sender's nickname preview (group lists only; null for private DMs,
+  /// where the list card already shows the peer's photo + name).
+  final String? senderNickname;
 }
 
-/// A single private message.
+/// A single message — private chat (has [conversationId]) or group chat
+/// (has [groupId]). Group messages embed the real sender's compact identity
+/// ([sender], ChatUser) so every bubble can be labeled without a per-message
+/// lookup; private messages leave it null (the peer is already known).
 class ChatMessage {
   const ChatMessage({
     required this.id,
-    required this.conversationId,
+    this.conversationId,
+    this.groupId,
+    this.sender,
     required this.senderId,
     required this.content,
     required this.createdAt,
@@ -102,7 +112,12 @@ class ChatMessage {
   });
 
   final String id;
-  final String conversationId;
+  final String? conversationId;
+  final String? groupId;
+
+  /// The real sender's compact identity (group messages only; null for DMs).
+  final ChatUser? sender;
+
   final String senderId;
   final String content;
   final DateTime createdAt;
@@ -135,10 +150,13 @@ class ChatMessage {
     String? type,
     String? audioUrl,
     int? durationMs,
+    ChatUser? sender,
   }) =>
       ChatMessage(
         id: id,
         conversationId: conversationId,
+        groupId: groupId,
+        sender: sender ?? this.sender,
         senderId: senderId,
         content: content,
         createdAt: createdAt,
@@ -148,6 +166,80 @@ class ChatMessage {
         type: type ?? this.type,
         audioUrl: audioUrl ?? this.audioUrl,
         durationMs: durationMs ?? this.durationMs,
+      );
+}
+
+/// A group as returned by the server's group-list endpoint. Carries the full
+/// identity (name, photo, description, creator, member count) plus the
+/// last-message preview and unread state, mirroring [Conversation] so the
+/// Chat tab can render DMs and groups in the same list.
+class GroupConversation {
+  const GroupConversation({
+    required this.id,
+    required this.group,
+    this.lastMessage,
+    required this.lastMine,
+    required this.unreadCount,
+    required this.updatedAt,
+  });
+
+  final String id;
+  final GroupHeader group;
+  final ConversationLastMessage? lastMessage;
+  final bool lastMine;
+  final int unreadCount;
+  final DateTime updatedAt;
+
+  GroupConversation copyWith({
+    String? id,
+    GroupHeader? group,
+    ConversationLastMessage? lastMessage,
+    bool? lastMine,
+    int? unreadCount,
+    DateTime? updatedAt,
+  }) =>
+      GroupConversation(
+        id: id ?? this.id,
+        group: group ?? this.group,
+        lastMessage: lastMessage ?? this.lastMessage,
+        lastMine: lastMine ?? this.lastMine,
+        unreadCount: unreadCount ?? this.unreadCount,
+        updatedAt: updatedAt ?? this.updatedAt,
+      );
+}
+
+/// The identity block of a group (list/detail common subset).
+class GroupHeader {
+  const GroupHeader({
+    required this.id,
+    required this.name,
+    required this.avatarUrl,
+    required this.description,
+    required this.createdById,
+    required this.memberCount,
+  });
+
+  final String id;
+  final String name;
+  final String? avatarUrl;
+  final String description;
+  final String createdById;
+  final int memberCount;
+
+  GroupHeader copyWith({
+    String? name,
+    String? avatarUrl,
+    String? description,
+    String? createdById,
+    int? memberCount,
+  }) =>
+      GroupHeader(
+        id: id,
+        name: name ?? this.name,
+        avatarUrl: avatarUrl ?? this.avatarUrl,
+        description: description ?? this.description,
+        createdById: createdById ?? this.createdById,
+        memberCount: memberCount ?? this.memberCount,
       );
 }
 

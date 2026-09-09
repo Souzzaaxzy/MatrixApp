@@ -386,6 +386,153 @@ class ChatRepository {
     return (json['unreadCount'] as num?)?.toInt() ?? 0;
   }
 
+  // ── Groups ─────────────────────────────────────────────
+
+  /// The authenticated user's groups, newest activity first. Mirrors the
+  /// private-conversation list shape so the Chat tab merges both lists.
+
+  Future<List<GroupConversation>> groups() async {
+    final json = await _api.get<Map<String, dynamic>>('/api/groups');
+    return (json['groups'] as List)
+        .cast<Map<String, dynamic>>()
+        .map(GroupConversationDto.fromJson)
+        .map((d) => d.toModel())
+        .toList();
+  }
+
+  /// Unread groups counter (summed with the DM badge by the app).
+  Future<int> groupUnreadCount() async {
+    final json =
+        await _api.get<Map<String, dynamic>>('/api/groups/unread-count');
+    return (json['unreadCount'] as num?)?.toInt() ?? 0;
+  }
+
+  /// Creates a group on the server (name required; description/foto/participants
+  /// optional — though a group with zero participants is pointless,and the
+  /// server validates friendship for every participant). The creator is
+  /// added as OWNER automatically server-side. Returns the created item so
+  /// the app can open its chat immediately.
+
+  Future<GroupConversation> createGroup({
+    required String name,
+    String description = '',
+    String? avatarUrl,
+    List<String> participantIds = const [],
+  }) async {
+    final json = await _api.post<Map<String, dynamic>>(
+      '/api/groups',
+      data: {
+        'name': name,
+        if (description.isNotEmpty) 'description': description,
+        if (avatarUrl != null && avatarUrl.isNotEmpty) 'avatarUrl': avatarUrl,
+        'participantIds': participantIds,
+      },
+    );
+    return GroupConversationDto.fromJson(json['group'] as Map<String, dynamic>)
+        .toModel();
+  }
+
+  /// Latest messages of a group (same paginated, chronological shape as
+  /// private messages — with the real sender embedded in every bubble).
+  Future<({List<ChatMessage> messages, bool hasMore})> groupMessages(
+    String groupId, {
+    String? before,
+    int limit = 30,
+  }) async {
+    final query = <String, dynamic>{'limit': limit};
+    if (before != null) query['before'] = before;
+    final json = await _api.get<Map<String, dynamic>>(
+      '/api/groups/$groupId/messages',
+      queryParameters: query,
+    );
+    final page = MessagePageDto.fromJson(json);
+    return (messages: page.messages, hasMore: page.hasMore);
+  }
+
+  /// Sends a group message (membership enforced server-side; the real
+  /// sender is always auth-derived). Returns the persisted message (with
+  /// embedded sender identity). [replyToMessageId] optional, validated
+  /// to belong to the same group by the server.
+
+  Future<ChatMessage> sendGroupMessage(
+    String groupId,
+    String content, {
+    String? replyToMessageId,
+  }) async {
+    final json = await _api.post<Map<String, dynamic>>(
+      '/api/groups/$groupId/messages',
+      data: {
+        'content': content,
+        if (replyToMessageId != null && replyToMessageId.isNotEmpty)
+          'replyToMessageId': replyToMessageId,
+      },
+    );
+    return ChatMessageDto.fromJson(json['message'] as Map<String, dynamic>)
+        .toModel();
+  }
+
+  /// Sends a VOICE group message (multipart, same rules as DMs).
+  Future<ChatMessage> sendGroupVoiceMessage(
+    String groupId,
+    File audioFile, {
+    required int durationMs,
+  }) async {
+    final multipart = await MultipartFile.fromFile(audioFile.path);
+    final json = await _api.upload<Map<String, dynamic>>(
+      '/api/groups/$groupId/voice?durationMs=$durationMs',
+      file: multipart,
+    );
+    return ChatMessageDto.fromJson(json['message'] as Map<String, dynamic>)
+        .toModel();
+  }
+
+  /// Marks all other-sent group messages as read (clears the unread badge).
+  Future<void> markGroupRead(String groupId) async {
+    await _api.post('/api/groups/$groupId/read');
+  }
+
+  /// Signals the other members that the session user is (or stopped) typing
+  /// in a group. Ephemeral realtime frame — nothing persists.
+
+  void setGroupTyping(String groupId, bool typing) {
+    _api
+        .post<void>('/api/groups/$groupId/typing',
+            data: {'typing': typing})
+        .catchError((_) {});
+  }
+
+  /// Signals the other members that the session user is (or stopped) recording
+  /// a voice message in a group. Ephemeral realtime frame; best-effort.
+
+  void setGroupRecording(String groupId, bool recording) {
+    _api
+        .post<void>('/api/groups/$groupId/recording',
+            data: {'recording': recording})
+        .catchError((_) {});
+  }
+
+  /// "Excluir mensagem para mim" (group) — hide for the current user only.
+
+  Future<void> deleteGroupMessageForMe(String groupId,String messageId) async {
+    await _api.delete('/api/groups/$groupId/messages/$messageId');
+  }
+
+  /// "Excluir mensagem para todos" (group; server-authoritative soft-delete).
+  Future<void> deleteGroupMessageForEveryone(
+    String groupId,
+    String messageId,
+  ) async {
+    await _api.delete(
+      '/api/groups/$groupId/messages/$messageId/everyone',
+    );
+  }
+
+  /// "Excluir grupo para mim" — removes the group from THIS user's list
+  /// only (a new incoming message un-hides it server-side. Idempotent).
+  Future<void> hideGroup(String groupId) async {
+    await _api.delete('/api/groups/$groupId');
+  }
+
   /// Returns the ONE conversation with [otherUserId], creating it when none
   /// exists yet (friends only — the server enforces this).
   Future<Conversation> getOrCreate(String otherUserId) async {
