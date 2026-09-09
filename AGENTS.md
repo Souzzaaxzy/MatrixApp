@@ -220,4 +220,28 @@ analyze clean, APK builds (~54MB). CI green on main.
   to pushNamed the next route; `setMode` is called WITHOUT await in widget
   tests (platform channel never resolves under fake async).
 - Status: server 122 tests pass, typecheck clean; app 133 tests pass,
-  analyze clean; CI green (APK built).
+  analyze clean; CI green (APK built.
+
+## Phase 7b — Group chat (app) e fix de classes aninhadas
+- O commit `ddf46e7` (`feat(chat): group chat creation, listing and conversation
+  flow`): crio grupo, tile do grupo no Chat tab e `group_conversation_screen`
+  reutilizando o sistema de mensagens/voice/realtime — mas quebrou o build do app:
+  as classes `_ChatFab` e `_GroupTile` foram inseridas **dentro** da classe
+  `_AkameCard` (faltou o `}` que fechava a classe antes delas`, causando
+  `undefined_method` e `Classes can't be declared inside other classes`.
+- Fix: fechar a classe `_AkameCard` com um `}` dedicado antes do
+  `_ChatFab` (commit `b47170c`). `flutter analyze` limpo e `flutter test`
+  (237 testes) passando depois da correção.
+
+- Gotcha: ao inserir novas classes no fim dum ficheiro, conferir sempre
+  o balanceamento de chaves da classe **imediatamente anterior** — o editor
+  `str_replace` nem sempre faz o fecho automático.
+
+
+## Status atuais
+- App: `flutter analyze` limpo e `flutter test` (237 testes, contagem atualizada)
+  passando, APK buildável via CI. — o AGENTS.md anterior listava 133; cresceu
+  com os fluxos de chats/grupos/voice adicionados entretanto.
+
+
+- Servidor: seguir o repo `Souzzaaxzy/ServidorMtx` — não tocado nesta rodada.
