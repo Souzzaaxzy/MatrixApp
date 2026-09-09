@@ -691,6 +691,8 @@ class _AkameCard extends StatelessWidget {
       },
     );
   }
+}
+
 /// The floating "+" button that opens group creation. It is anchored in the
 /// bottom-right of the Chat tab, visually consistent with the MATRIX HUD.
 class _ChatFab extends StatelessWidget {
