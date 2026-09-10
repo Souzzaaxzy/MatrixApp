@@ -66,9 +66,11 @@ class _GroupConversationScreenState extends State<GroupConversationScreen> {
   StreamSubscription<ChatMessageDeletedEvent>? _deletedSub;
 
   final bool _followBottom = true;
-  bool _peerTyping = false;
+  final Set<String> _typingUsers = <String>{};
+  final Map<String, String> _typingNames = <String, String>{};
   Timer? _typingAutoClear;
-  bool _peerRecording = false;
+  final Set<String> _recordingUsers = <String>{};
+  final Map<String, String> _recordingNames = <String, String>{};
   Timer? _recordingAutoClear;
   Timer? _typingSendDebounce;
   bool _typingLastSent = false;
@@ -268,14 +270,27 @@ class _GroupConversationScreenState extends State<GroupConversationScreen> {
   void _onTyping(ChatTypingEvent event) {
     if (!mounted) return;
     if (event.groupId != _groupId) return;
+    final id = event.userId;
+    final idKey = (id == null || id.isEmpty) ? event.chatId : id;
     if (event.typing) {
-      _peerTyping = true;
+      if (idKey.isNotEmpty) {
+        _typingUsers.add(idKey);
+        if (idKey == id && event.nickname != null && event.nickname!.isNotEmpty) {
+          _typingNames[idKey] = event.nickname!;
+        }
+      }
       _typingAutoClear?.cancel();
       _typingAutoClear = Timer(_typingTimeout, () {
-        if (mounted) setState(() => _peerTyping = false);
+        if (mounted) {
+          setState(() {
+            _typingUsers.clear();
+            _typingNames.clear();
+          });
+        }
       });
     } else {
-      _peerTyping = false;
+      _typingUsers.remove(idKey);
+      if (id != null) _typingNames.remove(idKey);
       _typingAutoClear?.cancel();
     }
     setState(() {});
@@ -284,14 +299,27 @@ class _GroupConversationScreenState extends State<GroupConversationScreen> {
   void _onRecording(ChatRecordingEvent event) {
     if (!mounted) return;
     if (event.groupId != _groupId) return;
+    final id = event.userId;
+    final idKey = (id == null || id.isEmpty) ? event.chatId : id;
     if (event.recording) {
-      _peerRecording = true;
+      if (idKey.isNotEmpty) {
+        _recordingUsers.add(idKey);
+        if (idKey == id && event.nickname != null && event.nickname!.isNotEmpty) {
+          _recordingNames[idKey] = event.nickname!;
+        }
+      }
       _recordingAutoClear?.cancel();
       _recordingAutoClear = Timer(_typingTimeout, () {
-        if (mounted) setState(() => _peerRecording = false);
+        if (mounted) {
+          setState(() {
+            _recordingUsers.clear();
+            _recordingNames.clear();
+          });
+        }
       });
     } else {
-      _peerRecording = false;
+      _recordingUsers.remove(idKey);
+      if (id != null) _recordingNames.remove(idKey);
       _recordingAutoClear?.cancel();
     }
     setState(() {});
@@ -576,6 +604,7 @@ class _GroupConversationScreenState extends State<GroupConversationScreen> {
         automaticallyImplyLeading: true,
         centerTitle: true,
         toolbarHeight: kToolbarHeight + 52,
+        bottom: _buildActivityIndicator(),
         title: GestureDetector(
           onTap: _openGroupProfile,
           child: Column(
@@ -610,6 +639,63 @@ class _GroupConversationScreenState extends State<GroupConversationScreen> {
       body: SafeArea(
         top: false,
         child: _buildBody(),
+      ),
+    );
+  }
+
+  /// Builds the realtime activity indicator for the header (right area):who
+  /// is typing / recording audio, with plural/count handling, truncated to
+  /// fit — never overflows whatever the name/count.
+  PreferredSizeWidget _buildActivityIndicator() {
+    final typingNames = _typingUsers.map((u) => _typingNames[u] ?? 'Alguém').toList();
+    final recordingNames =
+        _recordingUsers.map((u) => _recordingNames[u] ?? 'Alguém').toList();
+    String? label;
+    if (typingNames.isNotEmpty && recordingNames.isEmpty) {
+      if (typingNames.length == 1) {
+        label = '${typingNames.first} está digitando';
+      } else {
+        label = '${typingNames.length} usuários estão digitando';
+      }
+    }
+    if (recordingNames.isNotEmpty && typingNames.isEmpty) {
+      if (recordingNames.length == 1) {
+        label = '${recordingNames.first} está gravando áudio';
+      } else {
+        label = '${recordingNames.length} usuários estão gravando áudio';
+      }
+    }
+    if (typingNames.isNotEmpty && recordingNames.isNotEmpty) {
+      if (typingNames.length == 1 && recordingNames.length == 1) {
+        label = '${typingNames.first} digita e ${recordingNames.first} grava áudio';
+      } else {
+        label =
+            '${typingNames.length} digitando • ${recordingNames.length} gravando áudio';
+      }
+    }
+    final visible = label != null;
+    return PreferredSize(
+      preferredSize: Size.fromHeight(visible ? 24 : 0),
+      child: AnimatedSize(
+        duration: const Duration(milliseconds: 160),
+        curve: Curves.easeOut,
+        child: visible
+            ? SizedBox(
+                height: 24,
+                child: Center(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTextStyles.caption.copyWith(
+                      fontSize: 12,
+                      color: AppColors.holographicBlue,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              )
+            : const SizedBox.shrink(),
       ),
     );
   }
@@ -666,26 +752,6 @@ class _GroupConversationScreenState extends State<GroupConversationScreen> {
             child: _messageList(),
           ),
         ),
-        if (_peerTyping)
-          Padding(
-            padding: const EdgeInsets.symmetric(
-                horizontal: AppDimensions.spaceLg, vertical: 4),
-            child: Row(children: [
-              Text('Digitando...',
-                  style: AppTextStyles.caption
-                      .copyWith(color: AppColors.holographicBlue)),
-            ]),
-          ),
-        if (_peerRecording)
-          Padding(
-            padding: const EdgeInsets.symmetric(
-                horizontal: AppDimensions.spaceLg, vertical: 4),
-            child: Row(children: [
-              Text('Gravando áudio...',
-                  style: AppTextStyles.caption
-                      .copyWith(color: AppColors.holographicBlue)),
-            ]),
-          ),
         _composer(),
       ],
     );
@@ -925,7 +991,7 @@ class _GroupMessageBubble extends StatelessWidget {
         children: [
           if (sender != null) ...[
             Text(
-              '@${sender.nickname}',
+              sender.nickname,
               style: AppTextStyles.caption.copyWith(
                 fontSize: 11,
                 color: AppColors.holographicBlue,

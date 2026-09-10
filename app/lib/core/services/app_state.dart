@@ -1687,10 +1687,14 @@ class ChatRecordingEvent {
   const ChatRecordingEvent({
     this.conversationId,
     this.groupId,
+    this.userId,
+    this.nickname,
     required this.recording,
   });
   final String? conversationId;
   final String? groupId;
+  final String? userId;
+  final String? nickname;
   final bool recording;
 
   String get chatId => groupId ?? conversationId ?? '';
@@ -1701,10 +1705,14 @@ class ChatTypingEvent {
   const ChatTypingEvent({
     this.conversationId,
     this.groupId,
+    this.userId,
+    this.nickname,
     required this.typing,
   });
   final String? conversationId;
   final String? groupId;
+  final String? userId;
+  final String? nickname;
   final bool typing;
 
   String get chatId => groupId ?? conversationId ?? '';

@@ -128,6 +128,8 @@ class _MatrixAppState extends State<MatrixApp> {
     state.handleIncomingChatTyping(ChatTypingEvent(
       groupId: groupId,
       conversationId: conversationId,
+      userId: data['userId'] as String?,
+      nickname: data['nickname'] as String?,
       typing: (data['typing'] as bool?) ?? false,
     ));
   }
@@ -143,6 +145,8 @@ class _MatrixAppState extends State<MatrixApp> {
     state.handleIncomingChatRecording(ChatRecordingEvent(
       groupId: groupId,
       conversationId: conversationId,
+      userId: data['userId'] as String?,
+      nickname: data['nickname'] as String?,
       recording: (data['recording'] as bool?) ?? false,
     ));
   }

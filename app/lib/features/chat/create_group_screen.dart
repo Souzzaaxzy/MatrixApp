@@ -209,7 +209,7 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
                           imageUrl: u.avatarUrl,
                           size: 20,
                         ),
-                        label: Text('@${u.nickname}'),
+                        label: Text(u.nickname),
                         labelStyle: AppTextStyles.caption
                             .copyWith(color: AppColors.techWhite),
                         backgroundColor: AppColors.cardSurface,

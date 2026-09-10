@@ -231,7 +231,7 @@ class _GroupProfileScreenState extends State<GroupProfileScreen> {
       await state.addGroupMember(_groupId, chosen.userId);
       await _refreshSilent();
       messenger.showSnackBar(
-        SnackBar(content: Text('@${chosen.nickname} entrou no grupo.')),
+        SnackBar(content: Text('${chosen.nickname} entrou no grupo.')),
       );
     } on ApiException catch (e) {
       messenger.showSnackBar(SnackBar(content: Text(e.message)));
