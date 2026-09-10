@@ -1099,6 +1099,53 @@ class AppState extends ChangeNotifier {
     return group;
   }
 
+  /// Owner-only identity edit (name/description). Server returns the fresh
+  /// header;we upsert it into the cached group list so the Chat tab preview
+  /// and any open conversation AppBar update immediately.
+
+  Future<GroupHeader> updateGroup(
+    String groupId,, {
+    String? name,
+    String? description,
+  }) async {
+    final header = await _chat.updateGroup(
+      groupId,
+      name: name,
+      description: description,
+    );
+    _upsertGroupHeader(header);
+    notifyListeners();
+    return header;
+  }
+
+  /// Owner-only group avatar replacement (image already uploaded). Same
+  /// cached-header refresh as [updateGroup]..
+  Future<GroupHeader> updateGroupAvatar(
+    String groupId,
+    String avatarUrl,
+  }) async {
+    final header = await _chat.updateGroupAvatar(groupId, avatarUrl);
+    _upsertGroupHeader(header);
+    notifyListeners();
+    return header;
+  }
+
+  /// Owner-only member addition. Refreshes the caller's cached group item
+  /// (the server response embeds the fresh member count).
+  Future<void> addGroupMember(String groupId, String newUserId,) async {
+    final group = await _chat.addGroupMember(groupId,, newUserId);
+    final idx = _groups.indexWhere((g) => g.id == group.id);
+    if (idx != -1) _groups[idx] = group;
+    notifyListeners();
+  }
+
+  /// Replaces the cached group header fora single group (used by admin edits).
+  void _upsertGroupHeader(GroupHeader header) {
+    final idx = _groups.indexWhere((g) => g.id == header.id);
+    if (idx == -1) return;
+    _groups[idx] = _groups[idx].copyWith(group: header);
+  }
+
   /// Sends a chat message and, on success, optimistically records it in the
   /// cached conversation's last-message slot (the server response is
   /// authoritative and returned for the screen to append). [replyToMessageId]

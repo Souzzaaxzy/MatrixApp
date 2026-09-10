@@ -442,6 +442,52 @@ class ChatRepository {
     return GroupInfoDto.fromJson(json).toModel();
   }
 
+  /// Owner-only identity edit (name/description). Server-validated — auth,
+  /// owner, and length are checked server-side; the client never sends flags.
+  Future<GroupHeader> updateGroup(
+    String groupId,, {
+    String? name,
+    String? description,
+  }) async {
+    final json = await _api.patch<Map<String, dynamic>>(
+      '/api/groups/$groupId',
+      data: {
+        if (name != null) 'name': name,
+        if (description != null) 'description': description,
+      },
+    );
+    return GroupHeaderDto.fromJson(json['group'] as Map<String, dynamic>).toModel();
+  }
+
+  /// Owner-only group avatar replacement. The image is uploaded first via the
+  /// normal uploads flow;then PATCHes the group with the new public URL which
+  /// the server persists and broadcasts live to every participant..
+  Future<GroupHeader> updateGroupAvatar(
+    String groupId,
+    String avatarUrl,
+  ) async {
+    final json = await _api.patch<Map<String, dynamic>>(
+      '/api/groups/$groupId/avatar',
+      data: {'avatarUrl': avatarUrl},
+    );
+    return GroupHeaderDto.fromJson((json['group'] as Map<String, dynamic>)).toModel();
+  }
+
+  /// Owner-only member addition. The server re-checks friendship and
+  /// membership;the new member mirrors the group-creation rule (friends of
+  /// the owner only). Returns the refreshed group item for the caller..
+  Future<GroupConversation> addGroupMember(
+    String groupId,
+    String newUserId,
+  ) async {
+    final json = await _api.post<Map<String, dynamic>>(
+      '/api/groups/$groupId/members',
+      data: {'userId': newUserId},
+    );
+    return GroupConversationDto.fromJson(json['group'] as Map<String, dynamic>)
+        .toModel();
+  }
+
   /// Latest messages of a group (same paginated, chronological shape as
   /// private messages — with the real sender embedded in every bubble).
   Future<({List<ChatMessage> messages, bool hasMore})> groupMessages(

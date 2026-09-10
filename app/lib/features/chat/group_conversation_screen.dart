@@ -404,13 +404,20 @@ class _GroupConversationScreenState extends State<GroupConversationScreen> {
   Future<void> _showMessageMenu(int index) async {
     if (index < 0 || index >= _messages.length) return;
     final message = _messages[index];
+    final isOwner = _groupOwnerId != null &&
+        _groupOwnerId!.isNotEmpty &&
+        _state?.currentUser?.id == _groupOwnerId;
+    final canDeleteAnyone = message.mine || isOwner;
     final action = await showModalBottomSheet<_MessageAction>(
       context: context,
       useSafeArea: true,
       backgroundColor: Colors.transparent,
       barrierColor: Colors.black.withValues(alpha: 0.5),
       isScrollControlled: true,
-      builder: (_) => _MessageActionSheet(message: message),
+      builder: (_) => _MessageActionSheet(
+        message: message,
+        canDeleteAnyone: canDeleteAnyone,
+      ),
     );
     if (action == null || !mounted) return;
     switch (action) {
@@ -1016,9 +1023,17 @@ class _MessageContent extends StatelessWidget {
 enum _MessageAction { reply, deleteForMe, deleteForEveryone }
 
 class _MessageActionSheet extends StatelessWidget {
-  const _MessageActionSheet({required this.message});
+  const _MessageActionSheet({
+    required this.message,
+    this.canDeleteAnyone = false,
+  });
 
   final ChatMessage message;
+
+  /// Whether the session user may delete this message for everyone — the
+  /// sender of the message OR the group owner (server-validated). The
+  /// menu hides the action otherwise (cosmetic only).
+  final bool canDeleteAnyone;
 
   @override
   Widget build(BuildContext context) {
@@ -1041,7 +1056,8 @@ class _MessageActionSheet extends StatelessWidget {
               label: 'Excluir para mim',
               onTap: () =>
                   Navigator.of(context).pop(_MessageAction.deleteForMe)),
-          _ActionItem(
+          if (canDeleteAnyone)
+            _ActionItem(
               icon: Icons.delete_forever_rounded,
               label: 'Excluir para todos',
               onTap: () =>
