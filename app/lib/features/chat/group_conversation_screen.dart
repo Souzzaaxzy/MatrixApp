@@ -554,26 +554,33 @@ class _GroupConversationScreenState extends State<GroupConversationScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.absoluteBlack,
-      resizeToAvoidBottomInset: false,
+      // Default IME handling — the Scaffold resizes with the Android keyboard so
+      // the composer sits directly above it (same proven behavior as the DM chat;
+      // no fixed-pixel hacks for the nav bar or insets).
       appBar: AppBar(
         backgroundColor: AppColors.absoluteBlack,
         surfaceTintColor: Colors.transparent,
         automaticallyImplyLeading: true,
         centerTitle: true,
+        toolbarHeight: kToolbarHeight + 52,
         title: GestureDetector(
           onTap: _openGroupProfile,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               _GroupAvatar(
-                  size: 52,
+                  size: 72,
                   url: avatar,
                   name: name),
-              const SizedBox(height: 4),
+              const SizedBox(height: 6),
               Text(
                 name,
-                style: AppTextStyles.hud
-                    .copyWith(fontSize: 16, color: AppColors.techWhite),
+                textAlign: TextAlign.center,
+                style: AppTextStyles.hud.copyWith(
+                  fontSize: 18,
+                  color: AppColors.techWhite,
+                  fontWeight: FontWeight.w600,
+                ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
@@ -704,7 +711,7 @@ class _GroupConversationScreenState extends State<GroupConversationScreen> {
     }
     return ListView.builder(
       controller: _scroll,
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 100),
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 16),
       itemCount: items.length + 2,
       itemBuilder: (context, index) {
         if (index == 0) return const SizedBox(height: 12);
