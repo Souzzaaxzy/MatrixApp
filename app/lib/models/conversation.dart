@@ -263,3 +263,19 @@ class ReplyInfo {
   /// "mensagem apagada" placeholder rather than breaking the view).
   final bool exists;
 }
+
+/// A single group participant (profile menu). Avatar/nickname plus a
+/// server-computed owner flag — identity never inferred client-side..
+class GroupMemberInfoModel {
+  const GroupMemberInfoModel({
+    required this.id,
+    required this.nickname,
+    this.avatarUrl,
+    required this.isOwner,
+  });
+
+  final String id;
+  final String nickname;
+  final String? avatarUrl;
+  final bool isOwner;
+}

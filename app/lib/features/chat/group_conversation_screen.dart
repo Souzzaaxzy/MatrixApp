@@ -33,6 +33,14 @@ class GroupConversationScreen extends StatefulWidget {
 class _GroupConversationScreenState extends State<GroupConversationScreen> {
   static const _pagesize = 30;
 
+  GroupConversationRouteArgs? _args;
+  String? _groupName;
+  String? _groupAvatarUrl;
+  String _groupDescription = '';
+  String? _groupOwnerId;
+  int _groupMemberCount = 0;
+  StreamSubscription<GroupUpdatedEvent>? _groupSub;
+
   final TextEditingController _input = TextEditingController();
   final ScrollController _scroll = ScrollController();
   final List<ChatMessage> _messages = [];
@@ -90,6 +98,8 @@ class _GroupConversationScreenState extends State<GroupConversationScreen> {
       _readSub = state?.onChatRead.listen(_onRead);
       _deletedSub?.cancel();
       _deletedSub = state?.onChatMessageDeleted.listen(_onMessageDeleted);
+      _groupSub?.cancel();
+      _groupSub = state?.onGroupUpdated.listen(_onGroupUpdated;
     }
     if (!_loadRequested) {
       _loadRequested = true;
@@ -115,6 +125,7 @@ class _GroupConversationScreenState extends State<GroupConversationScreen> {
     _recordingSub?.cancel();
     _readSub?.cancel();
     _deletedSub?.cancel();
+    _groupSub?.cancel();
     if (_recListener != null) {
       _recorder.removeListener(_recListener!);
       _recListener = null;
@@ -147,6 +158,7 @@ class _GroupConversationScreenState extends State<GroupConversationScreen> {
           ..addAll(page.messages);
         _hasMore = page.hasMore;
         _loading = false;
+        _applyFreshHeader();
       });
       unawaited(state.markGroupRead(_groupId));
       WidgetsBinding.instance.addPostFrameCallback((_) => _jumpToBottom());
@@ -163,6 +175,39 @@ class _GroupConversationScreenState extends State<GroupConversationScreen> {
         _error = 'Não foi possível carregar o grupo. Verifique sua conexão.';
       });
     }
+  }
+
+  /// Refreshes the header from the current AppState cache if available — the
+  /// cache is fed by the group list and by real-time `group_updated` frames, so
+  /// the AppBar always reflects the persisted group identity (never a stale
+  /// snapshot from the route argument)). Falls back to the route payload..
+  void _applyFreshHeader() {
+    final groups = _state?.groups ?? const <GroupConversation>[];
+    GroupConversation? group;
+    for (final g in groups) {
+      if (g.id == _groupId) { group = g; break; }
+    }
+    if (group == null) return;
+    _groupName = group.name;
+    _groupAvatarUrl = group.avatarUrl;
+    _groupDescription = group.description;
+    _groupOwnerId = group.createdById;
+    _groupMemberCount = group.memberCount;
+  }
+
+  /// An owner edited the group (name/avatar/description/membership). The
+  /// server pushed a fresh header; update the AppBar and cached fields live.
+  void _onGroupUpdated(GroupUpdatedEvent event) {
+    if (!mounted) return;
+    if (event.groupId != _groupId) return;
+    if (event.group.id != _groupId) return;
+    setState(() {
+      _groupName = event.group.name;
+      _groupAvatarUrl = event.group.avatarUrl;
+      _groupDescription = event.group.description;
+      _groupOwnerId = event.group.createdById;
+      _groupMemberCount = event.group.memberCount;
+    });
   }
 
   Future<void> _loadOlderMessages() async {
@@ -504,31 +549,70 @@ class _GroupConversationScreenState extends State<GroupConversationScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final name = _groupName ?? _args?.groupName ?? widget.args.groupName;
+    final avatar = _groupAvatarUrl ?? _args?.groupAvatarUrl ?? widget.args.groupAvatarUrl;
+
     return Scaffold(
       backgroundColor: AppColors.absoluteBlack,
+      resizeToAvoidBottomInset: false,
       appBar: AppBar(
         backgroundColor: AppColors.absoluteBlack,
         surfaceTintColor: Colors.transparent,
+        automaticallyImplyLeading: true,
         centerTitle: true,
-        title: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _GroupAvatar(
-                size: 36,
-                url: widget.args.groupAvatarUrl,
-                name: widget.args.groupName),
-            const SizedBox(height: 2),
-            Text(
-              widget.args.groupName,
-              style: AppTextStyles.hud
-                  .copyWith(fontSize: 13, color: AppColors.techWhite),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ],
+        title: GestureDetector(
+          onTap: _openGroupProfile,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _GroupAvatar(
+                  size: 52,
+                  url: avatar,
+                  name: name),
+              const SizedBox(height: 4),
+              Text(
+                name,
+                style: AppTextStyles.hud
+                    .copyWith(fontSize: 16, color: AppColors.techWhite),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              if (_groupMemberCount > 0)
+                Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: Text(
+                    '${_groupMemberCount} membro${_groupMemberCount == 1 ? '' : 's'}',
+                    style: AppTextStyles.caption.copyWith(
+                        fontSize: 11, color: AppColors.holographicBlue),
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
-      body: _buildBody(),
+      body: SafeArea(
+        top: false,
+        child: _buildBody(),
+      ),
+    );
+  }
+
+  /// Opens the group profile menu (stage 3). The header (avatar/name)
+  /// doubles as its entry point;the profile pushes a fresh route so the
+  /// conversation state survives underneath (popped back intact).
+  void _openGroupProfile() {
+    if (_groupId.isEmpty) return;
+    Navigator.of(context).pushNamed(
+      AppRoutes.groupProfile,
+      arguments: GroupProfileRouteArgs(
+        groupId: _groupId,
+        initialName: _groupName ?? _args?.groupName ?? widget.args.groupName,
+        initialAvatarUrl:
+            _groupAvatarUrl ?? _args?.groupAvatarUrl ?? widget.args.groupAvatarUrl,
+        initialDescription: _groupDescription,
+        initialOwnerId: _groupOwnerId,
+        initialMemberCount: _groupMemberCount,
+      ),
     );
   }
 

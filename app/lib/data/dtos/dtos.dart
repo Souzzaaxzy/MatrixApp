@@ -635,6 +635,32 @@ class ReplyInfoDto {
       );
 }
 
+/// Real-time `chat_group_updated` frame: the server pushed a fresh group
+/// identity block after an owner edit (name/avatar/description/membership).
+class GroupUpdatedEvent {
+  const GroupUpdatedEvent({required this.groupId, required this.group});
+
+  final String groupId;
+  final GroupHeader group;
+
+  factory GroupUpdatedEvent.fromMap(Map<String, dynamic> data) {
+    final raw = data['group'];
+    return GroupUpdatedEvent(
+      groupId: (data['groupId'] as String?) ?? '',
+      group: raw is Map<String, dynamic>
+          ? GroupHeaderDto.fromJson(raw).toModel()
+          : GroupHeader(
+              id: (data['groupId'] as String?) ?? '',
+              name: (data['name'] as String?) ?? '',
+              avatarUrl: data['avatarUrl'] as String?,
+              description: (data['description'] as String?) ?? '',
+              createdById: (data['createdById'] as String?) ?? '',
+              memberCount: (data['memberCount'] as num?)?.toInt() ?? 0,
+            ),
+    );
+  }
+}
+
 /// The group identity block embedded in group-list items. Mirrors the
 /// server's `GroupHeader` shape.
 class GroupHeaderDto {
@@ -670,6 +696,59 @@ class GroupHeaderDto {
         description: (json['description'] as String?) ?? '',
         createdById: json['createdById'] as String,
         memberCount: (json['memberCount'] as num?)?.toInt() ?? 0,
+      );
+}
+
+/// A group member as returned by the group-info endpoint. Extended chat
+/// user (id/nickname/avatar) plus a server-computed `isOwner` flag so
+/// the profile screen can tag the owner without trusting the client..
+class GroupMemberDto {
+  final String id;
+  final String nickname;
+  final String? avatarUrl;
+  final bool isOwner;
+
+  const GroupMemberDto({
+    required this.id,
+    required this.nickname,
+    this.avatarUrl,
+    required this.isOwner,
+  });
+
+  GroupMemberInfoModel toModel() => GroupMemberInfoModel(
+        id: id,
+        nickname: nickname,
+        avatarUrl: avatarUrl,
+        isOwner: isOwner,
+      );
+
+  factory GroupMemberDto.fromJson(Map<String, dynamic> json) => GroupMemberDto(
+        id: json['id'] as String,
+        nickname: json['nickname'] as String,
+        avatarUrl: json['avatarUrl'] as String?,
+        isOwner: (json['isOwner'] as bool?) ?? false,
+      );
+}
+
+/// Full group info (profile menu). `group` is the identity block used
+/// everywhere;`members` is the participant list with owner tagging.
+class GroupInfoDto {
+  final GroupHeaderDto group;
+  final List<GroupMemberDto> members;
+
+  const GroupInfoDto({required this.group,, required this.members});
+
+  ({GroupHeader group,, List<GroupMemberInfoModel> members}) toModel() => (
+        group: group.toModel(),
+        members: members.map((m) => m.toModel()).toList(),
+      );
+
+  factory GroupInfoDto.fromJson(Map<String, dynamic> json) => GroupInfoDto(
+        group: GroupHeaderDto.fromJson(json['group'] as Map<String, dynamic>),
+        members: ((json['members'] as List?) ?? const [])
+            .cast<Map<String, dynamic>>()
+            .map(GroupMemberDto.fromJson)
+            .toList(),
       );
 }
 

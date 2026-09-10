@@ -36,6 +36,7 @@ class _MatrixAppState extends State<MatrixApp> {
       Services.instance.push.onChatRecording = _onChatRecording;
       Services.instance.push.onChatRead = _onChatRead;
       Services.instance.push.onChatMessageDeleted = _onChatMessageDeleted;
+      Services.instance.push.onChatGroupUpdated = _onChatGroupUpdated;
       Services.instance.push.onCommentDeleted = _onCommentDeleted;
     }
   }
@@ -60,7 +61,20 @@ class _MatrixAppState extends State<MatrixApp> {
   }
 
   /// A comment was deleted (by its owner or the post author). AppState
-  /// exposes it so open comments surfaces remove the entry live.
+  /// exposes it so open comments surfaces remove the entry live..
+
+  /// A group's identity was edited by the owner (realtime. Refresh the
+  /// cached header and tell open conversation/profile screens to re-render.
+  void _onChatGroupUpdated(Map<String, dynamic> data)) {
+    final state = _state;
+    if (state == null) return;
+    try {
+      state.handleIncomingGroupUpdated(GroupUpdatedEvent.fromMap(data));
+    } catch (_) {
+      // Malformed payload: ignore (the next list load refreshes it anyway).
+    }
+  }
+
   void _onCommentDeleted(Map<String, dynamic> data) {
     final state = _state;
     if (state == null) return;

@@ -55,6 +55,7 @@ class PushService {
   /// Called when a chat message was deleted FOR EVERYONE by the peer
   /// (kind `chat_message_deleted`). Payload carries {conversationId, messageId}.
   void Function(Map<String, dynamic> data)? onChatMessageDeleted;
+  void Function(Map<String, dynamic> data)? onChatGroupUpdated;
 
   /// Called when a comment was deleted (kind `comment_deleted`). Payload
   /// carries {postId, commentId}.
@@ -238,6 +239,12 @@ class PushService {
       final data =
           (message['data'] as Map?)?.cast<String, dynamic>() ?? const {};
       onChatMessageDeleted?.call(data);
+      return;
+    }
+    if (message['kind'] == 'chat_group_updated') {
+      final data =
+          (message['data'] as Map?)?.cast<String, dynamic>() ?? const {};
+      onChatGroupUpdated?.call(data);
       return;
     }
     if (message['kind'] == 'comment_deleted') {

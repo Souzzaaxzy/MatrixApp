@@ -12,6 +12,7 @@ import '../features/chat/chat_screen.dart';
 import '../features/chat/conversation_screen.dart';
 import '../features/chat/create_group_screen.dart';
 import '../features/chat/group_conversation_screen.dart';
+import '../features/chat/group_profile_screen.dart';
 import '../features/profile/edit_profile_screen.dart';
 import '../features/profile/profile_screen.dart';
 import '../features/splash/splash_screen.dart';
@@ -52,7 +53,11 @@ class AppRoutes {
   /// Pushed from the Chat tab's group tiles(right after group creation).
   static const String groupConversation = '/home/chat/group';
 
-  /// Group creation — pushed from the Chat tab's "+" FAB.
+  /// Group profile menu. Argument: [GroupProfileRouteArgs]. Pushed
+  /// when the group header (avatar/name)in the conversation is tapped..
+  static const String groupProfile = '/home/chat/group/profile';
+
+  /// Group creation — pushed from the Chat tab's "+" FAB..
   static const String createGroup = '/home/chat/create-group';
 }
 
@@ -105,6 +110,8 @@ Widget _buildPage(RouteSettings settings) {
     AppRoutes.createGroup => const CreateGroupScreen(),
     AppRoutes.groupConversation =>
       GroupConversationScreen(args: _groupArgs(settings.arguments)),
+    AppRoutes.groupProfile =>
+      GroupProfileScreen(args: _groupProfileArgs(settings.arguments)),
     AppRoutes.conversation =>
       ConversationScreen(args: _conversationArgs(settings.arguments)),
     _ => HomeScreen(), // defensive fallback — never a 404 page
@@ -117,6 +124,15 @@ GroupConversationRouteArgs _groupArgs(Object? arg) {
   return GroupConversationRouteArgs(
     groupId: '',
     groupName: '',
+  );
+}
+
+GroupProfileRouteArgs _groupProfileArgs(Object? arg) {
+  if (arg is GroupProfileRouteArgs) return arg;
+
+  return GroupProfileRouteArgs(
+    groupId: '',
+    initialName: '',
   );
 }
 

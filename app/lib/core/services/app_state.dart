@@ -118,6 +118,11 @@ class AppState extends ChangeNotifier {
 
   final _chatRecording = StreamController<ChatRecordingEvent>.broadcast();
   Stream<ChatRecordingEvent> get onChatRecording => _chatRecording.stream;
+/// Real-time group identity updates (name/avatar/description/membership)
+  /// pushed by the server after an owner edit. Open conversation / profile
+  /// screens refresh their header live..
+  final _groupUpdated = StreamController<GroupUpdatedEvent>.broadcast();
+  Stream<GroupUpdatedEvent> get onGroupUpdated => _groupUpdated.stream;
 
   /// Emits when a message in a conversation is deleted FOR EVERYONE by the
   /// peer (realtime). Open conversation screens remove the bubble live.
@@ -1058,6 +1063,22 @@ class AppState extends ChangeNotifier {
   /// group is inserted into the cached list immediately so it shows up in the
   /// Chat tab without a refetch.
 
+
+  /// Full group info (profile menu.: identity + member list with owner flag).
+  /// The group header is ALSO upserted into the local groups cache so an
+  /// open conversation header reflects the persisted identity immediately..
+  Future<({GroupHeader group, List<GroupMemberInfoModel> members})> fetchGroupInfo(
+    String groupId,
+  ) async {
+    final info = await _chat.groupInfo(groupId);
+    final idx = _groups.indexWhere((g) => g.id == groupId);
+    if (idx != -1) {
+      _groups[idx] = _groups[idx].copyWith(group: info.group);
+    }
+    notifyListeners();
+    return info;
+  }
+
   Future<GroupConversation> createGroup({
     required String name,
     String description = '',
@@ -1201,6 +1222,20 @@ class AppState extends ChangeNotifier {
   void handleIncomingChatMessageDeleted(ChatMessageDeletedEvent event) {
     if (_disposed) return;
     if (!_chatMessageDeleted.isClosed) _chatMessageDeleted.add(event);
+    notifyListeners();
+  }
+
+  /// A real-time `chat_group_updated` frame arrived → a group's identity
+  /// (name/avatar/description/members) was edited by the owner. Refresh
+  /// the cached list header and forward the event so an open conversation
+  /// AppBar / group profile menu updates live.
+
+  void handleIncomingGroupUpdated(GroupUpdatedEvent event) {
+    if (_disposed) return;
+    if (event.groupId.isEmpty) return;
+    final idx = _groups.indexWhere((g) => g.id == event.groupId);
+    if (idx != -1) _groups[idx] = _groups[idx].copyWith(group: event.group);
+    if (!_groupUpdated.isClosed) _groupUpdated.add(event);
     notifyListeners();
   }
 

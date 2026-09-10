@@ -114,11 +114,33 @@ class GroupConversationRouteArgs {
   final String? groupAvatarUrl;
 }
 
-/// Pushes the group conversation screen. The group UI is a SEPARATE route
+/// Pushes the group conversation screen. The group UI Is a SEPARATE route
 /// (shared infrastructure: Message streams, repositories, voice stack —
 /// not a duplicated chat system).
 void openGroupConversation(
     BuildContext context, GroupConversationRouteArgs args) {
   if (args.groupId.isEmpty) return;
   Navigator.of(context).pushNamed(AppRoutes.groupConversation, arguments: args);
+}
+
+/// Route arguments for the GROUP PROFILE menu (opened by tapping the group
+/// header in the conversation). Carries the current identity block so the
+/// profile renders immediately while it fetches the fresh server payload;the
+/// real-time `chat_group_updated` stream keeps it in sync after owner edits.
+class GroupProfileRouteArgs {
+  const GroupProfileRouteArgs({
+    required this.groupId,
+    required this.initialName,
+    this.initialAvatarUrl,
+    this.initialDescription,
+    this.initialOwnerId,
+    this.initialMemberCount,
+  });
+
+  final String groupId;
+  final String initialName;
+  final String? initialAvatarUrl;
+  final String initialDescription;
+  final String? initialOwnerId;
+  final int initialMemberCount;
 }

@@ -432,6 +432,16 @@ class ChatRepository {
         .toModel();
   }
 
+  /// Full group info (profile menu.: identity block + participant list with
+  /// server-computed owner flag). Refreshes the local groups cache too so
+  /// the conversation header and list stay in sync after admin edits..
+  Future<({GroupHeader group,, List<GroupMemberInfoModel> members})> groupInfo(
+    String groupId,
+  ) async {
+    final json = await _api.get<Map<String, dynamic>>('/api/groups/$groupId');
+    return GroupInfoDto.fromJson(json).toModel();
+  }
+
   /// Latest messages of a group (same paginated, chronological shape as
   /// private messages — with the real sender embedded in every bubble).
   Future<({List<ChatMessage> messages, bool hasMore})> groupMessages(
