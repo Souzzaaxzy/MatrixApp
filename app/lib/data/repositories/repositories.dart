@@ -435,7 +435,7 @@ class ChatRepository {
   /// Full group info (profile menu.: identity block + participant list with
   /// server-computed owner flag). Refreshes the local groups cache too so
   /// the conversation header and list stay in sync after admin edits..
-  Future<({GroupHeader group,, List<GroupMemberInfoModel> members})> groupInfo(
+  Future<({GroupHeader group, List<GroupMemberInfoModel> members})> groupInfo(
     String groupId,
   ) async {
     final json = await _api.get<Map<String, dynamic>>('/api/groups/$groupId');
@@ -445,7 +445,7 @@ class ChatRepository {
   /// Owner-only identity edit (name/description). Server-validated — auth,
   /// owner, and length are checked server-side; the client never sends flags.
   Future<GroupHeader> updateGroup(
-    String groupId,, {
+    String groupId, {
     String? name,
     String? description,
   }) async {

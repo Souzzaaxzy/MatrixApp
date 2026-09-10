@@ -736,9 +736,9 @@ class GroupInfoDto {
   final GroupHeaderDto group;
   final List<GroupMemberDto> members;
 
-  const GroupInfoDto({required this.group,, required this.members});
+  const GroupInfoDto({required this.group, required this.members});
 
-  ({GroupHeader group,, List<GroupMemberInfoModel> members}) toModel() => (
+  ({GroupHeader group, List<GroupMemberInfoModel> members}) toModel() => (
         group: group.toModel(),
         members: members.map((m) => m.toModel()).toList(),
       );

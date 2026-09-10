@@ -1102,4 +1102,89 @@ class _FakeChatRepository implements ChatRepository {
   Future<void> hideGroup(String groupId) async {
     _store.groupHides.add('$groupId|${_store.currentUserId}');
   }
+
+  @override
+  @override
+  Future<({GroupHeader group, List<GroupMemberInfoModel> members})> groupInfo(
+    String groupId,
+  ) async {
+    final g = _store.groups[groupId];
+    if (g == null) {
+      throw const ApiException(
+          statusCode: 404, message: 'Grupo n\u00e3o encontrado.');
+    }
+    final me = _store.currentUserId;
+
+    final ownerId = g.group.createdById;
+
+    final allUsers = _store.users.values.toList();
+    final candidates = [
+      ...allUsers.where((u) => u.id == ownerId),
+      ...allUsers.where((u) => u.id == me || u.id == ownerId),
+    ];
+
+    final seen = <String>{};
+    final members = <GroupMemberInfoModel>[];
+    for (final u in candidates) {
+      if (!seen.add(u.id)) continue;
+      members.add(GroupMemberInfoModel(
+        id: u.id,
+        nickname: u.nickname,
+        avatarUrl: u.avatarUrl,
+        isOwner: u.id == ownerId,
+      ));
+    }
+    return (group: g.group, members: members);
+  }
+
+  @override
+  Future<GroupHeader> updateGroup(
+    String groupId, {
+    String? name,
+    String? description,
+  }) async {
+    final g = _store.groups[groupId];
+    if (g == null) {
+      throw const ApiException(
+          statusCode: 404, message: 'Grupo n\u00e3o encontrado.');
+    }
+    final updated = g.copyWith(
+        group: g.group.copyWith(
+      name: name,
+      description: description,
+    ));
+    _store.groups[groupId] = updated;
+    return updated.group;
+  }
+
+  @override
+  Future<GroupHeader> updateGroupAvatar(
+    String groupId,
+    String avatarUrl,
+  ) async {
+    final g = _store.groups[groupId];
+    if (g == null) {
+      throw const ApiException(
+          statusCode: 404, message: 'Grupo n\u00e3o encontrado.');
+    }
+    final updated = g.copyWith(group: g.group.copyWith(avatarUrl: avatarUrl));
+    _store.groups[groupId] = updated;
+    return updated.group;
+  }
+
+  @override
+  Future<GroupConversation> addGroupMember(
+    String groupId,
+    String newUserId,
+  ) async {
+    final g = _store.groups[groupId];
+    if (g == null) {
+      throw const ApiException(
+          statusCode: 404, message: 'Grupo n\u00e3o encontrado.');
+    }
+    final updated = g.copyWith(
+        group: g.group.copyWith(memberCount: g.group.memberCount + 1));
+    _store.groups[groupId] = updated;
+    return updated;
+  }
 }

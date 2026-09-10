@@ -65,7 +65,7 @@ class _MatrixAppState extends State<MatrixApp> {
 
   /// A group's identity was edited by the owner (realtime. Refresh the
   /// cached header and tell open conversation/profile screens to re-render.
-  void _onChatGroupUpdated(Map<String, dynamic> data)) {
+  void _onChatGroupUpdated(Map<String, dynamic> data) {
     final state = _state;
     if (state == null) return;
     try {

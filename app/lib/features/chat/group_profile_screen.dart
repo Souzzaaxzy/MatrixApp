@@ -7,7 +7,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_dimensions.dart';
 import '../../app/theme/app_text_styles.dart';
-import '../../core/services/app_state.dart';
+import '../../core/widgets/app_state_scope.dart';
 import '../../core/widgets/framed_avatar.dart';
 import '../../core/widgets/hud_label.dart';
 import '../../core/widgets/matrix_button.dart';
@@ -36,7 +36,7 @@ class _GroupProfileScreenState extends State<GroupProfileScreen> {
   String _description = '';
   String? _ownerId;
   int _memberCount = 0;
-  List<GroupMemberInfoModel> _members = const[];
+  List<GroupMemberInfoModel> _members = const [];
   bool _loading = true;
   String? _error;
   bool _saving = false;
@@ -45,7 +45,10 @@ class _GroupProfileScreenState extends State<GroupProfileScreen> {
   String? get _myId => AppStateScope.maybeOf(context)?.currentUser?.id;
 
   bool get _isOwner =>
-      _ownerId != null && _ownerId!.isNotEmpty && _myId != null && _ownerId == _myId;
+      _ownerId != null &&
+      _ownerId!.isNotEmpty &&
+      _myId != null &&
+      _ownerId == _myId;
 
   String get _groupId => widget.args.groupId;
 
@@ -53,10 +56,10 @@ class _GroupProfileScreenState extends State<GroupProfileScreen> {
   void initState() {
     super.initState();
     _name = widget.args.initialName;
-    _avatarUrl = widget.args.initialAvatarUrl;
-    _description = widget.args.initialDescription;
+    _avatarUrl = widget.args.initialAvatarUrl ?? '';
+    _description = widget.args.initialDescription ?? '';
     _ownerId = widget.args.initialOwnerId;
-    _memberCount = widget.args.initialMemberCount;
+    _memberCount = widget.args.initialMemberCount ?? 0;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _load();
     });
@@ -78,7 +81,7 @@ class _GroupProfileScreenState extends State<GroupProfileScreen> {
   }
 
   Future<void> _load() async {
-    final state = AppStateScope.maybeOf(context;
+    final state = AppStateScope.maybeOf(context);
     if (state == null) return;
     try {
       final info = await state.fetchGroupInfo(_groupId);
@@ -96,7 +99,9 @@ class _GroupProfileScreenState extends State<GroupProfileScreen> {
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _error = e is ApiException ? e.message : 'Não foi possível carregar o grupo.';
+        _error = e is ApiException
+            ? e.message
+            : 'Não foi possível carregar o grupo.';
       });
     }
   }
@@ -125,7 +130,7 @@ class _GroupProfileScreenState extends State<GroupProfileScreen> {
       ),
     );
     if (result == null || !mounted) return;
-    final state = AppStateScope.maybeOf(context;
+    final state = AppStateScope.maybeOf(context);
     if (state == null) return;
     setState(() => _saving = true);
     final messenger = ScaffoldMessenger.of(context);
@@ -160,10 +165,10 @@ class _GroupProfileScreenState extends State<GroupProfileScreen> {
       imageQuality: 80,
     );
     if (result == null || !mounted) return;
-    final state = AppStateScope.maybeOf(context;
+    final state = AppStateScope.maybeOf(context);
     if (state == null) return;
     setState(() => _saving = true);
-    final messenger = ScaffoldMessenger.of(context;
+    final messenger = ScaffoldMessenger.of(context);
     try {
       final url = await Services.instance.uploads.upload(File(result.path));
       await state.updateGroupAvatar(_groupId, url);
@@ -183,7 +188,7 @@ class _GroupProfileScreenState extends State<GroupProfileScreen> {
   }
 
   Future<void> _refreshSilent() async {
-    final state = AppStateScope.maybeOf(context;
+    final state = AppStateScope.maybeOf(context);
     if (state == null) return;
     try {
       final info = await state.fetchGroupInfo(_groupId);
@@ -198,14 +203,12 @@ class _GroupProfileScreenState extends State<GroupProfileScreen> {
       });
     } catch (_) {
       // Best-effort refresh — realtime broadcasts cover the other members.
-
-
-
+    }
   }
 
   Future<void> _addMember() async {
     if (_saving) return;
-    final state = AppStateScope.maybeOf(context;
+    final state = AppStateScope.maybeOf(context);
     if (state == null) return;
     final current = state.currentUser;
     if (current == null) return;
@@ -241,22 +244,10 @@ class _GroupProfileScreenState extends State<GroupProfileScreen> {
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.absoluteBlack,
-      appBar: AppBar(
-        backgroundColor: AppColors.absoluteBlack,
-        surfaceTintColor: Colors.transparent,
-        centerTitle: true,
-        title: Text('Grupo', style: AppTextStyles.hud.copyWith(fontSize: 16)),
-      ),
-      body: SafeArea(child: _buildBody()),
-    );
-  }
-
   Widget _buildBody() {
-    if (_loading) return const Center(child: HudLabel(text: 'CARREGANDO...', dot: true));
+    if (_loading) {
+      return const Center(child: HudLabel(text: 'CARREGANDO...', dot: true));
+    }
     if (_error != null) {
       return Center(
         child: Padding(
@@ -264,13 +255,17 @@ class _GroupProfileScreenState extends State<GroupProfileScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(_error!, style: AppTextStyles.bodyMuted, textAlign: TextAlign.center),
+              Text(_error!,
+                  style: AppTextStyles.bodyMuted, textAlign: TextAlign.center),
               const SizedBox(height: AppDimensions.spaceMd),
               MatrixButton(
                 label: 'TENTAR NOVAMENTE',
                 expanded: false,
                 onPressed: () {
-                  setState(() { _loading = true; _error = null; });
+                  setState(() {
+                    _loading = true;
+                    _error = null;
+                  });
                   _load();
                 },
               ),
@@ -288,27 +283,35 @@ class _GroupProfileScreenState extends State<GroupProfileScreen> {
         ),
         const SizedBox(height: 16),
         Center(
-          child: Text(_name ?? '', textAlign: TextAlign.center,
-              style: AppTextStyles.h3.copyWith(color: AppColors.techWhite),
+          child: Text(
+            _name ?? '',
+            textAlign: TextAlign.center,
+            style: AppTextStyles.h3.copyWith(color: AppColors.techWhite),
+          ),
         ),
         if (_description.trim().isNotEmpty) ...[
           const SizedBox(height: 8),
           Center(
-            child: Text(_description!.trim(), textAlign: TextAlign.center,
-                style: AppTextStyles.bodyMuted,
+            child: Text(
+              _description.trim(),
+              textAlign: TextAlign.center,
+              style: AppTextStyles.bodyMuted,
+            ),
           ),
         ],
         const SizedBox(height: 8),
         Center(
           child: Text(
-            '${_memberCount} membro${_memberCount == 1 ? '' : 's'}',
-            style: AppTextStyles.caption.copyWith(color: AppColors.holographicBlue),
+            '$_memberCount membro${_memberCount == 1 ? '' : 's'}',
+            style: AppTextStyles.caption
+                .copyWith(color: AppColors.holographicBlue),
           ),
         ),
         if (_isOwner) ...[
           const SizedBox(height: AppDimensions.spaceLg),
           Text('Administração',
-              style: AppTextStyles.hud.copyWith(fontSize: 14, color: AppColors.techWhite)),
+              style: AppTextStyles.hud
+                  .copyWith(fontSize: 14, color: AppColors.techWhite)),
           const SizedBox(height: AppDimensions.spaceSm),
           _AdminActionTile(
             icon: Icons.badge_outlined,
@@ -328,17 +331,19 @@ class _GroupProfileScreenState extends State<GroupProfileScreen> {
         ],
         const SizedBox(height: AppDimensions.spaceLg),
         Text('Participantes',
-            style: AppTextStyles.hud.copyWith(fontSize: 14, color: AppColors.techWhite)),
+            style: AppTextStyles.hud
+                .copyWith(fontSize: 14, color: AppColors.techWhite)),
         const SizedBox(height: AppDimensions.spaceSm),
         if (_members.isEmpty)
           Padding(
             padding: const EdgeInsets.all(AppDimensions.spaceMd),
             child: Center(
-              child: Text('Nenhum participante.', style: AppTextStyles.bodyMuted),
+              child:
+                  Text('Nenhum participante.', style: AppTextStyles.bodyMuted),
             ),
           )
         else
-          ..._members.map(_memberTile).toList(),
+          ..._members.map(_memberTile),
         const SizedBox(height: AppDimensions.spaceXxl),
       ],
     );
@@ -354,9 +359,11 @@ class _GroupProfileScreenState extends State<GroupProfileScreen> {
         imageUrl: m.avatarUrl,
         size: 44,
       ),
-      title: Text(m.nickname, style: AppTextStyles.body.copyWith(color: AppColors.techWhite),
+      title: Text(
+        m.nickname,
+        style: AppTextStyles.body.copyWith(color: AppColors.techWhite),
       ),
-      trailing:isOwner
+      trailing: isOwner
           ? Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
               decoration: BoxDecoration(
@@ -366,12 +373,27 @@ class _GroupProfileScreenState extends State<GroupProfileScreen> {
                   color: AppColors.holographicBlue.withValues(alpha: 0.5),
                 ),
               ),
-              child: Text('Dono do grupo',
-                  style: AppTextStyles.caption.copyWith(
-                      fontSize: 11, color: AppColors.holographicBlue),
+              child: Text(
+                'Dono do grupo',
+                style: AppTextStyles.caption
+                    .copyWith(fontSize: 11, color: AppColors.holographicBlue),
               ),
             )
           : null,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppColors.absoluteBlack,
+      appBar: AppBar(
+        backgroundColor: AppColors.absoluteBlack,
+        surfaceTintColor: Colors.transparent,
+        centerTitle: true,
+        title: Text('Grupo', style: AppTextStyles.hud.copyWith(fontSize: 16)),
+      ),
+      body: SafeArea(child: _buildBody()),
     );
   }
 }
@@ -402,7 +424,7 @@ class _AdminActionTile extends StatelessWidget {
           leading: Icon(icon, color: AppColors.holographicBlue),
           title: Text(label,
               style: AppTextStyles.body.copyWith(color: AppColors.techWhite)),
-          trailing: const Icon(Icons.chevron_right_rounded,
+          trailing: Icon(Icons.chevron_right_rounded,
               color: AppColors.holographicBlue),
           onTap: onTap,
         ),
@@ -442,7 +464,8 @@ class _GroupIdentityDialogState extends State<_GroupIdentityDialog> {
         side: BorderSide(color: AppColors.deepBlue),
       ),
       title: Text('Editar grupo',
-          style: AppTextStyles.hud.copyWith(fontSize: 16, color: AppColors.techWhite)),
+          style: AppTextStyles.hud
+              .copyWith(fontSize: 16, color: AppColors.techWhite)),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -466,7 +489,8 @@ class _GroupIdentityDialogState extends State<_GroupIdentityDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: Text('Cancelar', style: TextStyle(color: AppColors.holographicBlue)),
+          child: Text('Cancelar',
+              style: TextStyle(color: AppColors.holographicBlue)),
         ),
         TextButton(
           onPressed: () {
@@ -520,7 +544,7 @@ class _AddMemberSheetState extends State<_AddMemberSheet> {
   }
 
   Future<void> _load() async {
-    final state = AppStateScope.maybeOf(context;
+    final state = AppStateScope.maybeOf(context);
     if (state == null) return;
     final current = state.currentUser;
     if (current == null) return;
@@ -529,7 +553,8 @@ class _AddMemberSheetState extends State<_AddMemberSheet> {
       if (!mounted) return;
       setState(() {
         _friends = page.friends
-            .where((f) => f.id != widget.ownerId && !widget.existingIds.contains(f.id))
+            .where((f) =>
+                f.id != widget.ownerId && !widget.existingIds.contains(f.id))
             .toList();
         _loading = false;
       });
@@ -553,22 +578,26 @@ class _AddMemberSheetState extends State<_AddMemberSheet> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: AppDimensions.spaceLg),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: AppDimensions.spaceLg),
               child: Text('ADICIONAR MEMBRO',
-                  style: AppTextStyles.hud.copyWith(fontSize: 14, color: AppColors.techWhite)),
+                  style: AppTextStyles.hud
+                      .copyWith(fontSize: 14, color: AppColors.techWhite)),
             ),
             const SizedBox(height: AppDimensions.spaceSm),
             if (_loading)
-              const Padding(
+              Padding(
                 padding: EdgeInsets.all(24),
-                child: Center(child: HudLabel(text: 'CARREGANDO...', dot: true)),
+                child:
+                    Center(child: HudLabel(text: 'CARREGANDO...', dot: true)),
               )
             else if (_friends.isEmpty)
-              const Padding(
+              Padding(
                 padding: EdgeInsets.all(24),
                 child: Center(
                   child: Text('Nenhum amigo disponível para adicionar.',
-                      style: AppTextStyles.bodyMuted, textAlign: TextAlign.center),
+                      style: AppTextStyles.bodyMuted,
+                      textAlign: TextAlign.center),
                 ),
               )
             else
@@ -596,7 +625,8 @@ class _AddMemberSheetState extends State<_AddMemberSheet> {
                         ),
                         onTap: () {
                           Navigator.of(context).pop(
-                            _AddMemberResult(userId: u.id, nickname: u.nickname),
+                            _AddMemberResult(
+                                userId: u.id, nickname: u.nickname),
                           );
                         },
                       ),
@@ -611,7 +641,8 @@ class _AddMemberSheetState extends State<_AddMemberSheet> {
 }
 
 class _GroupAvatar extends StatelessWidget {
-  const _GroupAvatar({required this.url, required this.name, required this.size});
+  const _GroupAvatar(
+      {required this.url, required this.name, required this.size});
 
   final String? url;
 
@@ -651,8 +682,8 @@ class _GroupAvatar extends StatelessWidget {
       alignment: Alignment.center,
       child: Text(
         name.isEmpty ? 'G' : name.substring(0, 1).toUpperCase(),
-        style: AppTextStyles.hud.copyWith(
-            color: AppColors.techWhite, fontSize: size * 0.34),
+        style: AppTextStyles.hud
+            .copyWith(color: AppColors.techWhite, fontSize: size * 0.34),
       ),
     );
   }

@@ -13,7 +13,9 @@ import '../../core/widgets/matrix_button.dart';
 import '../../core/widgets/matrix_text_field.dart';
 import '../../core/widgets/user_avatar.dart';
 import '../../data/api_config.dart';
+import '../../data/dtos/dtos.dart';
 import '../../models/conversation.dart';
+import '../../app/routes.dart';
 import 'chat_navigation.dart';
 import 'voice_player_bubble.dart';
 import 'voice_recorder.dart';
@@ -99,7 +101,7 @@ class _GroupConversationScreenState extends State<GroupConversationScreen> {
       _deletedSub?.cancel();
       _deletedSub = state?.onChatMessageDeleted.listen(_onMessageDeleted);
       _groupSub?.cancel();
-      _groupSub = state?.onGroupUpdated.listen(_onGroupUpdated;
+      _groupSub = state?.onGroupUpdated.listen(_onGroupUpdated);
     }
     if (!_loadRequested) {
       _loadRequested = true;
@@ -185,14 +187,17 @@ class _GroupConversationScreenState extends State<GroupConversationScreen> {
     final groups = _state?.groups ?? const <GroupConversation>[];
     GroupConversation? group;
     for (final g in groups) {
-      if (g.id == _groupId) { group = g; break; }
+      if (g.id == _groupId) {
+        group = g;
+        break;
+      }
     }
     if (group == null) return;
-    _groupName = group.name;
-    _groupAvatarUrl = group.avatarUrl;
-    _groupDescription = group.description;
-    _groupOwnerId = group.createdById;
-    _groupMemberCount = group.memberCount;
+    _groupName = group.group.name;
+    _groupAvatarUrl = group.group.avatarUrl;
+    _groupDescription = group.group.description;
+    _groupOwnerId = group.group.createdById;
+    _groupMemberCount = group.group.memberCount;
   }
 
   /// An owner edited the group (name/avatar/description/membership). The
@@ -557,7 +562,8 @@ class _GroupConversationScreenState extends State<GroupConversationScreen> {
   @override
   Widget build(BuildContext context) {
     final name = _groupName ?? _args?.groupName ?? widget.args.groupName;
-    final avatar = _groupAvatarUrl ?? _args?.groupAvatarUrl ?? widget.args.groupAvatarUrl;
+    final avatar =
+        _groupAvatarUrl ?? _args?.groupAvatarUrl ?? widget.args.groupAvatarUrl;
 
     return Scaffold(
       backgroundColor: AppColors.absoluteBlack,
@@ -575,10 +581,7 @@ class _GroupConversationScreenState extends State<GroupConversationScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              _GroupAvatar(
-                  size: 72,
-                  url: avatar,
-                  name: name),
+              _GroupAvatar(size: 72, url: avatar, name: name),
               const SizedBox(height: 6),
               Text(
                 name,
@@ -595,7 +598,7 @@ class _GroupConversationScreenState extends State<GroupConversationScreen> {
                 Padding(
                   padding: const EdgeInsets.only(top: 2),
                   child: Text(
-                    '${_groupMemberCount} membro${_groupMemberCount == 1 ? '' : 's'}',
+                    '$_groupMemberCount membro${_groupMemberCount == 1 ? '' : 's'}',
                     style: AppTextStyles.caption.copyWith(
                         fontSize: 11, color: AppColors.holographicBlue),
                   ),
@@ -621,8 +624,9 @@ class _GroupConversationScreenState extends State<GroupConversationScreen> {
       arguments: GroupProfileRouteArgs(
         groupId: _groupId,
         initialName: _groupName ?? _args?.groupName ?? widget.args.groupName,
-        initialAvatarUrl:
-            _groupAvatarUrl ?? _args?.groupAvatarUrl ?? widget.args.groupAvatarUrl,
+        initialAvatarUrl: _groupAvatarUrl ??
+            _args?.groupAvatarUrl ??
+            widget.args.groupAvatarUrl,
         initialDescription: _groupDescription,
         initialOwnerId: _groupOwnerId,
         initialMemberCount: _groupMemberCount,
@@ -1058,10 +1062,10 @@ class _MessageActionSheet extends StatelessWidget {
                   Navigator.of(context).pop(_MessageAction.deleteForMe)),
           if (canDeleteAnyone)
             _ActionItem(
-              icon: Icons.delete_forever_rounded,
-              label: 'Excluir para todos',
-              onTap: () =>
-                  Navigator.of(context).pop(_MessageAction.deleteForEveryone)),
+                icon: Icons.delete_forever_rounded,
+                label: 'Excluir para todos',
+                onTap: () => Navigator.of(context)
+                    .pop(_MessageAction.deleteForEveryone)),
         ],
       ),
     );

@@ -140,7 +140,7 @@ class GroupProfileRouteArgs {
   final String groupId;
   final String initialName;
   final String? initialAvatarUrl;
-  final String initialDescription;
+  final String? initialDescription;
   final String? initialOwnerId;
-  final int initialMemberCount;
+  final int? initialMemberCount;
 }

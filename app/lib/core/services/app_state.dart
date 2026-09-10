@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 
 import '../../data/api_config.dart';
+import '../../data/dtos/dtos.dart';
 import '../../data/repositories/repositories.dart';
 import '../../data/search_history_store.dart';
 import '../../data/services.dart';
@@ -1104,7 +1105,7 @@ class AppState extends ChangeNotifier {
   /// and any open conversation AppBar update immediately.
 
   Future<GroupHeader> updateGroup(
-    String groupId,, {
+    String groupId, {
     String? name,
     String? description,
   }) async {
@@ -1123,7 +1124,7 @@ class AppState extends ChangeNotifier {
   Future<GroupHeader> updateGroupAvatar(
     String groupId,
     String avatarUrl,
-  }) async {
+  ) async {
     final header = await _chat.updateGroupAvatar(groupId, avatarUrl);
     _upsertGroupHeader(header);
     notifyListeners();
@@ -1133,7 +1134,7 @@ class AppState extends ChangeNotifier {
   /// Owner-only member addition. Refreshes the caller's cached group item
   /// (the server response embeds the fresh member count).
   Future<void> addGroupMember(String groupId, String newUserId,) async {
-    final group = await _chat.addGroupMember(groupId,, newUserId);
+    final group = await _chat.addGroupMember(groupId, newUserId);
     final idx = _groups.indexWhere((g) => g.id == group.id);
     if (idx != -1) _groups[idx] = group;
     notifyListeners();
