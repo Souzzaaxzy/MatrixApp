@@ -12,6 +12,7 @@ import '../../core/widgets/framed_avatar.dart';
 import '../../core/widgets/hud_label.dart';
 import '../../core/widgets/matrix_button.dart';
 import '../../core/widgets/matrix_text_field.dart';
+import '../../core/utils/profile_navigation.dart';
 import '../../core/widgets/nickname_renderer.dart';
 import '../../core/widgets/user_avatar.dart';
 import '../../data/api_config.dart';
@@ -313,20 +314,24 @@ class _GroupProfileScreenState extends State<GroupProfileScreen> {
               style: AppTextStyles.hud
                   .copyWith(fontSize: 14, color: AppColors.techWhite)),
           const SizedBox(height: AppDimensions.spaceSm),
-          _AdminActionTile(
-            icon: Icons.badge_outlined,
-            label: 'Editar nome e descrição',
-            onTap: _editIdentity,
-          ),
-          _AdminActionTile(
-            icon: Icons.photo_camera_outlined,
-            label: 'Alterar foto do grupo',
-            onTap: _changeAvatar,
-          ),
-          _AdminActionTile(
-            icon: Icons.person_add_alt_1_rounded,
-            label: 'Adicionar membro',
-            onTap: _addMember,
+          _AdminActionsGrid(
+            actions: [
+              _AdminAction(
+                icon: Icons.badge_outlined,
+                label: 'Editar nome',
+                onTap: _editIdentity,
+              ),
+              _AdminAction(
+                icon: Icons.photo_camera_outlined,
+                label: 'Alterar foto',
+                onTap: _changeAvatar,
+              ),
+              _AdminAction(
+                icon: Icons.person_add_alt_1_rounded,
+                label: 'Adicionar',
+                onTap: _addMember,
+              ),
+            ],
           ),
         ],
         const SizedBox(height: AppDimensions.spaceLg),
@@ -353,6 +358,11 @@ class _GroupProfileScreenState extends State<GroupProfileScreen> {
     final isOwner = m.isOwner || (_ownerId != null && m.id == _ownerId);
     return ListTile(
       contentPadding: EdgeInsets.zero,
+      onTap: () => openProfileById(
+        context,
+        id: m.id,
+        nickname: m.nickname,
+      ),
       leading: UserAvatar(
         name: m.nickname,
         seed: m.nickname,
@@ -390,10 +400,54 @@ class _GroupProfileScreenState extends State<GroupProfileScreen> {
       appBar: AppBar(
         backgroundColor: AppColors.absoluteBlack,
         surfaceTintColor: Colors.transparent,
+        automaticallyImplyLeading: true,
+        leading: BackButton(
+          color: AppColors.holographicBlue,
+          onPressed: () => Navigator.of(context).maybePop(),
+        ),
         centerTitle: true,
         title: Text('Grupo', style: AppTextStyles.hud.copyWith(fontSize: 16)),
       ),
       body: SafeArea(child: _buildBody()),
+    );
+  }
+}
+
+/// A single admin action (icon + label + tap). Rendered as a square tile in
+/// a horizontal row (Etapa 4): organized in squares, responsive wrap, no
+/// horizontal overflow.
+class _AdminAction {
+  const _AdminAction({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+}
+
+/// Horizontal grid of admin action squares for the group owner. Uses a
+/// [Wrap] so small screens wrap gracefully instead of overflowing.
+class _AdminActionsGrid extends StatelessWidget {
+  const _AdminActionsGrid({required this.actions});
+
+  final List<_AdminAction> actions;
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: AppDimensions.spaceMd,
+      runSpacing: AppDimensions.spaceMd,
+      children: [
+        for (final action in actions)
+          _AdminActionTile(
+            icon: action.icon,
+            label: action.label,
+            onTap: action.onTap,
+          ),
+      ],
     );
   }
 }
@@ -411,22 +465,34 @@ class _AdminActionTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Material(
-        color: AppColors.cardSurface,
+    return Material(
+      color: AppColors.cardSurface,
+      borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
+      child: InkWell(
         borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
-        child: ListTile(
-          shape: RoundedRectangleBorder(
+        onTap: onTap,
+        child: Container(
+          width: 104,
+          padding: const EdgeInsets.symmetric(vertical: AppDimensions.spaceMd),
+          decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
-            side: BorderSide(color: AppColors.deepBlue),
+            border: Border.all(color: AppColors.deepBlue),
           ),
-          leading: Icon(icon, color: AppColors.holographicBlue),
-          title: Text(label,
-              style: AppTextStyles.body.copyWith(color: AppColors.techWhite)),
-          trailing: Icon(Icons.chevron_right_rounded,
-              color: AppColors.holographicBlue),
-          onTap: onTap,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, color: AppColors.holographicBlue, size: 26),
+              const SizedBox(height: 8),
+              Text(
+                label,
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: AppTextStyles.caption
+                    .copyWith(color: AppColors.techWhite, fontSize: 12),
+              ),
+            ],
+          ),
         ),
       ),
     );
