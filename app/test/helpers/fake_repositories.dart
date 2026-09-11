@@ -1222,4 +1222,20 @@ class _FakeChatRepository implements ChatRepository {
     _store.groups[groupId] = updated;
     return updated;
   }
+
+  @override
+  Future<GroupConversation> banGroupMember(
+    String groupId,
+    String targetUserId,
+  ) async {
+    final g = _store.groups[groupId];
+    if (g == null) {
+      throw const ApiException(
+          statusCode: 404, message: 'Grupo não encontrado.');
+    }
+    final updated = g.copyWith(
+        group: g.group.copyWith(memberCount: g.group.memberCount - 1));
+    _store.groups[groupId] = updated;
+    return updated;
+  }
 }

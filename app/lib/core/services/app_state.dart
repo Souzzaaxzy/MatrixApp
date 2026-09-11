@@ -1140,6 +1140,22 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Owner-only member removal (ban feature). Refreshes the caller's cached group
+  /// item (the server response embeds the fresh member count). Returns true on
+  /// success (the server re-validates owner permission and rejects banning the
+  /// OWNER — forge-proof).
+  Future<bool> banGroupMember(String groupId, String userId) async {
+    try {
+      final group = await _chat.banGroupMember(groupId, userId);
+      final idx = _groups.indexWhere((g) => g.id == group.id);
+      if (idx != -1) _groups[idx] = group;
+      notifyListeners();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// Replaces the cached group header fora single group (used by admin edits).
   void _upsertGroupHeader(GroupHeader header) {
     final idx = _groups.indexWhere((g) => g.id == header.id);

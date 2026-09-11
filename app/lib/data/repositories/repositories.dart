@@ -488,6 +488,21 @@ class ChatRepository {
         .toModel();
   }
 
+  /// Owner-only member BAN (server-authoritative soft-removal). The server
+  /// rejects non-owners and never bans the OWNER; a banned member loses
+  /// access immediately on every read/write path. Returns the refreshed
+  /// group item for the caller.
+  Future<GroupConversation> banGroupMember(
+    String groupId,
+    String targetUserId,
+  ) async {
+    final json = await _api.post<Map<String, dynamic>>(
+      '/api/groups/$groupId/members/$targetUserId/ban',
+    );
+    return GroupConversationDto.fromJson(json['group'] as Map<String, dynamic>)
+        .toModel();
+  }
+
   /// Latest messages of a group (same paginated, chronological shape as
   /// private messages — with the real sender embedded in every bubble).
   Future<({List<ChatMessage> messages, bool hasMore})> groupMessages(

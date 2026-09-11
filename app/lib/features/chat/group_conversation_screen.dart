@@ -470,6 +470,7 @@ class _GroupConversationScreenState extends State<GroupConversationScreen>
         _groupOwnerId!.isNotEmpty &&
         _state?.currentUser?.id == _groupOwnerId;
     final canDeleteAnyone = message.mine || isOwner;
+    final canBan = isOwner && !message.mine;
     final action = await showModalBottomSheet<_MessageAction>(
       context: context,
       useSafeArea: true,
@@ -479,6 +480,7 @@ class _GroupConversationScreenState extends State<GroupConversationScreen>
       builder: (_) => _MessageActionSheet(
         message: message,
         canDeleteAnyone: canDeleteAnyone,
+        canBan: canBan,
       ),
     );
     if (action == null || !mounted) return;
@@ -489,6 +491,8 @@ class _GroupConversationScreenState extends State<GroupConversationScreen>
         await _confirmDeleteForMe(message);
       case _MessageAction.deleteForEveryone:
         await _confirmDeleteForEveryone(message);
+      case _MessageAction.banUser:
+        await _confirmBanUser(message);
     }
   }
 
@@ -576,6 +580,55 @@ class _GroupConversationScreenState extends State<GroupConversationScreen>
     if (ok != true) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Não foi possível excluir a mensagem.')),
+      );
+    }
+  }
+
+  /// Owner-only action: ban the sender of [message] from the group. Shows a
+  /// confirmation before calling the server; the server re-validates the
+  /// owner permission and rejects banning the OWNER (forge-proof).
+  Future<void> _confirmBanUser(ChatMessage message) async {
+    if (!mounted) return;
+    final sender = message.sender;
+    final nickname = sender?.nickname ?? 'este usuário';
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.bluishBlack,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppDimensions.radiusLg),
+          side: BorderSide(color: AppColors.deepBlue),
+        ),
+        title: Text(
+          'Banir usuário?',
+          style: AppTextStyles.hud.copyWith(fontSize: 16, color: AppColors.techWhite),
+        ),
+        content: Text(
+          'Banir $nickname do grupo? Ele não poderá mais acessar nem enviar mensagens.',
+          style: AppTextStyles.bodyMuted,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text('Cancelar', style: TextStyle(color: AppColors.holographicBlue)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text('Banir', style: TextStyle(color: AppColors.error)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    final ok = await _state?.banGroupMember(_groupId, message.senderId);
+    if (!mounted) return;
+    if (ok != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$nickname foi banido do grupo.')),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Não foi possível banir o usuário.')),
       );
     }
   }
@@ -1119,12 +1172,13 @@ class _MessageContent extends StatelessWidget {
   }
 }
 
-enum _MessageAction { reply, deleteForMe, deleteForEveryone }
+enum _MessageAction { reply, deleteForMe, deleteForEveryone, banUser }
 
 class _MessageActionSheet extends StatelessWidget {
   const _MessageActionSheet({
     required this.message,
     this.canDeleteAnyone = false,
+    this.canBan = false,
   });
 
   final ChatMessage message;
@@ -1133,6 +1187,11 @@ class _MessageActionSheet extends StatelessWidget {
   /// sender of the message OR the group owner (server-validated). The
   /// menu hides the action otherwise (cosmetic only).
   final bool canDeleteAnyone;
+
+  /// Whether the session user (group owner) may BAN the sender of this
+  /// message. Only shown for OTHER participants' messages (never own, never
+  /// the owner). Server re-validates.
+  final bool canBan;
 
   @override
   Widget build(BuildContext context) {
@@ -1161,6 +1220,11 @@ class _MessageActionSheet extends StatelessWidget {
                 label: 'Excluir para todos',
                 onTap: () => Navigator.of(context)
                     .pop(_MessageAction.deleteForEveryone)),
+          if (canBan)
+            _ActionItem(
+                icon: Icons.block_rounded,
+                label: 'Banir usuário',
+                onTap: () => Navigator.of(context).pop(_MessageAction.banUser)),
         ],
       ),
     );
