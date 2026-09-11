@@ -679,9 +679,12 @@ class _GroupConversationScreenState extends State<GroupConversationScreen>
   /// is typing / recording audio, with plural/count handling, truncated to
   /// fit — never overflows whatever the name/count.
   Widget _buildActivityIndicator({double maxWidth = 160}) {
-    final typingNames = _typingUsers.map((u) => _typingNames[u] ?? 'Alguém').toList();
-    final recordingNames =
-        _recordingUsers.map((u) => _recordingNames[u] ?? 'Alguém').toList();
+    final typingNames = _typingUsers
+        .map((u) => displayNickname(_typingNames[u] ?? 'Alguém'))
+        .toList();
+    final recordingNames = _recordingUsers
+        .map((u) => displayNickname(_recordingNames[u] ?? 'Alguém'))
+        .toList();
     String? label;
     if (typingNames.isNotEmpty && recordingNames.isEmpty) {
       if (typingNames.length == 1) {
@@ -989,7 +992,7 @@ class _GroupMessageBubble extends StatelessWidget {
         children: [
           if (sender != null) ...[
             Text(
-              sender.nickname,
+              displayNickname(sender.nickname),
               style: AppTextStyles.caption.copyWith(
                 fontSize: 11,
                 color: AppColors.holographicBlue,

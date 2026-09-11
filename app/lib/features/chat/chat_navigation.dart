@@ -144,3 +144,18 @@ class GroupProfileRouteArgs {
   final String? initialOwnerId;
   final int? initialMemberCount;
 }
+
+/// Route arguments for the dedicated participants screen (Etapa 6). The
+/// group profile hands off its identity block so the screen renders instantly
+/// while it fetches the fresh member list from the server.
+class GroupMembersRouteArgs {
+  const GroupMembersRouteArgs({
+    required this.groupId,
+    required this.groupName,
+    this.ownerId,
+  });
+
+  final String groupId;
+  final String groupName;
+  final String? ownerId;
+}

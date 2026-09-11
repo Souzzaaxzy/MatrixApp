@@ -12,6 +12,7 @@ import '../features/chat/chat_screen.dart';
 import '../features/chat/conversation_screen.dart';
 import '../features/chat/create_group_screen.dart';
 import '../features/chat/group_conversation_screen.dart';
+import '../features/chat/group_members_screen.dart';
 import '../features/chat/group_profile_screen.dart';
 import '../features/profile/edit_profile_screen.dart';
 import '../features/profile/profile_screen.dart';
@@ -56,6 +57,11 @@ class AppRoutes {
   /// Group profile menu. Argument: [GroupProfileRouteArgs]. Pushed
   /// when the group header (avatar/name)in the conversation is tapped..
   static const String groupProfile = '/home/chat/group/profile';
+
+  /// Dedicated participants list of a group. Argument:
+  /// [GroupMembersRouteArgs]. Pushed from the group profile "Participantes"
+  /// row — a simple back arrow returns to the group profile..
+  static const String groupMembers = '/home/chat/group/members';
 
   /// Group creation — pushed from the Chat tab's "+" FAB..
   static const String createGroup = '/home/chat/create-group';
@@ -112,6 +118,8 @@ Widget _buildPage(RouteSettings settings) {
       GroupConversationScreen(args: _groupArgs(settings.arguments)),
     AppRoutes.groupProfile =>
       GroupProfileScreen(args: _groupProfileArgs(settings.arguments)),
+    AppRoutes.groupMembers =>
+      GroupMembersScreen(args: _groupMembersArgs(settings.arguments)),
     AppRoutes.conversation =>
       ConversationScreen(args: _conversationArgs(settings.arguments)),
     _ => HomeScreen(), // defensive fallback — never a 404 page
@@ -133,6 +141,15 @@ GroupProfileRouteArgs _groupProfileArgs(Object? arg) {
   return GroupProfileRouteArgs(
     groupId: '',
     initialName: '',
+  );
+}
+
+GroupMembersRouteArgs _groupMembersArgs(Object? arg) {
+  if (arg is GroupMembersRouteArgs) return arg;
+
+  return GroupMembersRouteArgs(
+    groupId: '',
+    groupName: '',
   );
 }
 

@@ -11,12 +11,13 @@ import '../../core/widgets/app_state_scope.dart';
 import '../../core/widgets/framed_avatar.dart';
 import '../../core/widgets/hud_label.dart';
 import '../../core/widgets/matrix_button.dart';
+import '../../core/utils/chat_format.dart';
 import '../../core/widgets/matrix_text_field.dart';
-import '../../core/utils/profile_navigation.dart';
 import '../../core/widgets/nickname_renderer.dart';
 import '../../core/widgets/user_avatar.dart';
 import '../../data/api_config.dart';
 import '../../data/dtos/dtos.dart';
+import '../../app/routes.dart';
 import '../../data/services.dart';
 import '../../models/conversation.dart';
 import '../../models/matrix_user.dart';
@@ -232,7 +233,7 @@ class _GroupProfileScreenState extends State<GroupProfileScreen> {
       await state.addGroupMember(_groupId, chosen.userId);
       await _refreshSilent();
       messenger.showSnackBar(
-        SnackBar(content: Text('${chosen.nickname} entrou no grupo.')),
+        SnackBar(content: Text('${displayNickname(chosen.nickname)} entrou no grupo.')),
       );
     } on ApiException catch (e) {
       messenger.showSnackBar(SnackBar(content: Text(e.message)));
@@ -300,20 +301,8 @@ class _GroupProfileScreenState extends State<GroupProfileScreen> {
             ),
           ),
         ],
-        const SizedBox(height: 8),
-        Center(
-          child: Text(
-            '$_memberCount membro${_memberCount == 1 ? '' : 's'}',
-            style: AppTextStyles.caption
-                .copyWith(color: AppColors.holographicBlue),
-          ),
-        ),
         if (_isOwner) ...[
           const SizedBox(height: AppDimensions.spaceLg),
-          Text('Administração',
-              style: AppTextStyles.hud
-                  .copyWith(fontSize: 14, color: AppColors.techWhite)),
-          const SizedBox(height: AppDimensions.spaceSm),
           _AdminActionsGrid(
             actions: [
               _AdminAction(
@@ -335,61 +324,30 @@ class _GroupProfileScreenState extends State<GroupProfileScreen> {
           ),
         ],
         const SizedBox(height: AppDimensions.spaceLg),
-        Text('Participantes',
-            style: AppTextStyles.hud
-                .copyWith(fontSize: 14, color: AppColors.techWhite)),
-        const SizedBox(height: AppDimensions.spaceSm),
-        if (_members.isEmpty)
-          Padding(
-            padding: const EdgeInsets.all(AppDimensions.spaceMd),
-            child: Center(
-              child:
-                  Text('Nenhum participante.', style: AppTextStyles.bodyMuted),
-            ),
-          )
-        else
-          ..._members.map(_memberTile),
+        Center(
+          child: Text(
+            '$_memberCount membro${_memberCount == 1 ? '' : 's'}',
+            style: AppTextStyles.caption
+                .copyWith(color: AppColors.holographicBlue),
+          ),
+        ),
+        const SizedBox(height: AppDimensions.spaceLg),
+        _ParticipantesTile(
+          memberCount: _memberCount,
+          onTap: () {
+            if (_groupId.isEmpty) return;
+            Navigator.of(context).pushNamed(
+              AppRoutes.groupMembers,
+              arguments: GroupMembersRouteArgs(
+                groupId: _groupId,
+                groupName: _name ?? '',
+                ownerId: _ownerId,
+              ),
+            );
+          },
+        ),
         const SizedBox(height: AppDimensions.spaceXxl),
       ],
-    );
-  }
-
-  Widget _memberTile(GroupMemberInfoModel m) {
-    final isOwner = m.isOwner || (_ownerId != null && m.id == _ownerId);
-    return ListTile(
-      contentPadding: EdgeInsets.zero,
-      onTap: () => openProfileById(
-        context,
-        id: m.id,
-        nickname: m.nickname,
-      ),
-      leading: UserAvatar(
-        name: m.nickname,
-        seed: m.nickname,
-        imageUrl: m.avatarUrl,
-        size: 44,
-      ),
-      title: Text(
-        m.nickname,
-        style: AppTextStyles.body.copyWith(color: AppColors.techWhite),
-      ),
-      trailing: isOwner
-          ? Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: AppColors.holographicBlue.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(999),
-                border: Border.all(
-                  color: AppColors.holographicBlue.withValues(alpha: 0.5),
-                ),
-              ),
-              child: Text(
-                'Dono do grupo',
-                style: AppTextStyles.caption
-                    .copyWith(fontSize: 11, color: AppColors.holographicBlue),
-              ),
-            )
-          : null,
     );
   }
 
@@ -684,7 +642,7 @@ class _AddMemberSheetState extends State<_AddMemberSheet> {
                           ),
                         ),
                         title: NicknameRenderer(
-                          u.nickname,
+                          displayNickname(u.nickname),
                           baseStyle: AppTextStyles.body.copyWith(fontSize: 15),
                           background: AppColors.bluishBlack,
                           nameColor: u.nameColor,
@@ -713,43 +671,62 @@ class _GroupAvatar extends StatelessWidget {
   final String? url;
 
   final String name;
+
   final double size;
 
   @override
   Widget build(BuildContext context) {
-    if (url != null && url!.isNotEmpty) {
-      return ClipOval(
-        child: SizedBox(
-          width: size,
-          height: size,
-          child: Image.network(
-            url!,
-            fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) => _fallback(),
+    return UserAvatar(
+      name: name.isEmpty ? 'G' : name,
+      seed: name,
+      imageUrl: (url == null || url!.isEmpty) ? null : url,
+      size: size,
+    );
+  }
+}
+
+/// Navigable row that opens the dedicated participants screen (Etapa 6).
+class _ParticipantesTile extends StatelessWidget {
+  const _ParticipantesTile({required this.memberCount, required this.onTap});
+
+  final int memberCount;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.cardSurface,
+      borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+              horizontal: AppDimensions.spaceLg,
+              vertical: AppDimensions.spaceMd,
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.group_rounded, color: AppColors.holographicBlue,
+                  size: 26),
+              const SizedBox(width: AppDimensions.spaceMd),
+              Expanded(
+                child: Text(
+                  'Participantes',
+                  style: AppTextStyles.body.copyWith(color: AppColors.techWhite),
+                ),
+              ),
+              Text(
+                '$memberCount membro${memberCount == 1 ? '' : 's'}',
+                style: AppTextStyles.caption
+                    .copyWith(color: AppColors.holographicBlue),
+              ),
+              const SizedBox(width: AppDimensions.spaceSm),
+              Icon(Icons.chevron_right_rounded,
+                  color: AppColors.holographicBlue, size: 22),
+            ],
           ),
         ),
-      );
-    }
-    return _fallback();
-  }
-
-  Widget _fallback() {
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        gradient: LinearGradient(
-          colors: [AppColors.deepBlue, AppColors.holographicBlue],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-      ),
-      alignment: Alignment.center,
-      child: Text(
-        name.isEmpty ? 'G' : name.substring(0, 1).toUpperCase(),
-        style: AppTextStyles.hud
-            .copyWith(color: AppColors.techWhite, fontSize: size * 0.34),
       ),
     );
   }

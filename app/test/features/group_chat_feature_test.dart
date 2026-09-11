@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:matrix_app/core/services/app_state.dart';
 import 'package:matrix_app/core/widgets/user_avatar.dart';
 import 'package:matrix_app/features/chat/chat_navigation.dart';
+import 'package:matrix_app/features/chat/chat_screen.dart';
 import 'package:matrix_app/features/chat/group_conversation_screen.dart';
 import 'package:matrix_app/features/chat/group_profile_screen.dart';
 import 'package:matrix_app/features/profile/profile_screen.dart';
@@ -72,6 +73,45 @@ Widget _groupScreen(String groupId, String name, String? avatar) {
 }
 
 void main() {
+  group('Group avatar sync (Etapa 3)', () {
+    testWidgets('group photo appears in the Chat list, in the conversation and in the profile',
+        (tester) async {
+      final state = await seededGroup(avatarUrl: '/static/g1.png');
+      await pumpMatrixApp(
+        tester,
+        const ChatScreen(),
+        state: state,
+      );
+      await tester.pumpAndSettle();
+
+      // The group tile uses the real photo (UserAvatar with imageUrl), below
+      // the friends/conversas sections — scroll until it is visible..
+      await tester.scrollUntilVisible(
+        find.text('Equipe MATRIX'),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pumpAndSettle();
+      expect(find.byType(UserAvatar), findsWidgets);
+
+      // Opens the group conversation → the header shows the same photo block.
+      await tester.tap(find.text('Equipe MATRIX'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(UserAvatar), findsWidgets);
+
+      // Opens the group profile from the header → the photo shows there too.
+      await tester.tap(find.text('Equipe MATRIX').first);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(UserAvatar), findsWidgets);
+    });
+  });
+
   group('GroupConversationScreen header', () {
     testWidgets('shows back arrow, group photo,name and member count',
         (tester) async {
@@ -235,8 +275,16 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('joao'), findsWidgets);
+      // Opens the dedicated participants screen.
+      await tester.tap(find.text('Participantes'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pumpAndSettle();
 
+      expect(find.text('joao'), findsWidgets);
+      expect(find.byType(BackButton), findsWidgets);
+
+      // Tap the member → opens the correct profile.
       await tester.tap(find.text('joao').first);
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
@@ -261,6 +309,12 @@ void main() {
         ),
         state: state,
       );
+      await tester.pumpAndSettle();
+
+      // Opens the participants screen — no "@" prefix anywhere..
+      await tester.tap(find.text('Participantes'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
       await tester.pumpAndSettle();
 
       expect(find.textContaining('@joao'), findsNothing);

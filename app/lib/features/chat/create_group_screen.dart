@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_dimensions.dart';
 import '../../app/theme/app_text_styles.dart';
+import '../../core/utils/chat_format.dart';
 import '../../core/widgets/matrix_card.dart';
 import '../../data/api_config.dart';
 import '../../data/services.dart';
@@ -209,7 +210,7 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
                           imageUrl: u.avatarUrl,
                           size: 20,
                         ),
-                        label: Text(u.nickname),
+                        label: Text(displayNickname(u.nickname)),
                         labelStyle: AppTextStyles.caption
                             .copyWith(color: AppColors.techWhite),
                         backgroundColor: AppColors.cardSurface,
@@ -340,7 +341,7 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         NicknameRenderer(
-                          u.nickname,
+                          displayNickname(u.nickname),
                           baseStyle: AppTextStyles.h3.copyWith(fontSize: 14),
                           background: AppColors.cardSurface,
                           nameColor: u.nameColor,

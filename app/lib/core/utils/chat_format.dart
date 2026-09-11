@@ -4,6 +4,12 @@
 /// (UTC ISO-8601) and the CLIENT renders it in the device's local time
 /// zone. We never trust a clock sent by the client as the source of truth.
 library;
+/// Presentation-only nickname for group chat surfaces. The stored
+/// nickname never carries '@' (the server normalizes it away), but this
+/// guard removes any stray '@' so no user is ever displayed with the prefix
+/// inside a group (Etapa 7). The identifier/userId is NEVER used for
+/// display.
+String displayNickname(String nickname) => nickname.replaceAll('@', '');
 
 /// Formats a timestamp as a 24h local time (`HH:mm`) — used on each message
 /// and as the last-message time in the conversations list.
