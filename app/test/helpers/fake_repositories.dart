@@ -98,6 +98,9 @@ class FakeStore {
   /// server's GroupHidden rows.
   final List<String> groupHides = [];
 
+  /// Group member ids by group id (fake persistence: mirrors GroupMember rows).
+  final Map<String, Set<String>> groupMemberIds = {};
+
   FakeStore() {
     users = {
       'u0': MatrixUser(
@@ -1004,6 +1007,7 @@ class _FakeChatRepository implements ChatRepository {
     );
     _store.groups[id] = g;
     _store.groupMessagesById[id] = [];
+    _store.groupMemberIds[id] = {me, ...participantIds};
     return g;
   }
 
@@ -1118,10 +1122,13 @@ class _FakeChatRepository implements ChatRepository {
     final ownerId = g.group.createdById;
 
     final allUsers = _store.users.values.toList();
-    final candidates = [
-      ...allUsers.where((u) => u.id == ownerId),
-      ...allUsers.where((u) => u.id == me || u.id == ownerId),
-    ];
+    final memberIds = _store.groupMemberIds[groupId];
+    final candidates = memberIds != null && memberIds.isNotEmpty
+        ? (allUsers.where((u) => memberIds.contains(u.id)).toList())
+        : [
+            ...allUsers.where((u) => u.id == ownerId),
+            ...allUsers.where((u) => u.id == me || u.id == ownerId),
+          ];
 
     final seen = <String>{};
     final members = <GroupMemberInfoModel>[];

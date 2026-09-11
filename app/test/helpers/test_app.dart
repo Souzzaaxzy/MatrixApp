@@ -9,6 +9,9 @@ import 'package:matrix_app/features/auth/register/register_screen.dart';
 import 'package:matrix_app/features/chat/chat_navigation.dart';
 import 'package:matrix_app/features/chat/chat_screen.dart';
 import 'package:matrix_app/features/chat/conversation_screen.dart';
+import 'package:matrix_app/features/chat/create_group_screen.dart';
+import 'package:matrix_app/features/chat/group_conversation_screen.dart';
+import 'package:matrix_app/features/chat/group_profile_screen.dart';
 import 'package:matrix_app/features/create_post/create_post_screen.dart';
 import 'package:matrix_app/features/customizations/customizations_screen.dart';
 import 'package:matrix_app/features/home/home_screen.dart';
@@ -60,6 +63,19 @@ Future<void> pumpMatrixApp(
           AppRoutes.conversation: (context) {
             final args = ModalRoute.of(context)!.settings.arguments;
             if (args is ConversationRouteArgs) return ConversationScreen(args: args);
+            return const ChatScreen();
+          },
+          AppRoutes.createGroup: (_) => const CreateGroupScreen(),
+          AppRoutes.groupConversation: (context) {
+            final args = ModalRoute.of(context)!.settings.arguments;
+            if (args is GroupConversationRouteArgs) {
+              return GroupConversationScreen(args: args);
+            }
+            return const ChatScreen();
+          },
+          AppRoutes.groupProfile: (context) {
+            final args = ModalRoute.of(context)!.settings.arguments;
+            if (args is GroupProfileRouteArgs) return GroupProfileScreen(args: args);
             return const ChatScreen();
           },
         },

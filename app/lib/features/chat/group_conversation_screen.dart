@@ -32,7 +32,8 @@ class GroupConversationScreen extends StatefulWidget {
       _GroupConversationScreenState();
 }
 
-class _GroupConversationScreenState extends State<GroupConversationScreen> {
+class _GroupConversationScreenState extends State<GroupConversationScreen>
+    with WidgetsBindingObserver {
   static const _pagesize = 30;
 
   GroupConversationRouteArgs? _args;
@@ -117,6 +118,9 @@ class _GroupConversationScreenState extends State<GroupConversationScreen> {
       };
       _recorder.addListener(_recListener!);
     }
+    // Keyboard show/hide (and app-lifecycle changes) re-pin the follow-bottom
+    // so the composer never covers the latest bubble — same as the DM chat..
+    WidgetsBinding.instance.addObserver(this);
   }
 
   @override
@@ -140,6 +144,7 @@ class _GroupConversationScreenState extends State<GroupConversationScreen> {
     if (_typingLastSent) {
       _state?.sendGroupTyping(_groupId, false);
     }
+    WidgetsBinding.instance.removeObserver(this);
     _recorder.dispose();
     _input.dispose();
     _scroll.dispose();
@@ -181,8 +186,21 @@ class _GroupConversationScreenState extends State<GroupConversationScreen> {
     }
   }
 
-  /// Refreshes the header from the current AppState cache if available — the
-  /// cache is fed by the group list and by real-time `group_updated` frames, so
+  /// Keyboard show/hide (or window/metrics change) — re-pin to the
+  /// bottom ONLY when the user was already following the newest message, so
+  /// the composer never covers the latest bubble,while mid-thread positions
+  /// are preserved (no forced jump). Mirrors the DM conversation behavior..
+  @override
+  void didChangeMetrics() {
+    super.didChangeMetrics();
+    if (!mounted || !_scroll.hasClients || !_followBottom) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _followBottom) _jumpToBottom();
+    });
+  }
+
+  /// Refreshes the header from the current AppState cache if available —the
+  /// cache is fed by the group list and by real-time `group_updated` frames,, so
   /// the AppBar always reflects the persisted group identity (never a stale
   /// snapshot from the route argument)). Falls back to the route payload..
   void _applyFreshHeader() {
@@ -592,49 +610,63 @@ class _GroupConversationScreenState extends State<GroupConversationScreen> {
     final name = _groupName ?? _args?.groupName ?? widget.args.groupName;
     final avatar =
         _groupAvatarUrl ?? _args?.groupAvatarUrl ?? widget.args.groupAvatarUrl;
+    final title = GestureDetector(
+      onTap: _openGroupProfile,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _GroupAvatar(size: 40, url: avatar, name: name),
+          const SizedBox(width: AppDimensions.spaceMd),
+          Flexible(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTextStyles.hud.copyWith(
+                    fontSize: 17,
+                    color: AppColors.techWhite,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                if (_groupMemberCount > 0)
+                  Text(
+                    '$_groupMemberCount membro${_groupMemberCount == 1 ? '' : 's'}',
+                    style: AppTextStyles.caption.copyWith(
+                        fontSize:  11, color: AppColors.holographicBlue),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
 
     return Scaffold(
       backgroundColor: AppColors.absoluteBlack,
       // Default IME handling — the Scaffold resizes with the Android keyboard so
       // the composer sits directly above it (same proven behavior as the DM chat;
       // no fixed-pixel hacks for the nav bar or insets).
+      resizeToAvoidBottomInset: true,
       appBar: AppBar(
         backgroundColor: AppColors.absoluteBlack,
         surfaceTintColor: Colors.transparent,
-        automaticallyImplyLeading: true,
+        automaticallyImplyLeading: false,
         centerTitle: true,
-        toolbarHeight: kToolbarHeight + 52,
-        bottom: _buildActivityIndicator(),
-        title: GestureDetector(
-          onTap: _openGroupProfile,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _GroupAvatar(size: 72, url: avatar, name: name),
-              const SizedBox(height: 6),
-              Text(
-                name,
-                textAlign: TextAlign.center,
-                style: AppTextStyles.hud.copyWith(
-                  fontSize: 18,
-                  color: AppColors.techWhite,
-                  fontWeight: FontWeight.w600,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              if (_groupMemberCount > 0)
-                Padding(
-                  padding: const EdgeInsets.only(top: 2),
-                  child: Text(
-                    '$_groupMemberCount membro${_groupMemberCount == 1 ? '' : 's'}',
-                    style: AppTextStyles.caption.copyWith(
-                        fontSize: 11, color: AppColors.holographicBlue),
-                  ),
-                ),
-            ],
-          ),
+        leading: BackButton(
+          color: AppColors.holographicBlue,
+          onPressed: () => Navigator.of(context).maybePop(),
         ),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: AppDimensions.spaceSm),
+            child: _buildActivityIndicator(maxWidth: 140),
+          ),
+        ],
+        title: title,
       ),
       body: SafeArea(
         top: false,
@@ -646,7 +678,7 @@ class _GroupConversationScreenState extends State<GroupConversationScreen> {
   /// Builds the realtime activity indicator for the header (right area):who
   /// is typing / recording audio, with plural/count handling, truncated to
   /// fit — never overflows whatever the name/count.
-  PreferredSizeWidget _buildActivityIndicator() {
+  Widget _buildActivityIndicator({double maxWidth = 160}) {
     final typingNames = _typingUsers.map((u) => _typingNames[u] ?? 'Alguém').toList();
     final recordingNames =
         _recordingUsers.map((u) => _recordingNames[u] ?? 'Alguém').toList();
@@ -674,30 +706,27 @@ class _GroupConversationScreenState extends State<GroupConversationScreen> {
       }
     }
     final visible = label != null;
-    return PreferredSize(
-      preferredSize: Size.fromHeight(visible ? 24 : 0),
-      child: AnimatedSize(
-        duration: const Duration(milliseconds: 160),
-        curve: Curves.easeOut,
-        child: visible
-            ? SizedBox(
-                height: 24,
-                child: Center(
-                  child: Text(
-                    label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppTextStyles.caption.copyWith(
-                      fontSize: 12,
-                      color: AppColors.holographicBlue,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
+    return AnimatedSize(
+      duration: const Duration(milliseconds: 160),
+      curve: Curves.easeOut,
+      child: visible
+          ? ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: maxWidth),
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.end,
+                style: AppTextStyles.caption.copyWith(
+                  fontSize: 12,
+                  color: AppColors.holographicBlue,
+                  fontWeight: FontWeight.w600,
                 ),
-              )
-            : const SizedBox.shrink(),
-      ),
+              ),
+            )
+          : const SizedBox(width: 0, height: 0),
     );
+
   }
 
   /// Opens the group profile menu (stage 3). The header (avatar/name)
@@ -887,42 +916,11 @@ class _GroupAvatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (url != null && url!.isNotEmpty) {
-      return ClipOval(
-        child: SizedBox(
-          width: size,
-          height: size,
-          child: Image.network(
-            url!,
-            fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) => _fallback(),
-          ),
-        ),
-      );
-    }
-    return _fallback();
-  }
-
-  Widget _fallback() {
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        gradient: LinearGradient(
-          colors: [AppColors.deepBlue, AppColors.holographicBlue],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-      ),
-      alignment: Alignment.center,
-      child: Text(
-        (name ?? 'G').isEmpty
-            ? 'G'
-            : (name ?? 'G').substring(0, 1).toUpperCase(),
-        style: AppTextStyles.hud
-            .copyWith(color: AppColors.techWhite, fontSize: 14),
-      ),
+    return UserAvatar(
+      name: name ?? 'G',
+      seed: name,
+      imageUrl: (url == null || url!.isEmpty) ? null : url,
+      size: size,
     );
   }
 }
