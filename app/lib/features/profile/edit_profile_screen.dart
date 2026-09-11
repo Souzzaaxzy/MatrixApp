@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_dimensions.dart';
 import '../../app/theme/app_text_styles.dart';
+import '../../core/utils/gallery_picker.dart';
 import '../../core/utils/validators.dart';
 import '../../core/widgets/app_state_scope.dart';
 import '../../core/widgets/framed_avatar.dart';
@@ -94,12 +95,29 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     );
     if (source == null || !mounted) return;
 
-    final picked = await ImagePicker().pickImage(
-      source: source,
-      imageQuality: 85,
-      maxWidth: 1024,
-      maxHeight: 1024,
-    );
+    XFile? picked;
+    if (source == ImageSource.gallery) {
+      final result = await pickGalleryImage(
+        imageQuality: 85,
+        maxWidth: 1024,
+        maxHeight: 1024,
+      );
+      if (!mounted) return;
+      if (!result.isSuccess) {
+        if (!result.cancelled && result.error != null && result.error!.isNotEmpty) {
+          _showError(result.error!);
+        }
+        return;
+      }
+      picked = result.file;
+    } else {
+      picked = await ImagePicker().pickImage(
+        source: source,
+        imageQuality: 85,
+        maxWidth: 1024,
+        maxHeight: 1024,
+      );
+    }
     if (picked == null || !mounted) return;
 
     setState(() => _uploadingAvatar = true);

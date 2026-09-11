@@ -29,6 +29,7 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^5.0.0
+  image_picker_platform_interface: ^2.10.0
   just_audio_platform_interface: 4.6.0
 
 flutter:

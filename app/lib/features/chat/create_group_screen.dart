@@ -1,12 +1,12 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
 
 import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_dimensions.dart';
 import '../../app/theme/app_text_styles.dart';
 import '../../core/utils/chat_format.dart';
+import '../../core/utils/gallery_picker.dart';
 import '../../core/widgets/matrix_card.dart';
 import '../../data/api_config.dart';
 import '../../data/services.dart';
@@ -79,14 +79,18 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
     if (_pickingPhoto) return;
     _pickingPhoto = true;
     try {
-      final picker = ImagePicker();
-      final result = await picker.pickImage(
-        source: ImageSource.gallery,
-        imageQuality: 80,
-      );
-      if (result == null || !mounted) return;
+      final result = await pickGalleryImage(imageQuality: 80);
+      if (!mounted) return;
+      if (!result.isSuccess) {
+        if (!result.cancelled && result.error != null && result.error!.isNotEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(result.error!)),
+          );
+        }
+        return;
+      }
       setState(() {
-        _avatarPath = result.path;
+        _avatarPath = result.file!.path;
         _avatarUrl = null;
       });
     } finally {

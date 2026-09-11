@@ -2,11 +2,11 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
 
 import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_dimensions.dart';
 import '../../app/theme/app_text_styles.dart';
+import '../../core/utils/gallery_picker.dart';
 import '../../core/widgets/app_state_scope.dart';
 import '../../core/widgets/framed_avatar.dart';
 import '../../core/widgets/hud_label.dart';
@@ -161,18 +161,22 @@ class _GroupProfileScreenState extends State<GroupProfileScreen> {
 
   Future<void> _changeAvatar() async {
     if (_saving) return;
-    final picker = ImagePicker();
-    final result = await picker.pickImage(
-      source: ImageSource.gallery,
-      imageQuality: 80,
-    );
-    if (result == null || !mounted) return;
+    final result = await pickGalleryImage(imageQuality: 80);
+    if (!mounted) return;
+    if (!result.isSuccess) {
+      if (!result.cancelled && result.error != null && result.error!.isNotEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(result.error!)),
+        );
+      }
+      return;
+    }
     final state = AppStateScope.maybeOf(context);
     if (state == null) return;
     setState(() => _saving = true);
     final messenger = ScaffoldMessenger.of(context);
     try {
-      final url = await Services.instance.uploads.upload(File(result.path));
+      final url = await Services.instance.uploads.upload(File(result.file!.path));
       await state.updateGroupAvatar(_groupId, url);
       await _refreshSilent();
       messenger.showSnackBar(
