@@ -7,6 +7,7 @@ import '../../app/theme/app_dimensions.dart';
 import '../../app/theme/app_text_styles.dart';
 import '../../core/services/app_state.dart';
 import '../../core/utils/chat_format.dart';
+import '../../core/utils/profile_navigation.dart';
 import '../../core/widgets/app_state_scope.dart';
 import '../../core/widgets/hud_label.dart';
 import '../../core/widgets/matrix_button.dart';
@@ -976,6 +977,13 @@ class _GroupMessageBubble extends StatelessWidget {
   final VoidCallback? onLongPress;
   final ChatMessage? replyingTo;
 
+  /// Opens the REAL sender's profile (id/nickname come from the embedded
+  /// sender identity — never the session user, never client-inferred state).
+  void _openSenderProfile(BuildContext context, ChatUser sender) {
+    if (sender.id.isEmpty || sender.nickname.isEmpty) return;
+    openProfileById(context, id: sender.id, nickname: sender.nickname);
+  }
+
   @override
   Widget build(BuildContext context) {
     final sender = message.sender;
@@ -1001,12 +1009,16 @@ class _GroupMessageBubble extends StatelessWidget {
             mine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
         children: [
           if (sender != null) ...[
-            Text(
-              displayNickname(sender.nickname),
-              style: AppTextStyles.caption.copyWith(
-                fontSize: 11,
-                color: AppColors.holographicBlue,
-                fontWeight: FontWeight.w600,
+            GestureDetector(
+              onTap: () => _openSenderProfile(context, sender),
+              behavior: HitTestBehavior.opaque,
+              child: Text(
+                displayNickname(sender.nickname),
+                style: AppTextStyles.caption.copyWith(
+                  fontSize: 11,
+                  color: AppColors.holographicBlue,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
             const SizedBox(height: 2),
@@ -1035,11 +1047,17 @@ class _GroupMessageBubble extends StatelessWidget {
           if (!mine) ...[
             Padding(
               padding: const EdgeInsets.only(right: 6, bottom: 8),
-              child: UserAvatar(
-                name: sender?.nickname ?? '?',
-                seed: sender?.nickname,
-                imageUrl: sender?.avatarUrl,
-                size: 36,
+              child: GestureDetector(
+                onTap: sender == null
+                    ? null
+                    : () => _openSenderProfile(context, sender),
+                behavior: HitTestBehavior.opaque,
+                child: UserAvatar(
+                  name: sender?.nickname ?? '?',
+                  seed: sender?.nickname,
+                  imageUrl: sender?.avatarUrl,
+                  size: 36,
+                ),
               ),
             ),
           ],

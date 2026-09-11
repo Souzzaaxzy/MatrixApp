@@ -321,4 +321,27 @@ void main() {
       expect(find.text('joao'), findsWidgets);
     });
   });
+
+  group('GroupConversationScreen sender profile (Etapa 2)', () {
+    testWidgets('tapping the sender nickname opens the REAL sender profile',
+        (tester) async {
+      final state = await seededGroup(messages: const ['bom dia', 'ola!']);
+      await pumpMatrixApp(
+        tester,
+        _groupScreen('g1', 'Equipe MATRIX', null),
+        state: state,
+      );
+      await tester.pumpAndSettle();
+
+      // The messages are from 'u0' (owner/leonardo) e 'u2' (joao).
+      // Tapping the name of the OTHER user must open JOAO's profile (not the
+      // session user u0/leonardo).
+      await tester.tap(find.text('joao').first);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(find.byType(ProfileScreen), findsOneWidget);
+      expect(find.textContaining('joao'), findsWidgets);
+    });
+  });
 }
