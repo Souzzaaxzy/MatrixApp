@@ -246,6 +246,36 @@ analyze clean, APK builds (~54MB). CI green on main.
 
 - Servidor: seguir o repo `Souzzaaxzy/ServidorMtx` — não tocado nesta rodada.
 
+## Phase 7c — Group chat UI improvements (Etapas 1-7)
+- **Header da conversa de grupo** (`group_conversation_screen.dart`): seta
+  de voltar à esquerda, foto (40px) + nome + contagem de membros centralizados.
+  Indicador de atividade (digitando/gravando áudio) fica na `actions` do AppBar
+  (direita), truncado via `ConstrainedBox(maxWidth)` — nunca overflow. O
+  `_GroupAvatar` usa `UserAvatar` (CachedNetworkImage) — a foto real do grupo.
+- **Teclado (Etapa 2)**: `_GroupConversationScreenState` agora usa
+  `WidgetsBindingObserver` + `didChangeMetrics()` para re-pinar o scroll ao
+  fundo quando o teclado abre/fecha (mesmo comportamento do DM). Nada de
+  valores fixos — `resizeToAvoidBottomInset: true` + `SafeArea`.
+- **Foto do grupo (Etapa 3)**: a MESMA `avatarUrl` do `GroupHeader` alimenta a
+  aba de chats (`_GroupTile`), o cabeçalho da conversa e as configurações —
+  sem cópias independentes. O realtime `chat_group_updated` (AppState
+  `handleIncomingGroupUpdated`) atualiza os três locais ao vivo.
+- **Configurações do grupo (Etapa 4)**: `_AdminActionsGrid` (Wrap de
+  `_AdminActionTile` 104px em quadrados) logo abaixo do nome/descrição —
+  responsivo, sem overflow horizontal.
+- **Participantes (Etapas 5-6)**: nova tela dedicada `GroupMembersScreen`
+  (`AppRoutes.groupMembers`, args `GroupMembersRouteArgs`) com seta de voltar.
+  A `GroupProfileScreen` mostra um `_ParticipantesTile` que navega até ela.
+  Cada membro é clicável → `openProfileById` (id real, guard anti-duplicata).
+- **Sem "@" (Etapa 7)**: `displayNickname()` em `core/utils/chat_format.dart`
+  remove "@" apenas na apresentação (defesa em profundidade — o servidor já
+  normaliza). Aplicado em bolhas, indicadores de atividade, lista de membros,
+  add-member sheet e criação de grupo. Identificadores/API inalterados.
+- Testes: `test/features/group_chat_feature_test.dart` (9 testes) cobre
+  cabeçalho, indicadores, teclado/scroll, foto nos 3 locais, participantes
+  clicáveis e ausência de "@". Helper `test_app.dart` ganhou as rotas de
+  grupo; `fake_repositories.dart` ganhou `groupMemberIds` no FakeStore.
+
 ============================================================
 MATRIX — FLUXO OBRIGATÓRIO DE TRABALHO
 ============================================================
