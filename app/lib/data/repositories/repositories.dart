@@ -528,14 +528,22 @@ class ChatRepository {
   }
 
   /// Sends a VOICE group message (multipart, same rules as DMs).
+  /// May carry an optional [replyToMessageId] pointing at a SAME-group message.
+
   Future<ChatMessage> sendGroupVoiceMessage(
     String groupId,
     File audioFile, {
     required int durationMs,
+    String? replyToMessageId,
   }) async {
     final multipart = await MultipartFile.fromFile(audioFile.path);
+    final replyQuery = (replyToMessageId != null && replyToMessageId.isNotEmpty)
+        ? '&replyToMessageId=$replyToMessageId'
+        : '';
+    final uri =
+        '/api/groups/$groupId/voice?durationMs=$durationMs$replyQuery';
     final json = await _api.upload<Map<String, dynamic>>(
-      '/api/groups/$groupId/voice?durationMs=$durationMs',
+      uri,
       file: multipart,
     );
     return ChatMessageDto.fromJson(json['message'] as Map<String, dynamic>)
@@ -636,18 +644,25 @@ class ChatRepository {
         .toModel();
   }
 
-  /// Sends a VOICE message (AAC/m4a recorded locally) for [conversationId].
+  /// Sends a VOICE message (AAC/m4a recorded locally)for [conversationId].
   /// [durationMs] is the recorded length (3–60s, validated server-side). The
-  /// audio file rides as multipart; the duration is a query param. Returns
+  /// audio file rides as multipart; the duration is a query param. May carry
+  /// an optional [replyToMessageId] (same rules as text replies). Returns
   /// the persisted voice message (type === 'voice').
   Future<ChatMessage> sendVoice(
     String conversationId,
     File audioFile, {
     required int durationMs,
+    String? replyToMessageId,
   }) async {
     final multipart = await MultipartFile.fromFile(audioFile.path);
+    final replyQuery = (replyToMessageId != null && replyToMessageId.isNotEmpty)
+        ? '&replyToMessageId=$replyToMessageId'
+        : '';
+    final uri =
+        '/api/conversations/$conversationId/voice?durationMs=$durationMs$replyQuery';
     final json = await _api.upload<Map<String, dynamic>>(
-      '/api/conversations/$conversationId/voice?durationMs=$durationMs',
+      uri,
       file: multipart,
     );
     final raw = json['message'] as Map<String, dynamic>;

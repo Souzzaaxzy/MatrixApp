@@ -912,6 +912,7 @@ class _FakeChatRepository implements ChatRepository {
     String conversationId,
     File audioFile, {
     required int durationMs,
+    String? replyToMessageId,
   }) async {
     final me = _store.currentUserId;
     final message = ChatMessage(
@@ -924,6 +925,15 @@ class _FakeChatRepository implements ChatRepository {
       type: 'voice',
       audioUrl: 'memory://voice-${DateTime.now().microsecondsSinceEpoch}.m4a',
       durationMs: durationMs,
+      replyTo: replyToMessageId == null
+        ? null
+        : ReplyInfo(
+            id: replyToMessageId,
+            senderId: _store.currentUserId ?? "",
+            senderNickname: _store.currentUser.nickname,
+            content: "original",
+            exists: true,
+          ),
     );
     _store.chatMessagesByPair
         .putIfAbsent(conversationId, () => [])
@@ -1056,7 +1066,15 @@ class _FakeChatRepository implements ChatRepository {
       content: content,
       createdAt: DateTime.now(),
       mine: true,
-      replyTo: replyToMessageId == null ? null : null,
+      replyTo: replyToMessageId == null
+        ? null
+        : ReplyInfo(
+            id: replyToMessageId,
+            senderId: _store.currentUserId ?? "",
+            senderNickname: _store.currentUser.nickname,
+            content: "original",
+            exists: true,
+          ),
     );
     _store.groupMessagesById.putIfAbsent(groupId, () => []).add(message);
     return message;
@@ -1067,6 +1085,7 @@ class _FakeChatRepository implements ChatRepository {
     String groupId,
     File audioFile, {
     required int durationMs,
+    String? replyToMessageId,
   }) async {
     final me = _store.currentUserId;
     final message = ChatMessage(
@@ -1080,6 +1099,15 @@ class _FakeChatRepository implements ChatRepository {
       type: 'voice',
       audioUrl: 'memory://voice-${DateTime.now().microsecondsSinceEpoch}.m4a',
       durationMs: durationMs,
+      replyTo: replyToMessageId == null
+        ? null
+        : ReplyInfo(
+            id: replyToMessageId,
+            senderId: _store.currentUserId ?? "",
+            senderNickname: _store.currentUser.nickname,
+            content: "original",
+            exists: true,
+          ),
     );
     _store.groupMessagesById.putIfAbsent(groupId, () => []).add(message);
     return message;

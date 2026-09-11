@@ -418,11 +418,21 @@ class _GroupConversationScreenState extends State<GroupConversationScreen>
       return;
     }
     final durationMs = _recorder.elapsed.inMilliseconds.clamp(1000, 60000);
+    // An outgoing voice reply reuses the same reply reference as texts:the
+    // quote is captured BEFORE clearing so the audio bubble keeps its link.
+
+    final voiceReply = _replyTarget;
+    if (voiceReply != null) {
+      setState(() {
+        _replyTarget = null;
+      });
+    }
     try {
       final message = await _state!.sendGroupVoiceMessage(
         _groupId,
         file,
         durationMs: durationMs,
+        replyToMessageId: voiceReply?.id,
       );
       _appendMessage(message);
       unawaited(_state!.markGroupRead(_groupId));

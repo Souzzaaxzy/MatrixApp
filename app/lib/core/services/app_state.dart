@@ -1174,9 +1174,14 @@ class AppState extends ChangeNotifier {
     File audioFile, {
     required int durationMs,
     ChatUser? otherUser,
+    String? replyToMessageId,
   }) async {
-    final message = await _chat.sendVoice(conversationId, audioFile,
-        durationMs: durationMs);
+    final message = await _chat.sendVoice(
+      conversationId,
+      audioFile,
+      durationMs: durationMs,
+      replyToMessageId: replyToMessageId,
+    );
     _applyChatMessage(message, otherUser: otherUser ?? _peerOf(conversationId));
     // Same synchronous wake-up as [sendChatMessage]: the audio preview
     // must appear on the list without waiting for a refetch.
@@ -1210,9 +1215,14 @@ class AppState extends ChangeNotifier {
     String groupId,
     File audioFile, {
     required int durationMs,
+    String? replyToMessageId,
   }) async {
-    final message = await _chat.sendGroupVoiceMessage(groupId, audioFile,
-        durationMs: durationMs);
+    final message = await _chat.sendGroupVoiceMessage(
+      groupId,
+      audioFile,
+      durationMs: durationMs,
+      replyToMessageId: replyToMessageId,
+    );
     _applyChatMessage(message);
     notifyListeners();
     return message;

@@ -374,12 +374,22 @@ class _ConversationScreenState extends State<ConversationScreen>
       return;
     }
     final durationMs = _recorder.elapsed.inMilliseconds.clamp(1000, 60000);
+    // An outgoing voice reply reuses the same reply reference as texts: the
+    // quote is captured BEFORE clearing so the audio bubble keeps its link.
+    final voiceReply = _replyTarget;
+    if (voiceReply != null) {
+      setState(() {
+        _replyTarget = null;
+        _replyTargetIndex = null;
+      });
+    }
     try {
       final message = await _state!.sendVoiceMessage(
         conversationId,
         file,
         durationMs: durationMs,
         otherUser: _conversation?.otherUser ?? widget.args.otherUser,
+        replyToMessageId: voiceReply?.id,
       );
       _appendMessage(message);
       unawaited(_state!.markConversationRead(conversationId));
