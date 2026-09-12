@@ -125,6 +125,12 @@ class AppState extends ChangeNotifier {
   final _groupUpdated = StreamController<GroupUpdatedEvent>.broadcast();
   Stream<GroupUpdatedEvent> get onGroupUpdated => _groupUpdated.stream;
 
+  /// Real-time signal that the session user was BANNED from a group. The
+  /// server kicks them out; the app drops the group from the cache and
+  /// open group screens close themselves so nothing stays stale.
+  final _groupBanned = StreamController<GroupBannedEvent>.broadcast();
+  Stream<GroupBannedEvent> get onGroupBanned => _groupBanned.stream;
+
   /// Emits when a message in a conversation is deleted FOR EVERYONE by the
   /// peer (realtime). Open conversation screens remove the bubble live.
   final _chatMessageDeleted =
@@ -1313,6 +1319,18 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// A real-time `chat_group_banned` frame arrived → the session user was
+  /// removed from a group. Drop the group from the local cache, recompute
+  /// the unread badge, and notify open group screens so they close.
+  void handleIncomingGroupBanned(GroupBannedEvent event) {
+    if (_disposed) return;
+    if (event.groupId.isEmpty) return;
+    _groups.removeWhere((g) => g.id == event.groupId);
+    _recomputeUnreadBadge();
+    if (!_groupBanned.isClosed) _groupBanned.add(event);
+    notifyListeners();
+  }
+
   /// A real-time `comment_deleted` frame arrived → a comment was removed
   /// (by its owner or the post author). Open comment surfaces subscribe to
   /// [onCommentDeleted] to remove it live.
@@ -1702,6 +1720,8 @@ class AppState extends ChangeNotifier {
     _chatRecording.close();
     _chatRead.close();
     _chatMessageDeleted.close();
+    _groupUpdated.close();
+    _groupBanned.close();
     _commentDeleted.close();
     _friendsChanged.close();
     super.dispose();
@@ -1770,6 +1790,15 @@ class ChatMessageDeletedEvent {
   final String? conversationId;
   final String? groupId;
   final String messageId;
+}
+
+/// A realtime signal that the session user was BANNED from a group. Carries
+/// the group id + name so the UI can show a meaningful message and kick the
+/// user out of every open surface for that group.
+class GroupBannedEvent {
+  const GroupBannedEvent({required this.groupId, required this.groupName});
+  final String groupId;
+  final String groupName;
 }
 
 /// A realtime signal that a comment was deleted (by its owner or the post

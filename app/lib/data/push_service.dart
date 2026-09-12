@@ -57,6 +57,11 @@ class PushService {
   void Function(Map<String, dynamic> data)? onChatMessageDeleted;
   void Function(Map<String, dynamic> data)? onChatGroupUpdated;
 
+  /// Called when the session user was BANNED from a group (kind
+  /// `chat_group_banned`). Payload carries {groupId, groupName}; the UI
+  /// kicks the user out of the group live.
+  void Function(Map<String, dynamic> data)? onChatGroupBanned;
+
   /// Called when a comment was deleted (kind `comment_deleted`). Payload
   /// carries {postId, commentId}.
   void Function(Map<String, dynamic> data)? onCommentDeleted;
@@ -245,6 +250,12 @@ class PushService {
       final data =
           (message['data'] as Map?)?.cast<String, dynamic>() ?? const {};
       onChatGroupUpdated?.call(data);
+      return;
+    }
+    if (message['kind'] == 'chat_group_banned') {
+      final data =
+          (message['data'] as Map?)?.cast<String, dynamic>() ?? const {};
+      onChatGroupBanned?.call(data);
       return;
     }
     if (message['kind'] == 'comment_deleted') {

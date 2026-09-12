@@ -416,11 +416,20 @@ class _ConversationScreenState extends State<ConversationScreen>
   }
 
   /// Appends a message to the list (dedup by id) and scrolls to the bottom
-  /// when following it.
+  /// when following it. The jump happens AFTER the frame that lays out the
+  /// new bubble — jumping synchronously inside setState reads a stale
+  /// [maxScrollExtent] (the list hasn't sized the new child yet), which left
+  /// the newest message under the composer when the keyboard was open. This
+  /// one post-frame pin is the single scroll driver for send, incoming
+  /// realtime, reply-preview collapse and keyboard resizes in the same frame.
   void _appendMessage(ChatMessage message) {
     if (_messages.any((m) => m.id == message.id)) return; // dedupe
     setState(() => _messages.add(message));
-    if (_followBottom) _jumpToBottom();
+    if (_followBottom) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _jumpToBottom();
+      });
+    }
   }
 
   void _onRealtime(ChatMessage message) {
@@ -651,6 +660,26 @@ class _ConversationScreenState extends State<ConversationScreen>
       _replyTarget = null;
       _replyTargetIndex = null;
     });
+  }
+
+  /// Tapping a reply quote scrolls to the ORIGINAL message when it is
+  /// currently loaded in this conversation (the scroll only navigates when
+  /// the target exists — otherwise it is a no-op, never a full-list fetch).
+  void _openReplyTarget(String messageId) {
+    if (!mounted || !_scroll.hasClients) return;
+    for (var i = 0; i < _messages.length; i++) {
+      if (_messages[i].id == messageId) {
+        _followBottom = false; // explicitly navigating away from the bottom
+        // Estimate the target's offset: the list is chronological, so
+        // approximate by its proportional position. This is a pragmatic
+        // anchor (not a per-pixel calculation) that keeps the target in
+        // view without loading pages.
+        final extent = _scroll.position.maxScrollExtent;
+        final ratio = _messages.isEmpty ? 0.0 : i / (_messages.length - 1);
+        _scroll.jumpTo((extent * ratio).clamp(0.0, extent));
+        return;
+      }
+    }
   }
 
   void _jumpToBottom() {
@@ -1119,22 +1148,24 @@ class _ConversationScreenState extends State<ConversationScreen>
       final senderAvatar = m.mine ? null : (other.avatarUrl ?? other.nickname);
       // Avatar rule for OTHER-side bubbles (own never show one):
       //  * a reply or a voice message ALWAYS shows the avatar;
-      //  * a normal (text, non-reply] message shows when the previous
-      //    same-sender run was interrupted (sender change,, my own message,
-      //    voice or reply), OR when five consecutive normal bubbles already
-      //    showed it —the 6th starts a fresh 5-group again.
+      //  * a normal (text, non-reply) message shows when the previous
+      //    same-sender run was interrupted (sender change, my own message or
+      //    a reply), OR when five consecutive normal bubbles already showed
+      //    it — the 6th starts a fresh 5-group again. A voice message right
+      //    before does NOT interrupt: the voice already wore the avatar
+      //    itself, so the following normal continues the run (no redundant
+      //    avatar).
       final prev = i > 0 ? _messages[i - 1] : null;
       final prevSameNormalSender = prev != null &&
           !prev.mine &&
           prev.senderId == m.senderId &&
-          !prev.isVoice &&
           prev.replyTo == null;
       final interrupted = m.mine ||
           prev == null ||
           !prevSameNormalSender ||
-          m.isVoice ||
           m.replyTo != null;
-      final showAvatar = !m.mine && (interrupted || normalShownCounter >= 5);
+      final showAvatar = !m.mine &&
+          (interrupted || m.isVoice || normalShownCounter >= 5);
       if (m.mine) {
         normalShownCounter = 0;
       } else if (m.isVoice || m.replyTo != null) {
@@ -1157,6 +1188,7 @@ class _ConversationScreenState extends State<ConversationScreen>
         onStartReply: _startReply,
         onLongPress: () => _showMessageMenu(i),
         replySelected: _replyTargetIndex == i,
+        onOpenReplyTarget: _openReplyTarget,
       ));
     }
     return Listener(
@@ -1360,6 +1392,7 @@ class _MessageBubble extends StatelessWidget {
     required this.onStartReply,
     required this.onLongPress,
     this.replySelected = false,
+    this.onOpenReplyTarget,
   });
 
   final ChatMessage message;
@@ -1378,6 +1411,9 @@ class _MessageBubble extends StatelessWidget {
   final void Function(int index) onStartReply;
   final VoidCallback onLongPress;
   final bool replySelected;
+
+  /// Tapping a reply quote scrolls to the ORIGINAL message (when loaded).
+  final void Function(String messageId)? onOpenReplyTarget;
 
   static const _maxWidth = 300.0;
 
@@ -1418,46 +1454,53 @@ class _MessageBubble extends StatelessWidget {
         children: [
           // Reply quote (visual only — both the message content and the
           // original stay untouched; the preview is resolved server-side).
+          // Tapping the quote scrolls to the original message when it is
+          // currently loaded in this conversation.
           if (message.replyTo != null)
-            Container(
-              margin: const EdgeInsets.only(bottom: 6),
-              padding: const EdgeInsets.fromLTRB(10, 6, 10, 6),
-              decoration: BoxDecoration(
-                color: AppColors.absoluteBlack.withValues(alpha: 0.35),
-                borderRadius: BorderRadius.circular(AppDimensions.radiusSm),
-                border: Border(
-                  left: BorderSide(color: AppColors.electricBlue, width: 2),
+            GestureDetector(
+              onTap: onOpenReplyTarget == null
+                  ? null
+                  : () => onOpenReplyTarget!(message.replyTo!.id),
+              child: Container(
+                margin: const EdgeInsets.only(bottom: 6),
+                padding: const EdgeInsets.fromLTRB(10, 6, 10, 6),
+                decoration: BoxDecoration(
+                  color: AppColors.absoluteBlack.withValues(alpha: 0.35),
+                  borderRadius: BorderRadius.circular(AppDimensions.radiusSm),
+                  border: Border(
+                    left: BorderSide(color: AppColors.electricBlue, width: 2),
+                  ),
                 ),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    message.replyTo!.exists
-                        ? message.replyTo!.senderNickname
-                        : 'Mensagem apagada',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: AppColors.electricBlue,
-                      fontWeight: FontWeight.w800,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      message.replyTo!.exists
+                          ? message.replyTo!.senderNickname
+                          : 'Mensagem apagada',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: AppColors.electricBlue,
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 1),
-                  Text(
-                    message.replyTo!.exists
-                        ? message.replyTo!.content
-                        : '(a mensagem original foi apagada)',
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: mine
-                          ? AppColors.techWhite.withValues(alpha: 0.85)
-                          : AppColors.holographicBlue,
+                    const SizedBox(height: 1),
+                    Text(
+                      message.replyTo!.exists
+                          ? message.replyTo!.content
+                          : '(a mensagem original foi apagada)',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: mine
+                            ? AppColors.techWhite.withValues(alpha: 0.85)
+                            : AppColors.holographicBlue,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           if (message.isVoice)
@@ -2253,47 +2296,56 @@ class _MessageActionMenu extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Push the sheet fully above the keyboard / Android nav bar: the
+    // keyboard insets come from viewInsets, the nav-bar safe area is handled
+    // by useSafeArea on the route. Without the extra inset the sheet would
+    // sit behind an open keyboard and its last option could become
+    // unreachable on devices with gesture/3-button navigation.
+    final keyboardInset = MediaQuery.viewInsetsOf(context).bottom;
     return SafeArea(
-      child: Container(
-        margin: const EdgeInsets.all(AppDimensions.spaceMd),
-        padding: const EdgeInsets.symmetric(vertical: AppDimensions.spaceXs),
-        decoration: BoxDecoration(
-          color: AppColors.bluishBlack,
-          borderRadius: BorderRadius.circular(AppDimensions.radiusXl),
-          border: Border.all(color: AppColors.deepBlue),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.4),
-              blurRadius: 20,
-            ),
-          ],
-        ),
-        child: Material(
-          color: Colors.transparent,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _ActionItem(
-                icon: Icons.reply_rounded,
-                label: 'Responder',
-                onTap: () => Navigator.of(context).pop(_MessageAction.reply),
-              ),
-              _ActionItem(
-                icon: Icons.remove_circle_outline_rounded,
-                iconColor: AppColors.holographicBlue,
-                label: 'Excluir',
-                hint: 'só para mim',
-                onTap: () =>
-                    Navigator.of(context).pop(_MessageAction.deleteForMe),
-              ),
-              _ActionItem(
-                icon: Icons.delete_forever_rounded,
-                iconColor: AppColors.error,
-                label: 'Excluir para todos',
-                onTap: () =>
-                    Navigator.of(context).pop(_MessageAction.deleteForEveryone),
+      child: Padding(
+        padding: EdgeInsets.only(bottom: keyboardInset),
+        child: Container(
+          margin: const EdgeInsets.all(AppDimensions.spaceMd),
+          padding: const EdgeInsets.symmetric(vertical: AppDimensions.spaceXs),
+          decoration: BoxDecoration(
+            color: AppColors.bluishBlack,
+            borderRadius: BorderRadius.circular(AppDimensions.radiusXl),
+            border: Border.all(color: AppColors.deepBlue),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.4),
+                blurRadius: 20,
               ),
             ],
+          ),
+          child: Material(
+            color: Colors.transparent,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _ActionItem(
+                  icon: Icons.reply_rounded,
+                  label: 'Responder',
+                  onTap: () => Navigator.of(context).pop(_MessageAction.reply),
+                ),
+                _ActionItem(
+                  icon: Icons.remove_circle_outline_rounded,
+                  iconColor: AppColors.holographicBlue,
+                  label: 'Excluir',
+                  hint: 'só para mim',
+                  onTap: () =>
+                      Navigator.of(context).pop(_MessageAction.deleteForMe),
+                ),
+                _ActionItem(
+                  icon: Icons.delete_forever_rounded,
+                  iconColor: AppColors.error,
+                  label: 'Excluir para todos',
+                  onTap: () => Navigator.of(context)
+                      .pop(_MessageAction.deleteForEveryone),
+                ),
+              ],
+            ),
           ),
         ),
       ),

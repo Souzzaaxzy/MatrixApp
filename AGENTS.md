@@ -22,9 +22,9 @@ MATRIX 💤 — cyberpunk futuristic social platform. Split across two repos:
 ### Flutter (run inside `app/`)
 - deps: `flutter pub get`
 - analyze: `flutter analyze` (must pass with no issues)
-- test: `flutter test` (70 tests)
+- test: `flutter test` (259 tests)
 - build APK: `flutter build apk --release` →
-  `build/app/outputs/flutter-apk/app-release.apk` (~54MB)
+  `build/app/outputs/flutter-apk/app-release.apk` (~70MB)
 
 ### Server
 The server is in `Souzzaaxzy/ServidorMtx`. Commands there:

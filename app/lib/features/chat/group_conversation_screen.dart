@@ -66,8 +66,9 @@ class _GroupConversationScreenState extends State<GroupConversationScreen>
   StreamSubscription<ChatRecordingEvent>? _recordingSub;
   StreamSubscription<ChatReadEvent>? _readSub;
   StreamSubscription<ChatMessageDeletedEvent>? _deletedSub;
+  StreamSubscription<GroupBannedEvent>? _bannedSub;
 
-  final bool _followBottom = true;
+  bool _followBottom = true;
   final Set<String> _typingUsers = <String>{};
   final Map<String, String> _typingNames = <String, String>{};
   Timer? _typingAutoClear;
@@ -106,6 +107,8 @@ class _GroupConversationScreenState extends State<GroupConversationScreen>
       _deletedSub = state?.onChatMessageDeleted.listen(_onMessageDeleted);
       _groupSub?.cancel();
       _groupSub = state?.onGroupUpdated.listen(_onGroupUpdated);
+      _bannedSub?.cancel();
+      _bannedSub = state?.onGroupBanned.listen(_onGroupBanned);
     }
     if (!_loadRequested) {
       _loadRequested = true;
@@ -135,6 +138,7 @@ class _GroupConversationScreenState extends State<GroupConversationScreen>
     _readSub?.cancel();
     _deletedSub?.cancel();
     _groupSub?.cancel();
+    _bannedSub?.cancel();
     if (_recListener != null) {
       _recorder.removeListener(_recListener!);
       _recListener = null;
@@ -236,6 +240,39 @@ class _GroupConversationScreenState extends State<GroupConversationScreen>
     });
   }
 
+  /// The session user was BANNED from this group (realtime). The server
+  /// already revoked membership; close the screen so nothing stays stale.
+  void _onGroupBanned(GroupBannedEvent event) {
+    if (!mounted) return;
+    if (event.groupId != _groupId) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          event.groupName.isEmpty
+              ? 'Você foi banido deste grupo.'
+              : 'Você foi banido de "${event.groupName}".',
+        ),
+      ),
+    );
+    Navigator.of(context).maybePop();
+  }
+
+  /// Tapping a reply quote scrolls to the ORIGINAL message when it is
+  /// currently loaded in this conversation (no-op otherwise — never triggers
+  /// a full-list fetch).
+  void _openReplyTarget(String messageId) {
+    if (!mounted || !_scroll.hasClients) return;
+    for (var i = 0; i < _messages.length; i++) {
+      if (_messages[i].id == messageId) {
+        _followBottom = false; // explicitly navigating away from the bottom
+        final extent = _scroll.position.maxScrollExtent;
+        final ratio = _messages.isEmpty ? 0.0 : i / (_messages.length - 1);
+        _scroll.jumpTo((extent * ratio).clamp(0.0, extent));
+        return;
+      }
+    }
+  }
+
   Future<void> _loadOlderMessages() async {
     if (_loadingOlder || _messages.isEmpty || !_hasMore) return;
     _loadingOlder = true;
@@ -264,7 +301,17 @@ class _GroupConversationScreenState extends State<GroupConversationScreen>
   void _appendMessage(ChatMessage message) {
     if (_messages.any((m) => m.id == message.id)) return;
     setState(() => _messages.add(message));
-    if (_followBottom) _jumpToBottom();
+    // Pin the newest message AFTER the frame that lays out the new bubble —
+    // jumping synchronously inside setState reads a stale maxScrollExtent
+    // (the list hasn't sized the new child yet), leaving the latest bubble
+    // under the composer when the keyboard is open. This single post-frame
+    // pin handles send, incoming realtime and keyboard resizes in the same
+    // frame (mirrors the DM conversation behavior).
+    if (_followBottom) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _jumpToBottom();
+      });
+    }
   }
 
   void _onRealtime(ChatMessage message) {
@@ -848,9 +895,35 @@ class _GroupConversationScreenState extends State<GroupConversationScreen>
             child: _messageList(),
           ),
         ),
+        // Reply-to preview above the composer when a message is selected —
+        // mirrors the DM chat so the user always sees what they're replying
+        // to and can cancel with the ✕.
+        AnimatedSwitcher(
+          duration: const Duration(milliseconds: 200),
+          transitionBuilder: (child, anim) => FadeTransition(
+            opacity: anim,
+            child: SlideTransition(
+              position:
+                  Tween(begin: const Offset(0, 0.05), end: Offset.zero)
+                      .animate(anim),
+              child: child,
+            ),
+          ),
+          child: _replyTarget != null
+              ? _GroupReplyPreviewBar(
+                  key: ValueKey(_replyTarget!.id),
+                  target: _replyTarget!,
+                  onCancel: _cancelReply,
+                )
+              : const SizedBox.shrink(),
+        ),
         _composer(),
       ],
     );
+  }
+
+  void _cancelReply() {
+    setState(() => _replyTarget = null);
   }
 
   Widget _messageList() {
@@ -880,6 +953,7 @@ class _GroupConversationScreenState extends State<GroupConversationScreen>
         mine: m.senderId == _state?.currentUser?.id,
         onLongPress: () => _showMessageMenu(i),
         replyingTo: (_replyTarget?.id == m.id) ? _replyTarget : null,
+        onOpenReplyTarget: _openReplyTarget,
       ));
     }
     return ListView.builder(
@@ -1023,12 +1097,16 @@ class _GroupMessageBubble extends StatelessWidget {
     required this.mine,
     this.onLongPress,
     this.replyingTo,
+    this.onOpenReplyTarget,
   });
 
   final ChatMessage message;
   final bool mine;
   final VoidCallback? onLongPress;
   final ChatMessage? replyingTo;
+
+  /// Tapping a reply quote scrolls to the ORIGINAL message (when loaded).
+  final void Function(String messageId)? onOpenReplyTarget;
 
   /// Opens the REAL sender's profile (id/nickname come from the embedded
   /// sender identity — never the session user, never client-inferred state).
@@ -1077,6 +1155,55 @@ class _GroupMessageBubble extends StatelessWidget {
             const SizedBox(height: 2),
           ],
           if (replyingTo != null) _ReplyQuote(reply: replyingTo!),
+          // The server-resolved original this message answers (received
+          // replies carry it on the wire). Tapping it locates the original
+          // message when it's loaded locally.
+          if (message.replyTo != null)
+            GestureDetector(
+              onTap: onOpenReplyTarget == null
+                  ? null
+                  : () => onOpenReplyTarget!(message.replyTo!.id),
+              child: Container(
+                margin: const EdgeInsets.only(bottom: 6),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: AppColors.absoluteBlack.withValues(alpha: 0.5),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border(
+                    left: BorderSide(color: AppColors.holographicBlue, width: 3),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      message.replyTo!.exists
+                          ? message.replyTo!.senderNickname
+                          : 'Mensagem apagada',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTextStyles.caption.copyWith(
+                        fontSize: 10,
+                        color: AppColors.holographicBlue,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 1),
+                    Text(
+                      message.replyTo!.exists &&
+                              message.replyTo!.content.isNotEmpty
+                          ? message.replyTo!.content
+                          : '🎤 Áudio',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTextStyles.caption
+                          .copyWith(color: AppColors.techWhite),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           _MessageContent(message: message),
           if (!mine) ...[
             const SizedBox(height: 4),
@@ -1172,6 +1299,83 @@ class _MessageContent extends StatelessWidget {
   }
 }
 
+/// The "Respondendo a …" bar shown above the group composer while a reply is
+/// selected:the original message's author + truncated preview + a ✕ close.
+/// Mirrors the DM chat's reply-bar so the group flow feels identical.
+class _GroupReplyPreviewBar extends StatelessWidget {
+  const _GroupReplyPreviewBar({
+    super.key,
+    required this.target,
+    required this.onCancel,
+  });
+
+  final ChatMessage target;
+  final VoidCallback onCancel;
+
+  @override
+  Widget build(BuildContext context) {
+    final sender = target.sender;
+    final author = sender != null && sender.nickname.isNotEmpty
+        ? sender.nickname
+        : 'mensagem';
+    final preview = target.content.isNotEmpty ? target.content : '🎤 Áudio';
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.navBarBackground,
+        border: Border(
+          top: BorderSide(color: AppColors.holographicBlue, width: 1),
+        ),
+      ),
+      padding: const EdgeInsets.fromLTRB(
+        AppDimensions.spaceLg,
+        AppDimensions.spaceSm,
+        AppDimensions.spaceSm,
+        AppDimensions.spaceSm,
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.reply_rounded, color: AppColors.holographicBlue),
+          SizedBox(width: AppDimensions.spaceSm),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Respondendo a $author',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: AppColors.holographicBlue,
+                    fontWeight: FontWeight.w800,
+                    fontFamily: 'JetBrainsMono',
+                  ),
+                ),
+                const SizedBox(height: 1),
+                Text(
+                  '“$preview”',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTextStyles.caption.copyWith(
+                    color: AppColors.techWhite,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            icon: Icon(Icons.close_rounded,
+                color: AppColors.holographicBlue, size: 20),
+            onPressed: onCancel,
+            tooltip: 'Cancelar resposta',
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 enum _MessageAction { reply, deleteForMe, deleteForEveryone, banUser }
 
 class _MessageActionSheet extends StatelessWidget {
@@ -1195,37 +1399,47 @@ class _MessageActionSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.all(8),
-      padding: const EdgeInsets.symmetric(vertical: 12),
-      decoration: BoxDecoration(
-        color: AppColors.bluishBlack,
-        borderRadius: BorderRadius.circular(AppDimensions.radiusLg),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          _ActionItem(
-              icon: Icons.reply_rounded,
-              label: 'Responder',
-              onTap: () => Navigator.of(context).pop(_MessageAction.reply)),
-          _ActionItem(
-              icon: Icons.delete_outline_rounded,
-              label: 'Excluir para mim',
-              onTap: () =>
-                  Navigator.of(context).pop(_MessageAction.deleteForMe)),
-          if (canDeleteAnyone)
+    // Push the sheet fully above the keyboard / Android nav bar: the
+    // keyboard insets come from viewInsets, the nav-bar safe area is handled
+    // by useSafeArea on the route. Without the extra inset the sheet would
+    // sit behind an open keyboard and its last option could become
+    // unreachable on devices with gesture/3-button navigation.
+    final keyboardInset = MediaQuery.viewInsetsOf(context).bottom;
+    return Padding(
+      padding: EdgeInsets.only(bottom: keyboardInset),
+      child: Container(
+        margin: const EdgeInsets.all(8),
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        decoration: BoxDecoration(
+          color: AppColors.bluishBlack,
+          borderRadius: BorderRadius.circular(AppDimensions.radiusLg),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
             _ActionItem(
-                icon: Icons.delete_forever_rounded,
-                label: 'Excluir para todos',
-                onTap: () => Navigator.of(context)
-                    .pop(_MessageAction.deleteForEveryone)),
-          if (canBan)
+                icon: Icons.reply_rounded,
+                label: 'Responder',
+                onTap: () => Navigator.of(context).pop(_MessageAction.reply)),
             _ActionItem(
-                icon: Icons.block_rounded,
-                label: 'Banir usuário',
-                onTap: () => Navigator.of(context).pop(_MessageAction.banUser)),
-        ],
+                icon: Icons.delete_outline_rounded,
+                label: 'Excluir para mim',
+                onTap: () =>
+                    Navigator.of(context).pop(_MessageAction.deleteForMe)),
+            if (canDeleteAnyone)
+              _ActionItem(
+                  icon: Icons.delete_forever_rounded,
+                  label: 'Excluir para todos',
+                  onTap: () => Navigator.of(context)
+                      .pop(_MessageAction.deleteForEveryone)),
+            if (canBan)
+              _ActionItem(
+                  icon: Icons.block_rounded,
+                  label: 'Banir usuário',
+                  onTap: () =>
+                      Navigator.of(context).pop(_MessageAction.banUser)),
+          ],
+        ),
       ),
     );
   }

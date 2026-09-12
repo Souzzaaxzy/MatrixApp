@@ -37,6 +37,7 @@ class _MatrixAppState extends State<MatrixApp> {
       Services.instance.push.onChatRead = _onChatRead;
       Services.instance.push.onChatMessageDeleted = _onChatMessageDeleted;
       Services.instance.push.onChatGroupUpdated = _onChatGroupUpdated;
+      Services.instance.push.onChatGroupBanned = _onChatGroupBanned;
       Services.instance.push.onCommentDeleted = _onCommentDeleted;
     }
   }
@@ -73,6 +74,20 @@ class _MatrixAppState extends State<MatrixApp> {
     } catch (_) {
       // Malformed payload: ignore (the next list load refreshes it anyway).
     }
+  }
+
+  /// The session user was BANNED from a group (realtime). AppState drops
+  /// the group from the cache; open group screens are kicked via the
+  /// [AppState.onGroupBanned] stream.
+  void _onChatGroupBanned(Map<String, dynamic> data) {
+    final state = _state;
+    if (state == null) return;
+    final groupId = data['groupId'] as String? ?? '';
+    if (groupId.isEmpty) return;
+    state.handleIncomingGroupBanned(GroupBannedEvent(
+      groupId: groupId,
+      groupName: data['groupName'] as String? ?? '',
+    ));
   }
 
   void _onCommentDeleted(Map<String, dynamic> data) {
