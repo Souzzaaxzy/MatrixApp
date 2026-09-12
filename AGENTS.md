@@ -239,12 +239,47 @@ analyze clean, APK builds (~54MB). CI green on main.
 
 
 ## Status atuais
-- App: `flutter analyze` limpo e `flutter test` (237 testes, contagem atualizada)
-  passando, APK buildável via CI. — o AGENTS.md anterior listava 133; cresceu
+- App: `flutter analyze` limpo e `flutter test` (256 testes, contagem atualizada)
+  passando, APK buildável via CI. — o AGENTS.md anterior listava 237; cresceu
   com os fluxos de chats/grupos/voice adicionados entretanto.
 
 
-- Servidor: seguir o repo `Souzzaaxzy/ServidorMtx` — não tocado nesta rodada.
+- Servidor: `npm test` (212 testes, vitest) passando, `npm run lint` limpo,
+  `npm run build` (tsc) OK. Commit de testes das etapas 4-5 em `main`.
+
+## Phase 8 — Correções e melhorias restantes do sistema de grupos (Etapas 1-6)
+- **Etapa 1 — Galeria** (commit anterior): `pickGalleryImage()`
+  (`core/utils/gallery_picker.dart`) unificado — `READ_MEDIA_IMAGES`/legacy
+  storage via permission_handler, resize/compress (1600px/q85), previews e
+  rejeição sem travar; usado em foto de perfil, post, grupo.
+- **Etapa 2 — Mini menu de edição** (`group_profile_screen.dart`): ícone de
+  lápis (`Icons.edit_rounded`) na AppBar SÓ para o owner (`_isOwner` compara
+  `_ownerId` do grupo com `currentUser.id`). Abre bottom sheet `_EditGroupMenu`
+  com: Editar nome (`_NameEditDialog`, nome obrigatório), Editar foto
+  (`_changeAvatar` galeria→upload→`updateGroupAvatar`), Editar descrição
+  (`_DescriptionEditDialog`, texto opcional + "Remover descrição"). Persistência
+  via `updateGroup` (nome OU descrição isolados) + realtime `chat_group_updated`.
+- **Etapa 3 — Membros** (`group_profile_screen.dart` + `group_members_screen.dart`):
+  corpo do perfil agora mostra seção "Membros" com prévia inline (avatar+apelido+
+  badge Dono) + "Ver todos" navegando para `GroupMembersScreen`. O botão
+  "ADICIONAR MEMBRO" (owner-only) fica DENTRO de `GroupMembersScreen` e abre o
+  sheet compartilhado `AddMemberSheet` (`features/chat/add_member_sheet.dart`),
+  filtrando amigos fora do grupo. `groupInfo`/`addGroupMember` validados no
+  servidor — nunca só no APP.
+- **Etapa 4 — Exclusão de comentários**: servidor já valida `comment.userId ===
+  userId || post.userId === userId` (`deleteComment`). Novo teste no servidor
+  cobre o cenário obrigatório: User1 post, User2 comenta 1º, User3 depois —
+  User2 NÃO pode apagar o comentário do User3 (403); o autor do post pode (204);
+  User2 pode apagar o próprio. Ordem NÃO concede permissão.
+- **Etapa 5 — Exclusão de mensagens em grupo**: mesmo sistema do DM reutilizado
+  (`deleteGroupMessageForEveryone` valida owner para apagar de terceiro;
+  `deleteGroupMessageForMe` idempotente; realtime `chat_message_deleted` para
+  todos os membros). Novo teste no servidor: membro comum → 403 ao apagar de
+  terceiro; owner OK + broadcast; membro pode apagar a própria para todos.
+- **Gotchas test**: bottom sheets/dialogs precisam de `pump(300ms)` após o tap;
+  `find.text('Ver todos')` substitui o antigo 'Participantes' no perfil do grupo;
+  `seededGroup` aceita `sessionUserId` para simular não-owner. Depois de
+  `Navigator.pushNamed`, `_openMembers` faz `_refreshSilent()` ao voltar.
 
 ## Phase 7c — Group chat UI improvements (Etapas 1-7)
 - **Header da conversa de grupo** (`group_conversation_screen.dart`): seta
