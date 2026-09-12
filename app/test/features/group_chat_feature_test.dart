@@ -5,6 +5,7 @@ import 'package:matrix_app/core/widgets/user_avatar.dart';
 import 'package:matrix_app/features/chat/chat_navigation.dart';
 import 'package:matrix_app/features/chat/chat_screen.dart';
 import 'package:matrix_app/features/chat/group_conversation_screen.dart';
+import 'package:matrix_app/features/chat/group_members_screen.dart';
 import 'package:matrix_app/features/chat/group_profile_screen.dart';
 import 'package:matrix_app/features/profile/profile_screen.dart';
 import 'package:matrix_app/models/conversation.dart';
@@ -18,9 +19,11 @@ Future<AppState> seededGroup({
   String? groupName = 'Equipe MATRIX',
   String? avatarUrl,
   int memberCount = 3,
+  String? sessionUserId,
 }) async {
   final repos = FakeRepositories();
   final store = repos.store;
+  if (sessionUserId != null) store.currentUserId = sessionUserId;
   final id = 'g1';
   final g = GroupConversation(
     id: id,
@@ -276,7 +279,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Opens the dedicated participants screen.
-      await tester.tap(find.text('Participantes'));
+      await tester.tap(find.text('Ver todos'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
       await tester.pumpAndSettle();
@@ -312,7 +315,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Opens the participants screen — no "@" prefix anywhere..
-      await tester.tap(find.text('Participantes'));
+      await tester.tap(find.text('Ver todos'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
       await tester.pumpAndSettle();
@@ -333,7 +336,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // The messages are from 'u0' (owner/leonardo) e 'u2' (joao).
+      // The messages are from 'u0' (owner/leonardo) e 'u2' (joao..
       // Tapping the name of the OTHER user must open JOAO's profile (not the
       // session user u0/leonardo).
       await tester.tap(find.text('joao').first);
@@ -342,6 +345,95 @@ void main() {
 
       expect(find.byType(ProfileScreen), findsOneWidget);
       expect(find.textContaining('joao'), findsWidgets);
+    });
+  });
+
+  group('GroupProfileScreen edit menu (Etapa 2)', () {
+    testWidgets('owner sees pencil and can open the mini edit menu', (tester) async {
+      final state = await seededGroup();
+      await pumpMatrixApp(
+        tester,
+        GroupProfileScreen(
+          args: const GroupProfileRouteArgs(
+            groupId: 'g1',
+            initialName: 'Equipe MATRIX',
+            initialAvatarUrl: null,
+            initialDescription: 'Grupo de testes',
+            initialOwnerId: 'u0',
+            initialMemberCount: 3,
+          ),
+        ),
+        state: state,
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byIcon(Icons.edit_rounded), findsOneWidget);
+      await tester.tap(find.byIcon(Icons.edit_rounded));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pumpAndSettle();
+
+      expect(find.text('EDITAR GRUPO'), findsOneWidget);
+      expect(find.text('Editar nome'), findsOneWidget);
+      expect(find.text('Editar foto'), findsOneWidget);
+      expect(find.text('Editar descrição'), findsOneWidget);
+
+      // Cancelling closes the menu without side effects..
+      await tester.tapAt(const Offset(10, 10));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pumpAndSettle();
+      expect(find.text('EDITAR GRUPO'), findsNothing);
+    });
+
+    testWidgets('non-owner does not see the edit pencil', (tester) async {
+      final state = await seededGroup(sessionUserId: 'u2');
+      await pumpMatrixApp(
+        tester,
+        GroupProfileScreen(
+          args: const GroupProfileRouteArgs(
+            groupId: 'g1',
+            initialName: 'Equipe MATRIX',
+            initialAvatarUrl: null,
+            initialDescription: 'Grupo de testes',
+            initialOwnerId: 'u9',
+            initialMemberCount: 3,
+          ),
+        ),
+        state: state,
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byIcon(Icons.edit_rounded), findsNothing);
+    });
+  });
+
+  group('GroupMembersScreen add member (Etapa 3)', () {
+    testWidgets('owner sees the ADICIONAR MEMBRO button in the members list',
+        (tester) async {
+      final state = await seededGroup();
+      await pumpMatrixApp(
+        tester,
+        GroupMembersScreen(
+          args: const GroupMembersRouteArgs(
+            groupId: 'g1',
+            groupName: 'Equipe MATRIX',
+            ownerId: 'u0',
+          ),
+        ),
+        state: state,
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('ADICIONAR MEMBRO'), findsOneWidget);
+
+      // Opens the picker sheet with the owner's friends (excluding existing members..
+      await tester.tap(find.text('ADICIONAR MEMBRO'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pumpAndSettle();
+
+      expect(find.text('ADICIONAR MEMBRO'), findsWidgets);
     });
   });
 }

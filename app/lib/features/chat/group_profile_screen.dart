@@ -6,21 +6,19 @@ import 'package:flutter/material.dart';
 import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_dimensions.dart';
 import '../../app/theme/app_text_styles.dart';
+import '../../core/utils/chat_format.dart';
 import '../../core/utils/gallery_picker.dart';
+import '../../core/utils/profile_navigation.dart';
 import '../../core/widgets/app_state_scope.dart';
-import '../../core/widgets/framed_avatar.dart';
 import '../../core/widgets/hud_label.dart';
 import '../../core/widgets/matrix_button.dart';
-import '../../core/utils/chat_format.dart';
 import '../../core/widgets/matrix_text_field.dart';
-import '../../core/widgets/nickname_renderer.dart';
 import '../../core/widgets/user_avatar.dart';
 import '../../data/api_config.dart';
 import '../../data/dtos/dtos.dart';
 import '../../app/routes.dart';
 import '../../data/services.dart';
 import '../../models/conversation.dart';
-import '../../models/matrix_user.dart';
 import 'chat_navigation.dart';
 
 class GroupProfileScreen extends StatefulWidget {
@@ -120,16 +118,12 @@ class _GroupProfileScreenState extends State<GroupProfileScreen> {
     });
   }
 
-  Future<void> _editIdentity() async {
+  Future<void> _editName() async {
     if (_saving) return;
     final nameController = TextEditingController(text: _name);
-    final descController = TextEditingController(text: _description);
-    final result = await showDialog<_GroupIdentityEdit>(
+    final result = await showDialog<String>(
       context: context,
-      builder: (ctx) => _GroupIdentityDialog(
-        nameController: nameController,
-        descController: descController,
-      ),
+      builder: (ctx) => _NameEditDialog(controller: nameController),
     );
     if (result == null || !mounted) return;
     final state = AppStateScope.maybeOf(context);
@@ -137,25 +131,70 @@ class _GroupProfileScreenState extends State<GroupProfileScreen> {
     setState(() => _saving = true);
     final messenger = ScaffoldMessenger.of(context);
     try {
-      await state.updateGroup(
-        _groupId,
-        name: result.name,
-        description: result.description,
-      );
+      await state.updateGroup(_groupId, name: result);
       await _refreshSilent();
       messenger.showSnackBar(
-        const SnackBar(content: Text('Grupo atualizado com sucesso.')),
+        const SnackBar(content: Text('Nome do grupo atualizado.')),
       );
     } on ApiException catch (e) {
       messenger.showSnackBar(SnackBar(content: Text(e.message)));
     } catch (_) {
       messenger.showSnackBar(
-        const SnackBar(content: Text('Não foi possível atualizar o grupo.')),
+        const SnackBar(content: Text('Não foi possível atualizar o nome.')),
       );
     } finally {
       if (mounted) setState(() => _saving = false);
       nameController.dispose();
+    }
+  }
+
+  Future<void> _editDescription() async {
+    if (_saving) return;
+    final descController = TextEditingController(text: _description);
+    final result = await showDialog<String?>(
+      context: context,
+      builder: (ctx) => _DescriptionEditDialog(controller: descController),
+    );
+    if (result == null || !mounted) return;
+    final state = AppStateScope.maybeOf(context);
+    if (state == null) return;
+    setState(() => _saving = true);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await state.updateGroup(_groupId, description: result);
+      await _refreshSilent();
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Descrição do grupo atualizada.')),
+      );
+    } on ApiException catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+    } catch (_) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Não foi possível atualizar a descrição.')),
+      );
+    } finally {
+      if (mounted) setState(() => _saving = false);
       descController.dispose();
+    }
+  }
+
+  Future<void> _showEditMenu() async {
+    if (_saving || !_isOwner) return;
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      barrierColor: Colors.black.withValues(alpha: 0.5),
+      builder: (_) => _EditGroupMenu(),
+    );
+    if (action == null || !mounted) return;
+    switch (action) {
+      case 'name':
+        await _editName();
+      case 'photo':
+        await _changeAvatar();
+      case 'description':
+        await _editDescription();
     }
   }
 
@@ -208,46 +247,21 @@ class _GroupProfileScreenState extends State<GroupProfileScreen> {
         _members = info.members;
       });
     } catch (_) {
-      // Best-effort refresh — realtime broadcasts cover the other members.
+      // Best-effort refresh — realtime broadcasts cover the other members..
     }
   }
 
-  Future<void> _addMember() async {
-    if (_saving) return;
-    final state = AppStateScope.maybeOf(context);
-    if (state == null) return;
-    final current = state.currentUser;
-    if (current == null) return;
-    final existingIds = _members.map((m) => m.id).toSet();
-    final chosen = await showModalBottomSheet<_AddMemberResult>(
-      context: context,
-      useSafeArea: true,
-      backgroundColor: Colors.transparent,
-      barrierColor: Colors.black.withValues(alpha: 0.5),
-      isScrollControlled: true,
-      builder: (_) => _AddMemberSheet(
-        ownerId: current.id,
-        existingIds: existingIds,
+  Future<void> _openMembers() async {
+    if (_groupId.isEmpty) return;
+    await Navigator.of(context).pushNamed(
+      AppRoutes.groupMembers,
+      arguments: GroupMembersRouteArgs(
+        groupId: _groupId,
+        groupName: _name ?? '',
+        ownerId: _ownerId,
       ),
     );
-    if (chosen == null || !mounted) return;
-    setState(() => _saving = true);
-    final messenger = ScaffoldMessenger.of(context);
-    try {
-      await state.addGroupMember(_groupId, chosen.userId);
-      await _refreshSilent();
-      messenger.showSnackBar(
-        SnackBar(content: Text('${displayNickname(chosen.nickname)} entrou no grupo.')),
-      );
-    } on ApiException catch (e) {
-      messenger.showSnackBar(SnackBar(content: Text(e.message)));
-    } catch (_) {
-      messenger.showSnackBar(
-        const SnackBar(content: Text('Não foi possível adicionar o membro.')),
-      );
-    } finally {
-      if (mounted) setState(() => _saving = false);
-    }
+    if (mounted) await _refreshSilent();
   }
 
   Widget _buildBody() {
@@ -305,50 +319,12 @@ class _GroupProfileScreenState extends State<GroupProfileScreen> {
             ),
           ),
         ],
-        if (_isOwner) ...[
-          const SizedBox(height: AppDimensions.spaceLg),
-          _AdminActionsGrid(
-            actions: [
-              _AdminAction(
-                icon: Icons.badge_outlined,
-                label: 'Editar nome',
-                onTap: _editIdentity,
-              ),
-              _AdminAction(
-                icon: Icons.photo_camera_outlined,
-                label: 'Alterar foto',
-                onTap: _changeAvatar,
-              ),
-              _AdminAction(
-                icon: Icons.person_add_alt_1_rounded,
-                label: 'Adicionar',
-                onTap: _addMember,
-              ),
-            ],
-          ),
-        ],
         const SizedBox(height: AppDimensions.spaceLg),
-        Center(
-          child: Text(
-            '$_memberCount membro${_memberCount == 1 ? '' : 's'}',
-            style: AppTextStyles.caption
-                .copyWith(color: AppColors.holographicBlue),
-          ),
-        ),
-        const SizedBox(height: AppDimensions.spaceLg),
-        _ParticipantesTile(
+        _MembersSection(
+          members: _members,
+          ownerId: _ownerId,
           memberCount: _memberCount,
-          onTap: () {
-            if (_groupId.isEmpty) return;
-            Navigator.of(context).pushNamed(
-              AppRoutes.groupMembers,
-              arguments: GroupMembersRouteArgs(
-                groupId: _groupId,
-                groupName: _name ?? '',
-                ownerId: _ownerId,
-              ),
-            );
-          },
+          onOpen: _openMembers,
         ),
         const SizedBox(height: AppDimensions.spaceXxl),
       ],
@@ -369,228 +345,25 @@ class _GroupProfileScreenState extends State<GroupProfileScreen> {
         ),
         centerTitle: true,
         title: Text('Grupo', style: AppTextStyles.hud.copyWith(fontSize: 16)),
+        actions: [
+          if (_isOwner)
+            IconButton(
+              tooltip: 'Editar',
+              icon: Icon(Icons.edit_rounded, color: AppColors.holographicBlue),
+              onPressed: _showEditMenu,
+            ),
+        ],
       ),
       body: SafeArea(child: _buildBody()),
     );
   }
 }
 
-/// A single admin action (icon + label + tap). Rendered as a square tile in
-/// a horizontal row (Etapa 4): organized in squares, responsive wrap, no
-/// horizontal overflow.
-class _AdminAction {
-  const _AdminAction({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-  });
 
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-}
-
-/// Horizontal grid of admin action squares for the group owner. Uses a
-/// [Wrap] so small screens wrap gracefully instead of overflowing.
-class _AdminActionsGrid extends StatelessWidget {
-  const _AdminActionsGrid({required this.actions});
-
-  final List<_AdminAction> actions;
-
-  @override
-  Widget build(BuildContext context) {
-    return Wrap(
-      spacing: AppDimensions.spaceMd,
-      runSpacing: AppDimensions.spaceMd,
-      children: [
-        for (final action in actions)
-          _AdminActionTile(
-            icon: action.icon,
-            label: action.label,
-            onTap: action.onTap,
-          ),
-      ],
-    );
-  }
-}
-
-class _AdminActionTile extends StatelessWidget {
-  const _AdminActionTile({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: AppColors.cardSurface,
-      borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
-        onTap: onTap,
-        child: Container(
-          width: 104,
-          padding: const EdgeInsets.symmetric(vertical: AppDimensions.spaceMd),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
-            border: Border.all(color: AppColors.deepBlue),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, color: AppColors.holographicBlue, size: 26),
-              const SizedBox(height: 8),
-              Text(
-                label,
-                textAlign: TextAlign.center,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: AppTextStyles.caption
-                    .copyWith(color: AppColors.techWhite, fontSize: 12),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Dialog result for the group identity edit (name + description).
-class _GroupIdentityEdit {
-  const _GroupIdentityEdit({required this.name, required this.description});
-
-  final String name;
-  final String description;
-}
-
-class _GroupIdentityDialog extends StatefulWidget {
-  const _GroupIdentityDialog({
-    required this.nameController,
-    required this.descController,
-  });
-
-  final TextEditingController nameController;
-  final TextEditingController descController;
-
-  @override
-  State<_GroupIdentityDialog> createState() => _GroupIdentityDialogState();
-}
-
-class _GroupIdentityDialogState extends State<_GroupIdentityDialog> {
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      backgroundColor: AppColors.bluishBlack,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(AppDimensions.radiusLg),
-        side: BorderSide(color: AppColors.deepBlue),
-      ),
-      title: Text('Editar grupo',
-          style: AppTextStyles.hud
-              .copyWith(fontSize: 16, color: AppColors.techWhite)),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          MatrixTextField(
-            label: 'Nome do grupo',
-            hint: 'Ex.: Grupo MATRIX',
-            controller: widget.nameController,
-            textCapitalization: TextCapitalization.sentences,
-          ),
-          const SizedBox(height: AppDimensions.spaceMd),
-          MatrixTextField(
-            label: 'Descrição',
-            hint: 'Descrição do grupo (opcional',
-            controller: widget.descController,
-            maxLines: 3,
-            minLines: 2,
-            textCapitalization: TextCapitalization.sentences,
-          ),
-        ],
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: Text('Cancelar',
-              style: TextStyle(color: AppColors.holographicBlue)),
-        ),
-        TextButton(
-          onPressed: () {
-            final name = widget.nameController.text.trim();
-            if (name.isEmpty) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('O nome do grupo é obrigatório.')),
-              );
-              return;
-            }
-            Navigator.of(context).pop(_GroupIdentityEdit(
-              name: name,
-              description: widget.descController.text.trim(),
-            ));
-          },
-          child: Text('Salvar', style: TextStyle(color: AppColors.primaryBlue)),
-        ),
-      ],
-    );
-  }
-}
-
-class _AddMemberResult {
-  const _AddMemberResult({required this.userId, required this.nickname});
-
-  final String userId;
-  final String nickname;
-}
-
-class _AddMemberSheet extends StatefulWidget {
-  const _AddMemberSheet({
-    required this.ownerId,
-    required this.existingIds,
-  });
-
-  final String ownerId;
-  final Set<String> existingIds;
-
-  @override
-  State<_AddMemberSheet> createState() => _AddMemberSheetState();
-}
-
-class _AddMemberSheetState extends State<_AddMemberSheet> {
-  List<MatrixUser> _friends = const [];
-  bool _loading = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  Future<void> _load() async {
-    final state = AppStateScope.maybeOf(context);
-    if (state == null) return;
-    final current = state.currentUser;
-    if (current == null) return;
-    try {
-      final page = await state.loadFriends(current.id, pageSize: 50);
-      if (!mounted) return;
-      setState(() {
-        _friends = page.friends
-            .where((f) =>
-                f.id != widget.ownerId && !widget.existingIds.contains(f.id))
-            .toList();
-        _loading = false;
-      });
-    } catch (_) {
-      if (!mounted) return;
-      setState(() => _loading = false);
-    }
-  }
+/// Mini menu of group editing options (Etapa 2). Opened by the pencil icon
+/// in the group profile AppBar (owner-only).
+class _EditGroupMenu extends StatelessWidget {
+  const _EditGroupMenu();
 
   @override
   Widget build(BuildContext context) {
@@ -608,62 +381,303 @@ class _AddMemberSheetState extends State<_AddMemberSheet> {
             Padding(
               padding:
                   const EdgeInsets.symmetric(horizontal: AppDimensions.spaceLg),
-              child: Text('ADICIONAR MEMBRO',
+              child: Text('EDITAR GRUPO',
                   style: AppTextStyles.hud
                       .copyWith(fontSize: 14, color: AppColors.techWhite)),
             ),
             const SizedBox(height: AppDimensions.spaceSm),
-            if (_loading)
-              Padding(
-                padding: EdgeInsets.all(24),
-                child:
-                    Center(child: HudLabel(text: 'CARREGANDO...', dot: true)),
-              )
-            else if (_friends.isEmpty)
-              Padding(
-                padding: EdgeInsets.all(24),
-                child: Center(
-                  child: Text('Nenhum amigo disponível para adicionar.',
-                      style: AppTextStyles.bodyMuted,
-                      textAlign: TextAlign.center),
-                ),
-              )
-            else
-              Flexible(
-                child: ListView(
-                  shrinkWrap: true,
-                  children: [
-                    for (final u in _friends)
-                      ListTile(
-                        leading: FramedAvatar(
-                          frame: u.frame,
-                          size: 44,
-                          child: UserAvatar(
-                            name: u.nickname,
-                            seed: u.nickname,
-                            imageUrl: u.avatarUrl,
-                            size: 36,
-                          ),
-                        ),
-                        title: NicknameRenderer(
-                          displayNickname(u.nickname),
-                          baseStyle: AppTextStyles.body.copyWith(fontSize: 15),
-                          background: AppColors.bluishBlack,
-                          nameColor: u.nameColor,
-                        ),
-                        onTap: () {
-                          Navigator.of(context).pop(
-                            _AddMemberResult(
-                                userId: u.id, nickname: u.nickname),
-                          );
-                        },
-                      ),
-                  ],
-                ),
-              ),
+            _EditMenuTile(
+              icon: Icons.badge_outlined,
+              label: 'Editar nome',
+              value: 'name',
+            ),
+            _EditMenuTile(
+              icon: Icons.photo_camera_outlined,
+              label: 'Editar foto',
+              value: 'photo',
+            ),
+            _EditMenuTile(
+              icon: Icons.notes_rounded,
+              label: 'Editar descrição',
+              value: 'description',
+            ),
+            const SizedBox(height: AppDimensions.spaceXs),
           ],
         ),
       ),
+    );
+  }
+}
+
+class _EditMenuTile extends StatelessWidget {
+  const _EditMenuTile({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+
+  final IconData icon;
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.cardSurface,
+      borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
+      child: ListTile(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
+        ),
+        leading: Icon(icon, color: AppColors.holographicBlue, size: 24),
+        title: Text(label, style: AppTextStyles.body),
+        trailing: Icon(Icons.chevron_right_rounded,
+            color: AppColors.holographicBlue, size: 20),
+        onTap: () => Navigator.of(context).pop(value),
+      ),
+    );
+  }
+}
+
+/// Dialog for editing ONLY the group name (Etapa 2).
+class _NameEditDialog extends StatefulWidget {
+  const _NameEditDialog({required this.controller});
+
+  final TextEditingController controller;
+
+  @override
+  State<_NameEditDialog> createState() => _NameEditDialogState();
+}
+
+class _NameEditDialogState extends State<_NameEditDialog> {
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: AppColors.bluishBlack,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppDimensions.radiusLg),
+        side: BorderSide(color: AppColors.deepBlue),
+      ),
+      title: Text('Editar nome',
+          style: AppTextStyles.hud
+              .copyWith(fontSize: 16, color: AppColors.techWhite)),
+      content: MatrixTextField(
+        label: 'Nome do grupo',
+        hint: 'Ex.: Grupo MATRIX',
+        controller: widget.controller,
+        textCapitalization: TextCapitalization.sentences,
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: Text('Cancelar',
+              style: TextStyle(color: AppColors.holographicBlue)),
+        ),
+        TextButton(
+          onPressed: () {
+            final name = widget.controller.text.trim();
+            if (name.isEmpty) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('O nome do grupo é obrigatório.')),
+              );
+              return;
+            }
+            Navigator.of(context).pop(name);
+          },
+          child: Text('Salvar', style: TextStyle(color: AppColors.primaryBlue)),
+        ),
+      ],
+    );
+  }
+}
+
+/// Dialog for editing/removing ONLY the group description (Etapa 2). The
+/// description is optional; 'Remover descrição' clears it ..
+class _DescriptionEditDialog extends StatefulWidget {
+  const _DescriptionEditDialog({required this.controller});
+
+  final TextEditingController controller;
+
+  @override
+  State<_DescriptionEditDialog> createState() => _DescriptionEditDialogState();
+}
+
+class _DescriptionEditDialogState extends State<_DescriptionEditDialog> {
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: AppColors.bluishBlack,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppDimensions.radiusLg),
+        side: BorderSide(color: AppColors.deepBlue),
+      ),
+      title: Text('Editar descrição',
+          style: AppTextStyles.hud
+              .copyWith(fontSize: 16, color: AppColors.techWhite)),
+      content: MatrixTextField(
+        label: 'Descrição',
+        hint: 'Descrição do grupo (opcional)',
+        controller: widget.controller,
+        maxLines: 3,
+        minLines: 2,
+        textCapitalization: TextCapitalization.sentences,
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: Text('Cancelar',
+              style: TextStyle(color: AppColors.holographicBlue)),
+        ),
+        TextButton(
+          onPressed: () {
+            Navigator.of(context).pop(widget.controller.text.trim());
+          },
+          child: Text('Salvar', style: TextStyle(color: AppColors.primaryBlue)),
+        ),
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(''),
+          child: Text('Remover descrição', style: TextStyle(color: AppColors.error)),
+        ),
+      ],
+    );
+  }
+}
+
+/// "Membros" section shown inthe group profile (Etapa 3): header +
+/// inline member list (with owner badge) + a row to open the full screen.
+class _MembersSection extends StatelessWidget {
+  const _MembersSection({
+    required this.members,
+    required this.ownerId,
+    required this.memberCount,
+    required this.onOpen,
+  });
+
+  final List<GroupMemberInfoModel> members;
+  final String? ownerId;
+  final int memberCount;
+  final VoidCallback onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final preview = members.take(4).toList();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(Icons.group_rounded, color: AppColors.holographicBlue, size: 22),
+            const SizedBox(width: 8),
+            Text(
+              'Membros',
+              style: AppTextStyles.hud.copyWith(fontSize: 14, color: AppColors.techWhite),
+            ),
+            const Spacer(),
+            Text(
+              '$memberCount',
+              style: AppTextStyles.caption
+                  .copyWith(color: AppColors.holographicBlue),
+            ),
+          ],
+        ),
+        const SizedBox(height: AppDimensions.spaceMd),
+        if (preview.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: AppDimensions.spaceMd),
+            child: Center(
+              child: Text('Sem membros.',
+                  style: AppTextStyles.bodyMuted,
+                  textAlign: TextAlign.center),
+            ),
+          )
+        else
+          for (final m in preview) ...[
+            _MemberRow(member: m, isOwner: m.id == ownerId),
+            const SizedBox(height: 4),
+          ],
+        const SizedBox(height: AppDimensions.spaceSm),
+        Material(
+          color: AppColors.cardSurface,
+          borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
+          child: InkWell(
+            borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
+            onTap: onOpen,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                  horizontal: AppDimensions.spaceLg,
+                  vertical: AppDimensions.spaceMd,
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.group_add_rounded,
+                      color: AppColors.holographicBlue, size: 22),
+                  const SizedBox(width: AppDimensions.spaceMd),
+                  Expanded(
+                    child: Text(
+                      'Ver todos',
+                      style: AppTextStyles.body.copyWith(color: AppColors.techWhite),
+                    ),
+                  ),
+                  Text(
+                    '$memberCount',
+                    style: AppTextStyles.caption
+                        .copyWith(color: AppColors.holographicBlue),
+                  ),
+                  const SizedBox(width: AppDimensions.spaceSm),
+                  Icon(Icons.chevron_right_rounded,
+                      color: AppColors.holographicBlue, size: 22),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _MemberRow extends StatelessWidget {
+  const _MemberRow({required this.member, required this.isOwner});
+
+  final GroupMemberInfoModel member;
+  final bool isOwner;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      onTap: () => openProfileById(
+        context,
+        id: member.id,
+        nickname: member.nickname,
+      ),
+      leading: UserAvatar(
+        name: member.nickname,
+        seed: member.nickname,
+        imageUrl: member.avatarUrl,
+        size: 40,
+      ),
+      title: Text(
+        displayNickname(member.nickname),
+        style: AppTextStyles.body.copyWith(fontSize: 15),
+      ),
+      trailing:isOwner
+          ? Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(
+                color: AppColors.holographicBlue.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(999),
+                border: Border.all(
+                  color: AppColors.holographicBlue.withValues(alpha: 0.5),
+                ),
+              ),
+              child: Text(
+                'Dono',
+                style: AppTextStyles.caption
+                    .copyWith(fontSize: 10, color: AppColors.holographicBlue),
+              ),
+            )
+          : null,
     );
   }
 }
@@ -685,53 +699,6 @@ class _GroupAvatar extends StatelessWidget {
       seed: name,
       imageUrl: (url == null || url!.isEmpty) ? null : url,
       size: size,
-    );
-  }
-}
-
-/// Navigable row that opens the dedicated participants screen (Etapa 6).
-class _ParticipantesTile extends StatelessWidget {
-  const _ParticipantesTile({required this.memberCount, required this.onTap});
-
-  final int memberCount;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: AppColors.cardSurface,
-      borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(
-              horizontal: AppDimensions.spaceLg,
-              vertical: AppDimensions.spaceMd,
-          ),
-          child: Row(
-            children: [
-              Icon(Icons.group_rounded, color: AppColors.holographicBlue,
-                  size: 26),
-              const SizedBox(width: AppDimensions.spaceMd),
-              Expanded(
-                child: Text(
-                  'Participantes',
-                  style: AppTextStyles.body.copyWith(color: AppColors.techWhite),
-                ),
-              ),
-              Text(
-                '$memberCount membro${memberCount == 1 ? '' : 's'}',
-                style: AppTextStyles.caption
-                    .copyWith(color: AppColors.holographicBlue),
-              ),
-              const SizedBox(width: AppDimensions.spaceSm),
-              Icon(Icons.chevron_right_rounded,
-                  color: AppColors.holographicBlue, size: 22),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }

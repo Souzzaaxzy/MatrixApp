@@ -15,6 +15,7 @@ import '../../core/widgets/user_avatar.dart';
 import '../../data/api_config.dart';
 import '../../data/dtos/dtos.dart';
 import '../../models/conversation.dart';
+import 'add_member_sheet.dart';
 import 'chat_navigation.dart';
 
 /// Dedicated participants screen for a group. Shows the member list with
@@ -41,6 +42,14 @@ class _GroupMembersScreenState extends State<GroupMembersScreen> {
   AppState? _resolvedState;
   AppState? get _state => _resolvedState;
   String get _groupId => widget.args.groupId;
+
+  bool get _isOwner {
+    final me = _resolvedState?.currentUser?.id;
+    return _ownerId != null &&
+        _ownerId!.isNotEmpty &&
+        me != null &&
+        _ownerId == me;
+  }
 
   @override
   void initState() {
@@ -107,6 +116,40 @@ class _GroupMembersScreenState extends State<GroupMembersScreen> {
       _groupName = event.group.name;
       _ownerId = event.group.createdById;
     });
+  }
+
+  Future<void> _addMember() async {
+    final state = _state;
+    if (state == null) return;
+    final current = state.currentUser;
+    if (current == null) return;
+    final existingIds = _members.map((m) => m.id).toSet();
+    final chosen = await showModalBottomSheet<AddMemberResult>(
+      context: context,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      barrierColor: Colors.black.withValues(alpha: 0.5),
+      isScrollControlled: true,
+      builder: (_) => AddMemberSheet(
+        ownerId: current.id,
+        existingIds: existingIds,
+      ),
+    );
+    if (chosen == null || !mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await state.addGroupMember(_groupId, chosen.userId);
+      await _load();
+      messenger.showSnackBar(
+        SnackBar(content: Text('${displayNickname(chosen.nickname)} entrou no grupo.')),
+      );
+    } on ApiException catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+    } catch (_) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Não foi possível adicionar o membro.')),
+      );
+    }
   }
 
   Widget _memberTile(GroupMemberInfoModel m) {
@@ -183,9 +226,21 @@ class _GroupMembersScreenState extends State<GroupMembersScreen> {
           horizontal: AppDimensions.spaceLg,
           vertical: AppDimensions.spaceLg,
       ),
-      itemCount: _members.length,
+      itemCount: _members.length + 1,
       separatorBuilder: (_, __) => const SizedBox(height: 4),
-      itemBuilder: (context, i) => _memberTile(_members[i]),
+      itemBuilder: (context,i) {
+        if (i == 0) {
+          return _isOwner
+              ? MatrixButton(
+                  label: 'ADICIONAR MEMBRO',
+                  expanded: true,
+                  icon: Icons.person_add_alt_1_rounded,
+                  onPressed: _addMember,
+                )
+              : const SizedBox.shrink();
+        }
+        return _memberTile(_members[i - 1]);
+      },
     );
   }
 
