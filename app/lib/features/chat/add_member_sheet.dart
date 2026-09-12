@@ -7,11 +7,13 @@ import '../../core/utils/chat_format.dart';
 import '../../core/widgets/app_state_scope.dart';
 import '../../core/widgets/framed_avatar.dart';
 import '../../core/widgets/hud_label.dart';
+import '../../core/widgets/matrix_button.dart';
 import '../../core/widgets/nickname_renderer.dart';
 import '../../core/widgets/user_avatar.dart';
 import '../../models/matrix_user.dart';
 
-/// Result of the add-member picker (a confirmed user to add).
+/// Result of the add-member picker (the confirmed selection + each picked
+/// user's nickname for the success snackbar).
 class AddMemberResult {
   const AddMemberResult({required this.userId, required this.nickname});
 
@@ -37,6 +39,10 @@ class AddMemberSheet extends StatefulWidget {
 
 class _AddMemberSheetState extends State<AddMemberSheet> {
   List<MatrixUser> _friends = const [];
+
+  /// Ids of the friends currently ticked (select/deselect before confirming).
+  final Set<String> _selected = {};
+
   bool _loading = true;
 
   @override
@@ -64,6 +70,26 @@ class _AddMemberSheetState extends State<AddMemberSheet> {
       if (!mounted) return;
       setState(() => _loading = false);
     }
+  }
+
+  /// Toggles a friend in/out of the pending selection (Etapa 3: selecionar /
+  /// desselecionar antes de confirmar).
+  void _toggle(MatrixUser u) {
+    setState(() {
+      if (!_selected.add(u.id)) {
+        _selected.remove(u.id);
+      }
+    });
+  }
+
+  void _confirm() {
+    if (_selected.isEmpty) return;
+    // Add the FIRST selected user; the caller adds them and refreshes,
+    // so the next open of the sheet excludes the newly-added member.
+    final chosen = _friends.firstWhere((f) => _selected.contains(f.id));
+    Navigator.of(context).pop(
+      AddMemberResult(userId: chosen.id, nickname: chosen.nickname),
+    );
   }
 
   @override
@@ -102,7 +128,7 @@ class _AddMemberSheetState extends State<AddMemberSheet> {
                       textAlign: TextAlign.center),
                 ),
               )
-            else
+            else ...[
               Flexible(
                 child: ListView(
                   shrinkWrap: true,
@@ -125,16 +151,45 @@ class _AddMemberSheetState extends State<AddMemberSheet> {
                           background: AppColors.bluishBlack,
                           nameColor: u.nameColor,
                         ),
-                        onTap: () {
-                          Navigator.of(context).pop(
-                            AddMemberResult(
-                                userId: u.id, nickname: u.nickname),
-                          );
-                        },
+                        trailing: Checkbox(
+                          value: _selected.contains(u.id),
+                          onChanged: (_) => _toggle(u),
+                          activeColor: AppColors.holographicBlue,
+                          checkColor: AppColors.absoluteBlack,
+                        ),
+                        onTap: () => _toggle(u),
                       ),
                   ],
                 ),
               ),
+              const SizedBox(height: AppDimensions.spaceSm),
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: AppDimensions.spaceLg),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: MatrixButton(
+                        label: 'CANCELAR',
+                        expanded: true,
+                        onPressed: () => Navigator.of(context).pop(),
+                      ),
+                    ),
+                    const SizedBox(width: AppDimensions.spaceMd),
+                    Expanded(
+                      child: MatrixButton(
+                        label: _selected.isEmpty
+                            ? 'ADICIONAR'
+                            : 'ADICIONAR (${_selected.length})',
+                        expanded: true,
+                        onPressed: _selected.isEmpty ? null : _confirm,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: AppDimensions.spaceSm),
+            ],
           ],
         ),
       ),
