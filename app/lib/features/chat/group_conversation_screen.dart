@@ -1262,12 +1262,20 @@ class _GroupConversationScreenState extends State<GroupConversationScreen>
         ),
         // WhatsApp-style mention suggestions: an INLINE bar anchored directly
         // above the composer (driven by the typing state, never a modal).
+        // The entrance uses fade + slide (no SizeTransition) so it compiles
+        // on every Flutter version — avoids the axisAlignment/alignment
+        // deprecation that older SDKs cannot satisfy.
         AnimatedSwitcher(
           duration: const Duration(milliseconds: 160),
-          transitionBuilder: (child, anim) => SizeTransition(
-            sizeFactor: anim,
-            axisAlignment: -1,
-            child: FadeTransition(opacity: anim, child: child),
+          transitionBuilder: (child, anim) => FadeTransition(
+            opacity: anim,
+            child: SlideTransition(
+              position: Tween<Offset>(
+                begin: const Offset(0, 0.04),
+                end: Offset.zero,
+              ).animate(anim),
+              child: child,
+            ),
           ),
           child: _showMentionSuggestions
               ? _MentionSuggestionsBar(
