@@ -468,7 +468,6 @@ class _ConversationScreenState extends State<ConversationScreen>
 
     final action = await showModalBottomSheet<_MessageAction>(
       context: context,
-      useSafeArea: true,
       backgroundColor: Colors.transparent,
       barrierColor: Colors.black.withValues(alpha: 0.5),
       isScrollControlled: true,
@@ -2296,55 +2295,67 @@ class _MessageActionMenu extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Push the sheet fully above the keyboard / Android nav bar: the
-    // keyboard insets come from viewInsets, the nav-bar safe area is handled
-    // by useSafeArea on the route. Without the extra inset the sheet would
-    // sit behind an open keyboard and its last option could become
-    // unreachable on devices with gesture/3-button navigation.
-    final keyboardInset = MediaQuery.viewInsetsOf(context).bottom;
+    // Keep the whole sheet inside the SAFE area: the Android nav bar is
+    // covered by [SafeArea] (bottom MediaQuery padding), an open keyboard
+    // by [viewInsets.bottom], and the content is height-capped and
+    // scrollable so every option stays fully visible/tappable — never
+    // hidden behind the navigation bar or clipped on any device.
+    final media = MediaQuery.of(context);
+    final keyboardInset = media.viewInsets.bottom;
+    final bottomSafe = media.padding.bottom;
+    final availableHeight = media.size.height - keyboardInset - bottomSafe;
     return SafeArea(
+      top: false,
       child: Padding(
         padding: EdgeInsets.only(bottom: keyboardInset),
-        child: Container(
-          margin: const EdgeInsets.all(AppDimensions.spaceMd),
-          padding: const EdgeInsets.symmetric(vertical: AppDimensions.spaceXs),
-          decoration: BoxDecoration(
-            color: AppColors.bluishBlack,
-            borderRadius: BorderRadius.circular(AppDimensions.radiusXl),
-            border: Border.all(color: AppColors.deepBlue),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.4),
-                blurRadius: 20,
-              ),
-            ],
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: (availableHeight - 16).clamp(0.0, availableHeight),
           ),
-          child: Material(
-            color: Colors.transparent,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                _ActionItem(
-                  icon: Icons.reply_rounded,
-                  label: 'Responder',
-                  onTap: () => Navigator.of(context).pop(_MessageAction.reply),
-                ),
-                _ActionItem(
-                  icon: Icons.remove_circle_outline_rounded,
-                  iconColor: AppColors.holographicBlue,
-                  label: 'Excluir',
-                  hint: 'só para mim',
-                  onTap: () =>
-                      Navigator.of(context).pop(_MessageAction.deleteForMe),
-                ),
-                _ActionItem(
-                  icon: Icons.delete_forever_rounded,
-                  iconColor: AppColors.error,
-                  label: 'Excluir para todos',
-                  onTap: () => Navigator.of(context)
-                      .pop(_MessageAction.deleteForEveryone),
+          child: Container(
+            margin: const EdgeInsets.all(AppDimensions.spaceMd),
+            padding: const EdgeInsets.symmetric(vertical: AppDimensions.spaceXs),
+            decoration: BoxDecoration(
+              color: AppColors.bluishBlack,
+              borderRadius: BorderRadius.circular(AppDimensions.radiusXl),
+              border: Border.all(color: AppColors.deepBlue),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.4),
+                  blurRadius: 20,
                 ),
               ],
+            ),
+            child: Material(
+              color: Colors.transparent,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _ActionItem(
+                      icon: Icons.reply_rounded,
+                      label: 'Responder',
+                      onTap: () =>
+                          Navigator.of(context).pop(_MessageAction.reply),
+                    ),
+                    _ActionItem(
+                      icon: Icons.remove_circle_outline_rounded,
+                      iconColor: AppColors.holographicBlue,
+                      label: 'Excluir',
+                      hint: 'só para mim',
+                      onTap: () =>
+                          Navigator.of(context).pop(_MessageAction.deleteForMe),
+                    ),
+                    _ActionItem(
+                      icon: Icons.delete_forever_rounded,
+                      iconColor: AppColors.error,
+                      label: 'Excluir para todos',
+                      onTap: () => Navigator.of(context)
+                          .pop(_MessageAction.deleteForEveryone),
+                    ),
+                  ],
+                ),
+              ),
             ),
           ),
         ),

@@ -1074,7 +1074,12 @@ class AppState extends ChangeNotifier {
   /// Full group info (profile menu.: identity + member list with owner flag).
   /// The group header is ALSO upserted into the local groups cache so an
   /// open conversation header reflects the persisted identity immediately..
-  Future<({GroupHeader group, List<GroupMemberInfoModel> members})> fetchGroupInfo(
+  Future<
+      ({
+        GroupHeader group,
+        List<GroupMemberInfoModel> members,
+        List<GroupMemberInfoModel> bannedMembers,
+      })> fetchGroupInfo(
     String groupId,
   ) async {
     final info = await _chat.groupInfo(groupId);
@@ -1153,6 +1158,21 @@ class AppState extends ChangeNotifier {
   Future<bool> banGroupMember(String groupId, String userId) async {
     try {
       final group = await _chat.banGroupMember(groupId, userId);
+      final idx = _groups.indexWhere((g) => g.id == group.id);
+      if (idx != -1) _groups[idx] = group;
+      notifyListeners();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Owner-only member unban. Refreshes the caller's cached group item (the
+  /// server response embeds the fresh member count). Returns true on success
+  /// (the server re-validates owner permission and the banned state).
+  Future<bool> unbanGroupMember(String groupId, String userId) async {
+    try {
+      final group = await _chat.unbanGroupMember(groupId, userId);
       final idx = _groups.indexWhere((g) => g.id == group.id);
       if (idx != -1) _groups[idx] = group;
       notifyListeners();

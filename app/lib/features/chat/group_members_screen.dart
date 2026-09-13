@@ -33,6 +33,7 @@ class GroupMembersScreen extends StatefulWidget {
 
 class _GroupMembersScreenState extends State<GroupMembersScreen> {
   List<GroupMemberInfoModel> _members = const [];
+  List<GroupMemberInfoModel> _bannedMembers = const [];
   bool _loading = true;
   String? _error;
   String _groupName = '';
@@ -90,6 +91,7 @@ class _GroupMembersScreenState extends State<GroupMembersScreen> {
       if (!mounted) return;
       setState(() {
         _members = info.members;
+        _bannedMembers = info.bannedMembers;
         _groupName = info.group.name;
         _ownerId = info.group.createdById;
         _loading = false;
@@ -116,6 +118,14 @@ class _GroupMembersScreenState extends State<GroupMembersScreen> {
       _groupName = event.group.name;
       _ownerId = event.group.createdById;
     });
+    // Membership changed (someone was banned/unbanned on another device).
+    // Refresh the active + banned lists so the section stays live; only if
+    // the banned set actually differs to avoid refetch spam.
+    final currentBanned = _bannedMembers.map((m) => m.id).toSet();
+    if (event.bannedUserIds.length != currentBanned.length ||
+        event.bannedUserIds.difference(currentBanned).isNotEmpty) {
+      _load();
+    }
   }
 
   Future<void> _addMember() async {
@@ -133,6 +143,7 @@ class _GroupMembersScreenState extends State<GroupMembersScreen> {
       builder: (_) => AddMemberSheet(
         ownerId: current.id,
         existingIds: existingIds,
+        bannedIds: _bannedMembers.map((m) => m.id).toSet(),
       ),
     );
     if (chosen == null || !mounted) return;
@@ -191,6 +202,77 @@ class _GroupMembersScreenState extends State<GroupMembersScreen> {
     );
   }
 
+  /// A currently-BANNED participant tile (owner view). Banned users are NOT
+  /// active members — they never appear in the regular list; this section
+  /// lets the owner unban them (server-validated) so they can be re-added.
+  Widget _bannedMemberTile(GroupMemberInfoModel m) {
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: UserAvatar(
+        name: m.nickname,
+        seed: m.nickname,
+        imageUrl: m.avatarUrl,
+        size: 48,
+      ),
+      title: Text(
+        displayNickname(m.nickname),
+        style: AppTextStyles.body.copyWith(
+          color: AppColors.techWhite.withValues(alpha: 0.7),
+        ),
+      ),
+      subtitle: Text(
+        'banido(a)',
+        style: AppTextStyles.caption.copyWith(
+          fontSize: 11,
+          color: AppColors.error,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+      trailing: _isOwner
+          ? OutlinedButton(
+              onPressed: () => _unbanMember(m),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.holographicBlue,
+                side: BorderSide(color: AppColors.holographicBlue),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(999),
+                ),
+              ),
+              child: const Text(
+                'DESBANIR',
+                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+              ),
+            )
+          : null,
+    );
+  }
+
+  /// Owner-only unban (server re-validates). After success the banned member
+  /// becomes an active member again and the list reloads.
+  Future<void> _unbanMember(GroupMemberInfoModel banned) async {
+    final state = _state;
+    if (state == null) return;
+    final messenger = ScaffoldMessenger.of(context);
+    final ok = await state.unbanGroupMember(_groupId, banned.id);
+    if (!mounted) return;
+    if (ok) {
+      await _load();
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            '${displayNickname(banned.nickname)} foi desbanido e voltou ao grupo.',
+          ),
+        ),
+      );
+    } else {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text('Não foi possível desbanir o usuário.'),
+        ),
+      );
+    }
+  }
+
   Widget _buildBody() {
     if (_loading) {
       return const Center(child: HudLabel(text: 'CARREGANDO...', dot: true));
@@ -226,9 +308,10 @@ class _GroupMembersScreenState extends State<GroupMembersScreen> {
           horizontal: AppDimensions.spaceLg,
           vertical: AppDimensions.spaceLg,
       ),
-      itemCount: _members.length + 1,
+      itemCount: _members.length + (_bannedMembers.isEmpty ? 1 : 2),
       separatorBuilder: (_, __) => const SizedBox(height: 4),
       itemBuilder: (context,i) {
+        final activeEnd = _members.length;
         if (i == 0) {
           return _isOwner
               ? MatrixButton(
@@ -239,8 +322,36 @@ class _GroupMembersScreenState extends State<GroupMembersScreen> {
                 )
               : const SizedBox.shrink();
         }
-        return _memberTile(_members[i - 1]);
+        if (i <= activeEnd) {
+          return _memberTile(_members[i - 1]);
+        }
+        return _bannedSection();
       },
+    );
+  }
+
+  /// BANNED participants section header + tiles. Only owner sees the header
+  /// context (regular members only see their own active list); the tiles
+  /// carry the "banido(a)" subtitle and DESBANIR action.
+  Widget _bannedSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (_bannedMembers.isNotEmpty) ...[
+          const SizedBox(height: AppDimensions.spaceMd),
+          Text(
+            'BANIDOS',
+            style: AppTextStyles.caption.copyWith(
+              fontSize: 11,
+              color: AppColors.error.withValues(alpha: 0.9),
+              fontWeight: FontWeight.w800,
+              letterSpacing: 1.2,
+            ),
+          ),
+          const SizedBox(height: AppDimensions.spaceXs),
+          for (final m in _bannedMembers) _bannedMemberTile(m),
+        ],
+      ],
     );
   }
 

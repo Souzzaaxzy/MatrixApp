@@ -435,7 +435,12 @@ class ChatRepository {
   /// Full group info (profile menu.: identity block + participant list with
   /// server-computed owner flag). Refreshes the local groups cache too so
   /// the conversation header and list stay in sync after admin edits..
-  Future<({GroupHeader group, List<GroupMemberInfoModel> members})> groupInfo(
+  Future<
+      ({
+        GroupHeader group,
+        List<GroupMemberInfoModel> members,
+        List<GroupMemberInfoModel> bannedMembers,
+      })> groupInfo(
     String groupId,
   ) async {
     final json = await _api.get<Map<String, dynamic>>('/api/groups/$groupId');
@@ -498,6 +503,20 @@ class ChatRepository {
   ) async {
     final json = await _api.post<Map<String, dynamic>>(
       '/api/groups/$groupId/members/$targetUserId/ban',
+    );
+    return GroupConversationDto.fromJson(json['group'] as Map<String, dynamic>)
+        .toModel();
+  }
+
+  /// Owner-only member UNBAN (server-authoritative). Clears the ban marker so
+  /// the user is an ACTIVE member again. The server re-validates ownership and
+  /// rejects unbunning non-banned members / the OWNER.
+  Future<GroupConversation> unbanGroupMember(
+    String groupId,
+    String targetUserId,
+  ) async {
+    final json = await _api.post<Map<String, dynamic>>(
+      '/api/groups/$groupId/members/$targetUserId/unban',
     );
     return GroupConversationDto.fromJson(json['group'] as Map<String, dynamic>)
         .toModel();

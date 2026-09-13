@@ -101,6 +101,10 @@ class FakeStore {
   /// Group member ids by group id (fake persistence: mirrors GroupMember rows).
   final Map<String, Set<String>> groupMemberIds = {};
 
+  /// Currently-banned member ids by group id (fake persistence: mirrors
+  /// `bannedAt` on the GroupMember rows — banned users are NOT members).
+  final Map<String, Set<String>> groupBannedIds = {};
+
   FakeStore() {
     users = {
       'u0': MatrixUser(
@@ -1037,15 +1041,25 @@ class _FakeChatRepository implements ChatRepository {
     }
     final all =
         List<ChatMessage>.of(_store.groupMessagesById[groupId] ?? const []);
+    // Mirror the server: a banned sender's messages stay in history but their
+    // embedded `sender.banned` reflects the CURRENT group ban state.
+    final bannedIds = _store.groupBannedIds[groupId] ?? const <String>{};
+    final visible = all.map((m) {
+      final sender = m.sender;
+      if (sender == null || bannedIds.contains(sender.id) == sender.banned) {
+        return m;
+      }
+      return m.copyWith(sender: sender.copyWith(banned: bannedIds.contains(sender.id)));
+    }).toList();
     if (before != null) {
-      final index = all.indexWhere((m) => m.id == before);
-      final from = index == -1 ? all.length : index;
-      final older = all.sublist(0, from);
+      final index = visible.indexWhere((m) => m.id == before);
+      final from = index == -1 ? visible.length : index;
+      final older = visible.sublist(0, from);
       final start = older.length > limit ? older.length - limit : 0;
       return (messages: older.sublist(start), hasMore: start > 0);
     }
-    final start = all.length > limit ? all.length - limit : 0;
-    return (messages: all.sublist(start), hasMore: start > 0);
+    final start = visible.length > limit ? visible.length - limit : 0;
+    return (messages: visible.sublist(start), hasMore: start > 0);
   }
 
   @override
@@ -1136,8 +1150,12 @@ class _FakeChatRepository implements ChatRepository {
   }
 
   @override
-  @override
-  Future<({GroupHeader group, List<GroupMemberInfoModel> members})> groupInfo(
+  Future<
+      ({
+        GroupHeader group,
+        List<GroupMemberInfoModel> members,
+        List<GroupMemberInfoModel> bannedMembers,
+      })> groupInfo(
     String groupId,
   ) async {
     final g = _store.groups[groupId];
@@ -1169,7 +1187,19 @@ class _FakeChatRepository implements ChatRepository {
         isOwner: u.id == ownerId,
       ));
     }
-    return (group: g.group, members: members);
+    final bannedIds = _store.groupBannedIds[groupId] ?? const <String>{};
+    final bannedMembers = <GroupMemberInfoModel>[];
+    for (final u in allUsers) {
+      if (u.id == ownerId || !bannedIds.contains(u.id)) continue;
+      if (members.any((m) => m.id == u.id)) continue;
+      bannedMembers.add(GroupMemberInfoModel(
+        id: u.id,
+        nickname: u.nickname,
+        avatarUrl: u.avatarUrl,
+        isOwner: false,
+      ));
+    }
+    return (group: g.group, members: members, bannedMembers: bannedMembers);
   }
 
   @override
@@ -1233,8 +1263,31 @@ class _FakeChatRepository implements ChatRepository {
       throw const ApiException(
           statusCode: 404, message: 'Grupo não encontrado.');
     }
+    // Banned users are no longer active members (row is kept in the fake DB
+    // with bannedAt set — mirrors the server's GroupMember.bannedAt).
+    _store.groupMemberIds[groupId]?.remove(targetUserId);
+    (_store.groupBannedIds[groupId] ??= {}).add(targetUserId);
     final updated = g.copyWith(
         group: g.group.copyWith(memberCount: g.group.memberCount - 1));
+    _store.groups[groupId] = updated;
+    return updated;
+  }
+
+  @override
+  Future<GroupConversation> unbanGroupMember(
+    String groupId,
+    String targetUserId,
+  ) async {
+    final g = _store.groups[groupId];
+    if (g == null) {
+      throw const ApiException(
+          statusCode: 404, message: 'Grupo não encontrado.');
+    }
+    _store.groupBannedIds[groupId]?.remove(targetUserId);
+    final memberIds = _store.groupMemberIds[groupId] ??= {};
+    if (targetUserId != g.group.createdById) memberIds.add(targetUserId);
+    final updated = g.copyWith(
+        group: g.group.copyWith(memberCount: memberIds.length));
     _store.groups[groupId] = updated;
     return updated;
   }

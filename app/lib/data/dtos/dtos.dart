@@ -421,6 +421,7 @@ class ChatUserDto {
   final String? nameColor;
   final String? frameId;
   final String? frameAsset;
+  final bool banned;
 
   const ChatUserDto({
     required this.id,
@@ -429,6 +430,7 @@ class ChatUserDto {
     this.nameColor,
     this.frameId,
     this.frameAsset,
+    this.banned = false,
   });
 
   ChatUser toModel() => ChatUser(
@@ -438,6 +440,7 @@ class ChatUserDto {
         nameColor: nameColor,
         frameId: frameId,
         frameAsset: frameAsset,
+        banned: banned,
       );
 
   factory ChatUserDto.fromJson(Map<String, dynamic> json) => ChatUserDto(
@@ -447,6 +450,7 @@ class ChatUserDto {
         nameColor: json['nameColor'] as String?,
         frameId: json['frameId'] as String?,
         frameAsset: json['frameAsset'] as String?,
+        banned: (json['banned'] as bool?) ?? false,
       );
 }
 
@@ -637,16 +641,30 @@ class ReplyInfoDto {
 
 /// Real-time `chat_group_updated` frame: the server pushed a fresh group
 /// identity block after an owner edit (name/avatar/description/membership).
+/// Also carries the CURRENT list of banned user ids ([bannedUserIds]) so open
+/// conversation screens can tag/un-tag "banido(a)" on the affected messages
+/// live, without a full history reload.
 class GroupUpdatedEvent {
-  const GroupUpdatedEvent({required this.groupId, required this.group});
+  const GroupUpdatedEvent({
+    required this.groupId,
+    required this.group,
+    this.bannedUserIds = const {},
+  });
 
   final String groupId;
   final GroupHeader group;
 
+  /// Full set of user ids currently banned from this group (server-authoritative).
+  final Set<String> bannedUserIds;
+
   factory GroupUpdatedEvent.fromMap(Map<String, dynamic> data) {
     final raw = data['group'];
+    final rawBanned = data['bannedUserIds'];
     return GroupUpdatedEvent(
       groupId: (data['groupId'] as String?) ?? '',
+      bannedUserIds: rawBanned is List
+          ? rawBanned.whereType<String>().toSet()
+          : const <String>{},
       group: raw is Map<String, dynamic>
           ? GroupHeaderDto.fromJson(raw).toModel()
           : GroupHeader(
@@ -731,21 +749,34 @@ class GroupMemberDto {
 }
 
 /// Full group info (profile menu). `group` is the identity block used
-/// everywhere;`members` is the participant list with owner tagging.
+/// everywhere;`members` is the participant list with owner tagging and
+/// `bannedMembers` lists the currently-banned participants (kept separate so
+/// they are never confused with active members).
 class GroupInfoDto {
   final GroupHeaderDto group;
   final List<GroupMemberDto> members;
+  final List<GroupMemberDto> bannedMembers;
 
-  const GroupInfoDto({required this.group, required this.members});
+  const GroupInfoDto({
+    required this.group,
+    required this.members,
+    this.bannedMembers = const [],
+  });
 
-  ({GroupHeader group, List<GroupMemberInfoModel> members}) toModel() => (
-        group: group.toModel(),
-        members: members.map((m) => m.toModel()).toList(),
-      );
+  ({GroupHeader group, List<GroupMemberInfoModel> members, List<GroupMemberInfoModel> bannedMembers})
+      toModel() => (
+            group: group.toModel(),
+            members: members.map((m) => m.toModel()).toList(),
+            bannedMembers: bannedMembers.map((m) => m.toModel()).toList(),
+          );
 
   factory GroupInfoDto.fromJson(Map<String, dynamic> json) => GroupInfoDto(
         group: GroupHeaderDto.fromJson(json['group'] as Map<String, dynamic>),
         members: ((json['members'] as List?) ?? const [])
+            .cast<Map<String, dynamic>>()
+            .map(GroupMemberDto.fromJson)
+            .toList(),
+        bannedMembers: ((json['bannedMembers'] as List?) ?? const [])
             .cast<Map<String, dynamic>>()
             .map(GroupMemberDto.fromJson)
             .toList(),

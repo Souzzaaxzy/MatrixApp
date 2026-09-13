@@ -227,6 +227,9 @@ class _GroupConversationScreenState extends State<GroupConversationScreen>
 
   /// An owner edited the group (name/avatar/description/membership). The
   /// server pushed a fresh header; update the AppBar and cached fields live.
+  /// The frame also carries the CURRENT banned ids — sync the loaded messages
+  /// so "banido(a)" tags appear/disappear on the affected senders instantly
+  /// (no reload, no app restart).
   void _onGroupUpdated(GroupUpdatedEvent event) {
     if (!mounted) return;
     if (event.groupId != _groupId) return;
@@ -237,7 +240,36 @@ class _GroupConversationScreenState extends State<GroupConversationScreen>
       _groupDescription = event.group.description;
       _groupOwnerId = event.group.createdById;
       _groupMemberCount = event.group.memberCount;
+      _syncBannedSenders(event.bannedUserIds);
     });
+  }
+
+  /// Syncs every loaded group message's sender to the CURRENT banned set
+  /// (both set and clear). Called inside [setState] by realtime frames — the
+  /// server is authoritative and provides the full list, so this must only
+  /// mutate [\_messages] in place, never rebuild the list.
+  void _syncBannedSenders(Set<String> bannedIds) {
+    for (var i = 0; i < _messages.length; i++) {
+      final sender = _messages[i].sender;
+      if (sender == null) continue;
+      final banned = bannedIds.contains(sender.id);
+      if (sender.banned != banned) {
+        _messages[i] =
+            _messages[i].copyWith(sender: sender.copyWith(banned: banned));
+      }
+    }
+  }
+
+  /// Marks every loaded message from [senderId] as banned (without clearing
+  /// others) — used after the OWNER bans a user on this screen, where the
+  /// acting user does NOT receive their own realtime broadcast.
+  void _markSenderBanned(String senderId) {
+    for (var i = 0; i < _messages.length; i++) {
+      final sender = _messages[i].sender;
+      if (sender == null || sender.id != senderId || sender.banned) continue;
+      _messages[i] =
+          _messages[i].copyWith(sender: sender.copyWith(banned: true));
+    }
   }
 
   /// The session user was BANNED from this group (realtime). The server
@@ -520,7 +552,6 @@ class _GroupConversationScreenState extends State<GroupConversationScreen>
     final canBan = isOwner && !message.mine;
     final action = await showModalBottomSheet<_MessageAction>(
       context: context,
-      useSafeArea: true,
       backgroundColor: Colors.transparent,
       barrierColor: Colors.black.withValues(alpha: 0.5),
       isScrollControlled: true,
@@ -669,7 +700,11 @@ class _GroupConversationScreenState extends State<GroupConversationScreen>
     if (confirmed != true || !mounted) return;
     final ok = await _state?.banGroupMember(_groupId, message.senderId);
     if (!mounted) return;
-    if (ok != null) {
+    if (ok == true) {
+      // The owner's screen does NOT receive their own realtime fan-out —
+      // tag the banned user's messages locally so "banido(a)" appears
+      // immediately on this device too.
+      setState(() => _markSenderBanned(message.senderId));
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('$nickname foi banido do grupo.')),
       );
@@ -1143,13 +1178,50 @@ class _GroupMessageBubble extends StatelessWidget {
             GestureDetector(
               onTap: () => _openSenderProfile(context, sender),
               behavior: HitTestBehavior.opaque,
-              child: Text(
-                displayNickname(sender.nickname),
-                style: AppTextStyles.caption.copyWith(
-                  fontSize: 11,
-                  color: AppColors.holographicBlue,
-                  fontWeight: FontWeight.w600,
-                ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Flexible(
+                    child: Text(
+                      displayNickname(sender.nickname),
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTextStyles.caption.copyWith(
+                        fontSize: 11,
+                        color: AppColors.holographicBlue,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  // Group-scoped ban state: the sender is CURRENTLY banned
+                  // from THIS group (server-embedded per group; a private DM
+                  // peer never gets the tag). Keeps the message history
+                  // intact while labeling the author.
+                  if (sender.banned) ...[
+                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 1,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppColors.error.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(999),
+                        border: Border.all(
+                          color: AppColors.error.withValues(alpha: 0.5),
+                        ),
+                      ),
+                      child: Text(
+                        'banido(a)',
+                        style: AppTextStyles.caption.copyWith(
+                          fontSize: 9,
+                          color: AppColors.error,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
               ),
             ),
             const SizedBox(height: 2),
@@ -1399,46 +1471,63 @@ class _MessageActionSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Push the sheet fully above the keyboard / Android nav bar: the
-    // keyboard insets come from viewInsets, the nav-bar safe area is handled
-    // by useSafeArea on the route. Without the extra inset the sheet would
-    // sit behind an open keyboard and its last option could become
-    // unreachable on devices with gesture/3-button navigation.
-    final keyboardInset = MediaQuery.viewInsetsOf(context).bottom;
-    return Padding(
-      padding: EdgeInsets.only(bottom: keyboardInset),
-      child: Container(
-        margin: const EdgeInsets.all(8),
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        decoration: BoxDecoration(
-          color: AppColors.bluishBlack,
-          borderRadius: BorderRadius.circular(AppDimensions.radiusLg),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _ActionItem(
-                icon: Icons.reply_rounded,
-                label: 'Responder',
-                onTap: () => Navigator.of(context).pop(_MessageAction.reply)),
-            _ActionItem(
-                icon: Icons.delete_outline_rounded,
-                label: 'Excluir para mim',
-                onTap: () =>
-                    Navigator.of(context).pop(_MessageAction.deleteForMe)),
-            if (canDeleteAnyone)
-              _ActionItem(
-                  icon: Icons.delete_forever_rounded,
-                  label: 'Excluir para todos',
-                  onTap: () => Navigator.of(context)
-                      .pop(_MessageAction.deleteForEveryone)),
-            if (canBan)
-              _ActionItem(
-                  icon: Icons.block_rounded,
-                  label: 'Banir usuário',
-                  onTap: () =>
-                      Navigator.of(context).pop(_MessageAction.banUser)),
-          ],
+    // Keep the whole sheet inside the SAFE area of the screen: the Android
+    // navigation bar is accounted for by [SafeArea] (bottom padding from
+    // MediaQuery), an OPEN keyboard by [viewInsets.bottom], and the content
+    // is capped to the remaining height and made scrollable so every action
+    // ("Banir usuário" included) is always fully visible and tappable —
+    // never behind the nav bar, never clipped, on any device/rotation. No
+    // fixed offsets. `useSafeArea` on the route stays OFF; this explicit
+    // SafeArea is the single source of truth.
+    final media = MediaQuery.of(context);
+    final keyboardInset = media.viewInsets.bottom;
+    final bottomSafe = media.padding.bottom;
+    final availableHeight = media.size.height - keyboardInset - bottomSafe;
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: EdgeInsets.only(bottom: keyboardInset),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: (availableHeight - 16).clamp(0.0, availableHeight),
+          ),
+          child: Container(
+            margin: const EdgeInsets.all(8),
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            decoration: BoxDecoration(
+              color: AppColors.bluishBlack,
+              borderRadius: BorderRadius.circular(AppDimensions.radiusLg),
+            ),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _ActionItem(
+                      icon: Icons.reply_rounded,
+                      label: 'Responder',
+                      onTap: () =>
+                          Navigator.of(context).pop(_MessageAction.reply)),
+                  _ActionItem(
+                      icon: Icons.delete_outline_rounded,
+                      label: 'Excluir para mim',
+                      onTap: () => Navigator.of(context)
+                          .pop(_MessageAction.deleteForMe)),
+                  if (canDeleteAnyone)
+                    _ActionItem(
+                        icon: Icons.delete_forever_rounded,
+                        label: 'Excluir para todos',
+                        onTap: () => Navigator.of(context)
+                            .pop(_MessageAction.deleteForEveryone)),
+                  if (canBan)
+                    _ActionItem(
+                        icon: Icons.block_rounded,
+                        label: 'Banir usuário',
+                        onTap: () => Navigator.of(context)
+                            .pop(_MessageAction.banUser)),
+                ],
+              ),
+            ),
+          ),
         ),
       ),
     );

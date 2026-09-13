@@ -21,17 +21,25 @@ class AddMemberResult {
   final String nickname;
 }
 
-/// Bottom sheet that lists a user's friends (excluding the owner and anyone
-/// already in the group) so the group owner can pick one to add..
+/// Bottom sheet that lists a user's friends (excluding the owner, anyone
+/// already in the group AND anyone currently banned — banned users are NOT
+/// active members) so the group owner can pick one to add..
 class AddMemberSheet extends StatefulWidget {
   const AddMemberSheet({
     super.key,
     required this.ownerId,
     required this.existingIds,
+    this.bannedIds = const {},
   });
 
   final String ownerId;
+
+  /// Active member ids of the group (banned users are excluded from this set).
   final Set<String> existingIds;
+
+  /// Currently-banned member ids of the group — they must never be offered
+  /// as "addable": they are NOT active members and require an unban first.
+  final Set<String> bannedIds;
 
   @override
   State<AddMemberSheet> createState() => _AddMemberSheetState();
@@ -62,7 +70,9 @@ class _AddMemberSheetState extends State<AddMemberSheet> {
       setState(() {
         _friends = page.friends
             .where((f) =>
-                f.id != widget.ownerId && !widget.existingIds.contains(f.id))
+                f.id != widget.ownerId &&
+                !widget.existingIds.contains(f.id) &&
+                !widget.bannedIds.contains(f.id))
             .toList();
         _loading = false;
       });

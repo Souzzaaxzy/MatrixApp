@@ -11,6 +11,7 @@ class ChatUser {
     this.nameColor,
     this.frameId,
     this.frameAsset,
+    this.banned = false,
   });
 
   final String id;
@@ -19,6 +20,12 @@ class ChatUser {
   final String? nameColor;
   final String? frameId;
   final String? frameAsset;
+
+  /// Group-scoped ban state (set only in group messages): true when this
+  /// user is CURRENTLY banned from the group the message belongs to. Private
+  /// chat peers always keep it false — the flag is meaningless outside a
+  /// group.
+  final bool banned;
 
   /// The equipped AVATAR_FRAME as a cosmetic (mirrors MatrixUser.frame).
   CosmeticItem? get frame {
@@ -31,6 +38,25 @@ class ChatUser {
       assetUrl: frameAsset ?? '',
     );
   }
+
+  ChatUser copyWith({
+    String? id,
+    String? nickname,
+    String? avatarUrl,
+    String? nameColor,
+    String? frameId,
+    String? frameAsset,
+    bool? banned,
+  }) =>
+      ChatUser(
+        id: id ?? this.id,
+        nickname: nickname ?? this.nickname,
+        avatarUrl: avatarUrl ?? this.avatarUrl,
+        nameColor: nameColor ?? this.nameColor,
+        frameId: frameId ?? this.frameId,
+        frameAsset: frameAsset ?? this.frameAsset,
+        banned: banned ?? this.banned,
+      );
 }
 
 /// One private conversation as returned by the server. `otherUser` is always
