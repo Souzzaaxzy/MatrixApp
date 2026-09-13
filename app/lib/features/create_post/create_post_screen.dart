@@ -1,6 +1,9 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:video_thumbnail/video_thumbnail.dart';
 
 import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_dimensions.dart';
@@ -29,6 +32,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
   final _controller = TextEditingController();
   String? _imagePath;
   String? _videoPath;
+  String? _thumbnailPath;
   bool _publishing = false;
 
   @override
@@ -37,8 +41,11 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
     super.dispose();
   }
 
-  Future<void> _pickImage() async {
-    final result = await pickGalleryImage(imageQuality: 80);
+  /// Unified media picker: ONE button opens the gallery and the user picks a
+  /// photo OR a video directly (no prior Foto/Vídeo step). The type is
+  /// detected from the file; for videos a cover/thumbnail is generated.
+  Future<void> _pickMedia() async {
+    final result = await pickGalleryMedia();
     if (!mounted) return;
     if (!result.isSuccess) {
       if (!result.cancelled &&
@@ -50,29 +57,53 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
       }
       return;
     }
+    final file = result.file!;
+    final isVideo = _isVideoPath(file.path);
     setState(() {
-      _imagePath = result.file!.path;
-      _videoPath = null; // image and video are mutually exclusive
+      _imagePath = isVideo ? null : file.path;
+      _videoPath = isVideo ? file.path : null;
+      _thumbnailPath = null;
     });
+    if (isVideo) {
+      final cover = await _generateThumbnail(file.path);
+      if (mounted && cover != null) {
+        setState(() => _thumbnailPath = cover);
+      }
+    }
   }
 
-  Future<void> _pickVideo() async {
-    final result = await pickGalleryVideo();
-    if (!mounted) return;
-    if (!result.isSuccess) {
-      if (!result.cancelled &&
-          result.error != null &&
-          result.error!.isNotEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(result.error!)),
-        );
-      }
-      return;
+  bool _isVideoPath(String path) {
+    final lower = path.toLowerCase();
+    return lower.endsWith('.mp4') ||
+        lower.endsWith('.mov') ||
+        lower.endsWith('.m4v') ||
+        lower.endsWith('.mkv') ||
+        lower.endsWith('.webm') ||
+        lower.endsWith('.3gp');
+  }
+
+  /// Generates a lightweight cover frame from the video (best-frame at 1s)
+  /// and writes it as a JPEG in the temp dir — the cover is then uploaded
+  /// like a normal image and persisted as the post's thumbnailUrl.
+  Future<String?> _generateThumbnail(String videoPath) async {
+    try {
+      final dir = await getTemporaryDirectory();
+      final outPath =
+          '${dir.path}/mc_cover_${DateTime.now().millisecondsSinceEpoch}.jpg';
+      final Uint8List? thumb = await VideoThumbnail.thumbnailData(
+        video: videoPath,
+        imageFormat: ImageFormat.JPEG,
+        maxWidth: 720,
+        quality: 80,
+        timeMs: 1000,
+      );
+      if (thumb == null) return null;
+      final file = File(outPath);
+      await file.writeAsBytes(thumb);
+      return file.path;
+    } catch (_) {
+      return null; // safe fallback: no cover → app uses the video badge
     }
-    setState(() {
-      _videoPath = result.file!.path;
-      _imagePath = null; // image and video are mutually exclusive
-    });
   }
 
   Future<void> _publish() async {
@@ -84,6 +115,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
     try {
       String? imageUrl;
       String? videoUrl;
+      String? thumbnailUrl;
       if (_imagePath != null) {
         imageUrl = await Services.instance.uploads.upload(File(_imagePath!));
       } else if (_videoPath != null) {
@@ -98,11 +130,21 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
           );
         }
         videoUrl = await Services.instance.uploads.uploadVideo(f);
+        // Upload the cover when available (same image upload path).
+        if (_thumbnailPath != null) {
+          try {
+            thumbnailUrl =
+                await Services.instance.uploads.upload(File(_thumbnailPath!));
+          } catch (_) {
+            thumbnailUrl = null; // safe fallback
+          }
+        }
       }
       await state.createPost(
         text: _controller.text,
         imageUrl: imageUrl,
         videoUrl: videoUrl,
+        thumbnailUrl: thumbnailUrl,
       );
       if (!mounted) return;
       // Return to the caller (own profile or feed) — replacing the route
@@ -157,19 +199,40 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
                 if (_videoPath != null) ...[
                   ClipRRect(
                     borderRadius: BorderRadius.circular(AppDimensions.radiusLg),
-                    child: Container(
-                      height: 180,
-                      color: AppColors.nightBlue,
-                      alignment: Alignment.center,
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.videocam_rounded, size: 44),
-                          const SizedBox(height: 6),
-                          Text('VÍDEO SELECIONADO', style: AppTextStyles.hud),
-                        ],
-                      ),
-                    ),
+                    child: _thumbnailPath != null
+                        ? AspectRatio(
+                            aspectRatio: 16 / 10,
+                            child: Stack(
+                              fit: StackFit.expand,
+                              children: [
+                                Image.file(
+                                  File(_thumbnailPath!),
+                                  fit: BoxFit.cover,
+                                ),
+                                const Center(
+                                  child: Icon(
+                                    Icons.play_circle_outline_rounded,
+                                    color: Colors.white,
+                                    size: 48,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                        : Container(
+                            height: 180,
+                            color: AppColors.nightBlue,
+                            alignment: Alignment.center,
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.videocam_rounded, size: 44),
+                                const SizedBox(height: 6),
+                                Text('VÍDEO SELECIONADO',
+                                    style: AppTextStyles.hud),
+                              ],
+                            ),
+                          ),
                   ),
                   const SizedBox(height: AppDimensions.spaceSm),
                   Align(
@@ -180,7 +243,10 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
                       label: Text('Remover vídeo',
                           style: AppTextStyles.caption
                               .copyWith(color: AppColors.error)),
-                      onPressed: () => setState(() => _videoPath = null),
+                      onPressed: () => setState(() {
+                        _videoPath = null;
+                        _thumbnailPath = null;
+                      }),
                     ),
                   ),
                 ] else if (_imagePath != null) ...[
@@ -206,23 +272,14 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
                       onPressed: () => setState(() => _imagePath = null),
                     ),
                   ),
-                ] else ...[
+                ] else
                   MatrixButton(
-                    label: 'Adicionar imagem',
-                    icon: Icons.add_photo_alternate_outlined,
+                    label: '📷 Foto/Vídeo',
+                    icon: Icons.photo_library_outlined,
                     variant: MatrixButtonVariant.outline,
                     expanded: true,
-                    onPressed: _pickImage,
+                    onPressed: _pickMedia,
                   ),
-                  const SizedBox(height: AppDimensions.spaceSm),
-                  MatrixButton(
-                    label: 'Adicionar vídeo',
-                    icon: Icons.videocam_outlined,
-                    variant: MatrixButtonVariant.outline,
-                    expanded: true,
-                    onPressed: _pickVideo,
-                  ),
-                ],
                 const SizedBox(height: AppDimensions.spaceXxl),
                 Row(
                   children: [

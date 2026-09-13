@@ -175,6 +175,9 @@ class _PostCardState extends State<PostCard>
                 key: widget.videoKey,
                 child: PostVideoPreview(
                   videoUrl: ApiConfig.resolveUrl(post.videoUrl!),
+                  thumbnailUrl: post.thumbnailUrl != null
+                      ? ApiConfig.resolveUrl(post.thumbnailUrl!)
+                      : null,
                   active: widget.videoActive,
                   onTap: _openVideo,
                 ),

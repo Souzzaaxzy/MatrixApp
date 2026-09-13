@@ -11,7 +11,7 @@ void main() {
 
     expect(find.text('NOVA PUBLICAÇÃO'), findsOneWidget);
     expect(find.text('O que você está pensando?'), findsOneWidget);
-    expect(find.text('ADICIONAR IMAGEM'), findsOneWidget);
+    expect(find.textContaining('FOTO/VÍDEO'), findsOneWidget);
     expect(find.text('PUBLICAR'), findsOneWidget);
   });
 

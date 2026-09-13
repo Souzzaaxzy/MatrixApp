@@ -133,6 +133,7 @@ class PostRepository {
     required String text,
     String? imageUrl,
     String? videoUrl,
+    String? thumbnailUrl,
   }) async {
     final json = await _api.post<Map<String, dynamic>>(
       '/api/posts',
@@ -140,6 +141,7 @@ class PostRepository {
         'text': text,
         if (imageUrl != null) 'imageUrl': imageUrl,
         if (videoUrl != null) 'videoUrl': videoUrl,
+        if (thumbnailUrl != null) 'thumbnailUrl': thumbnailUrl,
       },
     );
     return FeedPostDto.fromJson(json).toModel();

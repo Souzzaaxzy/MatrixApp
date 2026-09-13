@@ -84,6 +84,10 @@ class _GroupConversationScreenState extends State<GroupConversationScreen>
   bool _typingLastSent = false;
   bool _loadRequested = false;
 
+  /// Whether the composer currently has ANY text (non-empty + non-whitespace).
+  /// Drives the mic/send swap: empty → 🎙, text → ➤ (never both).
+  bool _hasComposerText = false;
+
   // ── Mentions (@user + @todos) — WhatsApp-style inline suggestions ──
   List<GroupMemberInfoModel> _mentionMembers = const [];
   bool _mentionMembersLoaded = false;
@@ -562,6 +566,7 @@ class _GroupConversationScreenState extends State<GroupConversationScreen>
       _input.clear();
       setState(() {
         _replyTarget = null;
+        _hasComposerText = false;
       });
       _appendMessage(message);
     } on ApiException catch (e) {
@@ -921,6 +926,10 @@ class _GroupConversationScreenState extends State<GroupConversationScreen>
   }
 
   void _onComposerChanged(String value) {
+    final hasText = value.trim().isNotEmpty;
+    if (hasText != _hasComposerText) {
+      _hasComposerText = hasText;
+    }
     final typing = value.trim().isNotEmpty;
     if (typing != _typingLastSent) {
       _typingLastSent = typing;
@@ -1381,21 +1390,25 @@ class _GroupConversationScreenState extends State<GroupConversationScreen>
             iconColor: AppColors.holographicBlue,
             onSendMedia: _sendGroupMedia,
           ),
-          const SizedBox(width: 8),
-          _recording
-              ? _GroupPill(
-                  icon: Icons.stop_rounded,
-                  color: AppColors.error,
-                  onTap: _onMicTap)
-              : _GroupPill(
-                  icon: Icons.mic_rounded,
-                  color: AppColors.holographicBlue,
-                  onTap: _onMicTap),
-          const SizedBox(width: 8),
-          IconButton(
-            onPressed: (_sending || _voiceSending) ? null : () => _send(),
-            icon: Icon(Icons.send_rounded, color: AppColors.holographicBlue),
-          ),
+          // ONCE at a time: empty field → mic; text present → send. While
+          // recording, the stop pill stays visible regardless of text.
+          if (_recording)
+            _GroupPill(
+              icon: Icons.stop_rounded,
+              color: AppColors.error,
+              onTap: _onMicTap)
+          else if (!_hasComposerText)
+            _GroupPill(
+              icon: Icons.mic_rounded,
+              color: AppColors.holographicBlue,
+              onTap: _onMicTap)
+          else ...[
+            const SizedBox(width: 8),
+            IconButton(
+              onPressed: (_sending || _voiceSending) ? null : () => _send(),
+              icon: Icon(Icons.send_rounded, color: AppColors.holographicBlue),
+            ),
+          ],
         ],
       ),
     );

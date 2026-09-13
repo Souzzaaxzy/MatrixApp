@@ -576,7 +576,7 @@ class _ProfilePostTile extends StatelessWidget {
             fit: StackFit.expand,
             children: [
               if (post.isVideo)
-                const _VideoPlaceholder()
+                _VideoThumb(post)
               else if (post.imageUrl != null)
                 CachedNetworkImage(
                   imageUrl: ApiConfig.resolveUrl(post.imageUrl!),
@@ -650,18 +650,36 @@ class _ProfilePostTile extends StatelessWidget {
   }
 }
 
-/// Square grid placeholder for VIDEO posts in the profile grid: a dark tile
-/// with a play badge (no thumbnail generation needed — keeps the grid light).
-class _VideoPlaceholder extends StatelessWidget {
-  const _VideoPlaceholder();
+/// Square grid tile for VIDEO posts in the profile grid: shows the video
+/// COVER when available (crisp, no empty space), otherwise a dark fallback —
+/// always with a play badge so the media reads as a video.
+class _VideoThumb extends StatelessWidget {
+  const _VideoThumb(this.post);
+
+  final Post post;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      color: AppColors.nightBlue,
-      alignment: Alignment.center,
-      child: Icon(Icons.play_circle_outline_rounded,
-          color: AppColors.holographicBlue, size: 34),
+    final cover = post.thumbnailUrl;
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        if (cover != null && cover.isNotEmpty)
+          CachedNetworkImage(
+            imageUrl: ApiConfig.resolveUrl(cover),
+            fit: BoxFit.cover,
+            placeholder: (_, __) => _darkBackdrop(),
+            errorWidget: (_, __, ___) => _darkBackdrop(),
+          )
+        else
+          _darkBackdrop(),
+        Center(
+          child: Icon(Icons.play_circle_outline_rounded,
+              color: AppColors.holographicBlue, size: 34),
+        ),
+      ],
     );
   }
+
+  Widget _darkBackdrop() => Container(color: AppColors.nightBlue);
 }

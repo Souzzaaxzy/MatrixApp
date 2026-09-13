@@ -44,27 +44,18 @@ class ChatAttachButton extends StatelessWidget {
     if (action == null || !context.mounted) return;
     final messenger = ScaffoldMessenger.of(context);
 
-    // 1. Foto ou Vídeo?
-    final kind = await showModalBottomSheet<String>(
-      context: context,
-      useSafeArea: true,
-      backgroundColor: Colors.transparent,
-      barrierColor: Colors.black.withValues(alpha: 0.5),
-      builder: (_) => const _KindPopup(),
-    );
-    if (kind == null || !context.mounted) return;
-
-    // 2. Capture or pick from the gallery/camera.
+    // Pick media DIRECTLY from the gallery (photo OR video in the same
+    // native picker — no extra Foto/Vídeo step). The type is detected from
+    // the file.
     final result = await (action == _AttachAction.gallery
-        ? (kind == 'video'
-            ? pickGalleryVideo()
-            : pickGalleryImage(imageQuality: 85))
-        : (kind == 'video' ? pickCameraVideo() : pickCameraImage()));
+        ? pickGalleryMedia()
+        : _captureCameraMedia(context));
     if (!context.mounted) return;
     if (!result.isSuccess || result.file == null) return;
     final file = File(result.file!.path);
+    final kind = _isVideoPath(file.path) ? 'video' : 'image';
 
-    // 3. Size guard (server re-validates) + upload + send.
+    // Size guard (server re-validates) + upload + send.
     try {
       if (kind == 'video' && file.lengthSync() > 100 * 1024 * 1024) {
         messenger.showSnackBar(
@@ -82,6 +73,32 @@ class ChatAttachButton extends StatelessWidget {
       messenger.showSnackBar(
           const SnackBar(content: Text('Erro ao enviar a mídia.')));
     }
+  }
+
+  /// Camera capture: opens the native camera and lets the user switch
+  /// between taking a PHOTO or recording a VIDEO (image_picker has no
+  /// single "camera media" entry, so the camera action offers Foto/Vídeo —
+  /// the gallery action stays unified).
+  Future<GalleryPickResult> _captureCameraMedia(BuildContext context) async {
+    final kind = await showModalBottomSheet<String>(
+      context: context,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      barrierColor: Colors.black.withValues(alpha: 0.5),
+      builder: (_) => _CameraKindPopup(),
+    );
+    if (kind == null) return const GalleryPickResult.cancelled();
+    return kind == 'video' ? pickCameraVideo() : pickCameraImage();
+  }
+
+  bool _isVideoPath(String path) {
+    final lower = path.toLowerCase();
+    return lower.endsWith('.mp4') ||
+        lower.endsWith('.mov') ||
+        lower.endsWith('.m4v') ||
+        lower.endsWith('.mkv') ||
+        lower.endsWith('.webm') ||
+        lower.endsWith('.3gp');
   }
 
   @override
@@ -117,9 +134,10 @@ class _AttachPopup extends StatelessWidget {
   }
 }
 
-/// Compact bottom pop-up to pick Foto or Vídeo.
-class _KindPopup extends StatelessWidget {
-  const _KindPopup();
+/// Camera sub-menu: Foto ou Vídeo (only for the camera — image_picker's
+/// native camera has separate photo/video intents).
+class _CameraKindPopup extends StatelessWidget {
+  const _CameraKindPopup();
 
   @override
   Widget build(BuildContext context) {

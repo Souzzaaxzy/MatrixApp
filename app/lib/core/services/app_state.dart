@@ -536,16 +536,19 @@ class AppState extends ChangeNotifier {
 
   /// Creates a post remotely and prepends it to the local feed (and to the
   /// profile grid when the viewed profile is the author's own). [imageUrl]
-  /// and [videoUrl] are mutually exclusive (server validates).
+  /// and [videoUrl] are mutually exclusive (server validates); [thumbnailUrl]
+  /// is the video cover (only for video posts).
   Future<String> createPost({
     required String text,
     String? imageUrl,
     String? videoUrl,
+    String? thumbnailUrl,
   }) async {
     final post = await _postsRepo.create(
       text: text.trim(),
       imageUrl: imageUrl,
       videoUrl: videoUrl,
+      thumbnailUrl: thumbnailUrl,
     );
     _posts.insert(0, post);
     // Reflect on the author's viewed profile, if loaded: posts list grows

@@ -65,6 +65,7 @@ class FeedPostDto {
   final String text;
   final String? imageUrl;
   final String? videoUrl;
+  final String? thumbnailUrl;
   final DateTime createdAt;
   final String authorId;
   final String authorNickname;
@@ -81,6 +82,7 @@ class FeedPostDto {
     required this.text,
     this.imageUrl,
     this.videoUrl,
+    this.thumbnailUrl,
     required this.createdAt,
     required this.authorId,
     required this.authorNickname,
@@ -106,6 +108,7 @@ class FeedPostDto {
         authorFrameAsset: authorFrameAsset,
         imageUrl: imageUrl,
         videoUrl: videoUrl,
+        thumbnailUrl: thumbnailUrl,
         likes: likeCount,
         liked: liked,
         commentCount: commentCount,
@@ -118,6 +121,7 @@ class FeedPostDto {
       text: (json['text'] as String?) ?? '',
       imageUrl: json['imageUrl'] as String?,
       videoUrl: json['videoUrl'] as String?,
+      thumbnailUrl: json['thumbnailUrl'] as String?,
       createdAt: DateTime.parse(json['createdAt'] as String),
       authorId: (author['id'] as String?) ?? '',
       authorNickname: author['nickname'] as String,

@@ -310,6 +310,7 @@ class _FakePostRepository implements PostRepository {
     required String text,
     String? imageUrl,
     String? videoUrl,
+    String? thumbnailUrl,
   }) async {
     final u = _store.currentUser;
     final post = Post(
@@ -322,6 +323,7 @@ class _FakePostRepository implements PostRepository {
       authorAvatarUrl: u.avatarUrl,
       imageUrl: imageUrl,
       videoUrl: videoUrl,
+      thumbnailUrl: thumbnailUrl,
       likes: 0,
       liked: false,
       comments: const [],

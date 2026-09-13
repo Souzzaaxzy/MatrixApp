@@ -18,42 +18,43 @@ void main() {
   });
 
   group('gallery integration in create post', () {
-    testWidgets('picking a gallery image shows the preview and removes it',
+    testWidgets('picking gallery media (photo/video) shows the preview and removes it',
         (tester) async {
       await pumpMatrixApp(tester, const CreatePostScreen());
 
-      // No preview yet → the "Adicionar imagem" button is present
+      // One unified media button (📷 Foto/Vídeo) — no photo vs video split.
 
-      expect(find.text('ADICIONAR IMAGEM'), findsOneWidget);
+      expect(find.textContaining('FOTO/VÍDEO'), findsOneWidget);
 
-      // Open the gallery (fake picks a file) → preview replaces the button
+      // Open the gallery (fake picks a file) → preview replaces the button.
 
-      await tester.tap(find.text('ADICIONAR IMAGEM'));
+      await tester.tap(find.textContaining('FOTO/VÍDEO'));
       await tester.pumpAndSettle();
 
       expect(fake.pickCount, 1);
-      expect(find.text('ADICIONAR IMAGEM'), findsNothing);
+      expect(find.textContaining('FOTO/VÍDEO'), findsNothing);
       expect(find.text('Remover imagem'), findsOneWidget);
 
-      // Removing them restores the add-button(so the image can be replaced..
+      // Removing it restores the unified button (so media can be replaced).
       await tester.ensureVisible(find.text('Remover imagem'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Remover imagem'));
       await tester.pump();
 
-      expect(find.text('ADICIONAR IMAGEM'), findsOneWidget);
+      expect(find.textContaining('FOTO/VÍDEO'), findsOneWidget);
     });
 
-    testWidgets('permission denied shows an error and does not crash',
+    testWidgets('gallery opens and picking is stable (no crash on cancel)',
         (tester) async {
-      fake.permissionGranted = false;
+      fake.pickedImagePath = null; // simulate user cancelling the picker
       await pumpMatrixApp(tester, const CreatePostScreen());
 
-      await tester.tap(find.text('ADICIONAR IMAGEM'));
+      await tester.tap(find.textContaining('FOTO/VÍDEO'));
       await tester.pumpAndSettle();
 
-      expect(find.textContaining('Permissão'), findsOneWidget);
-      expect(find.text('ADICIONAR IMAGEM'), findsOneWidget);
+      // Cancel keeps the screen intact and the unified button available.
+      expect(find.text('Remover imagem'), findsNothing);
+      expect(find.textContaining('FOTO/VÍDEO'), findsOneWidget);
     });
   });
 }

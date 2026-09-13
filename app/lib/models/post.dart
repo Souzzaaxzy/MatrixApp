@@ -15,6 +15,7 @@ class Post {
     this.authorFrameAsset,
     this.imageUrl,
     this.videoUrl,
+    this.thumbnailUrl,
     this.likes = 0,
     this.liked = false,
     this.commentCount = 0,
@@ -53,6 +54,10 @@ class Post {
   /// [imageUrl] server-side.
   final String? videoUrl;
 
+  /// Remote URL of the video's cover/thumbnail (video posts). Persisted
+  /// server-side; old videos may have null → the UI falls back to a badge.
+  final String? thumbnailUrl;
+
   /// Whether this post's media is a video.
   bool get isVideo => videoUrl != null && videoUrl!.isNotEmpty;
 
@@ -68,6 +73,7 @@ class Post {
     String? text,
     String? imageUrl,
     String? videoUrl,
+    String? thumbnailUrl,
     int? likes,
     bool? liked,
     int? commentCount,
@@ -86,6 +92,7 @@ class Post {
         authorFrameAsset: authorFrameAsset,
         imageUrl: imageUrl ?? this.imageUrl,
         videoUrl: videoUrl ?? this.videoUrl,
+        thumbnailUrl: thumbnailUrl ?? this.thumbnailUrl,
         likes: likes ?? this.likes,
         liked: liked ?? this.liked,
         commentCount: commentCount ?? this.commentCount,

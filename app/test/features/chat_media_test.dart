@@ -50,6 +50,48 @@ Future<AppState> seededGroup() async {
 }
 
 void main() {
+  group('composer mic/send swap', () {
+    testWidgets('DM: empty field shows mic, text shows send, never both',
+        (tester) async {
+      final state = await seededChat();
+      await pumpMatrixApp(
+        tester,
+        const ConversationScreen(
+          args: ConversationRouteArgs(
+            conversationId: 'u0|u2',
+            otherUserId: 'u2',
+            otherNickname: 'joao',
+          ),
+        ),
+        state: state,
+      );
+      await tester.pumpAndSettle();
+
+      // Empty → mic visible, send hidden.
+      expect(find.byIcon(Icons.mic_rounded), findsOneWidget);
+      expect(find.byIcon(Icons.arrow_forward_rounded), findsNothing);
+
+      // Type → mic hidden (invisible), send visible.
+      await tester.enterText(find.byType(TextField), 'oi');
+      await tester.pumpAndSettle();
+      expect(find.byIcon(Icons.arrow_forward_rounded), findsOneWidget);
+      expect(tester
+          .widget<Opacity>(
+              find
+                  .ancestor(
+                      of: find.byIcon(Icons.mic_rounded),
+                      matching: find.byType(Opacity))
+                  .first)
+          .opacity,
+          0);
+
+      // Clear → mic back, send gone.
+      await tester.enterText(find.byType(TextField), '');
+      await tester.pumpAndSettle();
+      expect(find.byIcon(Icons.mic_rounded), findsOneWidget);
+      expect(find.byIcon(Icons.arrow_forward_rounded), findsNothing);
+    });
+  });
   test('ChatMessage media fields: isImage/isVideo/isMedia', () {
     final text = ChatMessage(
       id: 'a',

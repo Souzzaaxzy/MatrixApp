@@ -205,6 +205,9 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
   Widget _detailVideo(Post post) {
     return PostVideoPreview(
       videoUrl: ApiConfig.resolveUrl(post.videoUrl!),
+      thumbnailUrl: post.thumbnailUrl != null
+          ? ApiConfig.resolveUrl(post.thumbnailUrl!)
+          : null,
       active: true,
       onTap: () {
         Navigator.of(context).push(

@@ -106,8 +106,19 @@ class _FakeImagePickerPlatform extends ImagePickerPlatform {
       <XFile>[XFile('/tmp/fake_gallery_multi_${_fake.pickCount}.jpg')];
 
   @override
-  Future<List<XFile>> getMedia({required MediaOptions options}) async =>
-      <XFile>[XFile('/tmp/fake_gallery_media_${_fake.pickCount}.jpg')];
+  Future<List<XFile>> getMedia({required MediaOptions options}) async {
+    _fake.pickCount++;
+    final path = _fake.pickedImagePath;
+    if (path == null || path.isEmpty) return const <XFile>[];
+    final f = File(path);
+    try {
+      f.parent.createSync(recursive: true);
+      if (!f.existsSync()) {
+        f.writeAsBytesSync(List<int>.filled(64, 1));
+      }
+    } catch (_) {}
+    return <XFile>[XFile(path)];
+  }
 }
 
 class _NoopImagePickerPlatform extends ImagePickerPlatform {

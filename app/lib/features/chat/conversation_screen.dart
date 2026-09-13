@@ -1739,15 +1739,21 @@ class _ComposerState extends State<_Composer> {
                 ),
                 const SizedBox(width: 2),
               ],
-              _MicButton(
-                onPointerDown: widget.onPointerDown,
-                onPointerUp: widget.onPointerUp,
-                onDrag: widget.onMicDragUpdate,
-                enabled: widget.enabled && !widget.voiceSending,
-                state: widget.recorder.state,
-                sending: widget.voiceSending,
-                locking: widget.dragLocked,
-                cancelZone: widget.dragCancelZone,
+              // ONCE at a time: empty field → mic; text present → send.
+              // The mic is kept in the tree (Opacity 0 once replaced) so the
+              // recording gesture recognizers never churn/re-mount.
+              Opacity(
+                opacity: showSend ? 0 : 1,
+                child: _MicButton(
+                  onPointerDown: widget.onPointerDown,
+                  onPointerUp: widget.onPointerUp,
+                  onDrag: widget.onMicDragUpdate,
+                  enabled: widget.enabled && !widget.voiceSending,
+                  state: widget.recorder.state,
+                  sending: widget.voiceSending,
+                  locking: widget.dragLocked,
+                  cancelZone: widget.dragCancelZone,
+                ),
               ),
               if (showSend) ...[
                 const SizedBox(width: AppDimensions.spaceSm),

@@ -94,6 +94,23 @@ Future<GalleryPickResult> pickGalleryImage({
   }
 }
 
+/// Opens the device gallery and lets the user pick EITHER a photo or a
+/// video in a single step (image_picker's `pickMedia`). The caller detects
+/// the type from the returned file (extension/MIME). Returns the [XFile].
+Future<GalleryPickResult> pickGalleryMedia() async {
+  try {
+    // image_picker's `pickMedia` opens the gallery photo/video picker in one
+    // step (photo OR video — the user chooses directly there).
+    final file = await ImagePicker().pickMedia();
+    if (file == null) {
+      return const GalleryPickResult.cancelled();
+    }
+    return GalleryPickResult.success(file);
+  } catch (_) {
+    return const GalleryPickResult.failure('Não foi possível abrir a galeria.');
+  }
+}
+
 /// Picks a VIDEO from the device gallery (image_picker's pickVideo). No
 /// permission prompts beyond what Android's photo picker requires; returns
 /// the [XFile] as-is (videos are not re-encoded).
