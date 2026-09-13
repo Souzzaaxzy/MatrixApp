@@ -729,6 +729,49 @@ class ChatRepository {
     return (messages: page.messages, hasMore: page.hasMore);
   }
 
+  /// Sends a MEDIA chat message (image/video). The file must already be
+  /// uploaded (image → /api/uploads, video → /api/uploads/video) and [url]
+  /// is the resulting URL. The server validates membership + reply target,
+  /// persists the message and fans it out via realtime.
+  Future<ChatMessage> sendMedia(
+    String conversationId, {
+    required String kind,
+    required String url,
+    String? replyToMessageId,
+  }) async {
+    final json = await _api.post<Map<String, dynamic>>(
+      '/api/conversations/$conversationId/media',
+      data: {
+        'kind': kind,
+        'url': url,
+        if (replyToMessageId != null && replyToMessageId.isNotEmpty)
+          'replyToMessageId': replyToMessageId,
+      },
+    );
+    return ChatMessageDto.fromJson(json['message'] as Map<String, dynamic>)
+        .toModel();
+  }
+
+  /// Sends a MEDIA message to a GROUP (see [sendMedia]).
+  Future<ChatMessage> sendGroupMedia(
+    String groupId, {
+    required String kind,
+    required String url,
+    String? replyToMessageId,
+  }) async {
+    final json = await _api.post<Map<String, dynamic>>(
+      '/api/groups/$groupId/media',
+      data: {
+        'kind': kind,
+        'url': url,
+        if (replyToMessageId != null && replyToMessageId.isNotEmpty)
+          'replyToMessageId': replyToMessageId,
+      },
+    );
+    return ChatMessageDto.fromJson(json['message'] as Map<String, dynamic>)
+        .toModel();
+  }
+
   /// Sends a chat message. Returns the persisted message (auth-derived
   /// sender). [replyToMessageId] is optional: when set, the message is a
   /// reply to that existing message of the same conversation (only the

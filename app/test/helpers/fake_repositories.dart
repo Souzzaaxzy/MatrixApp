@@ -921,6 +921,41 @@ class _FakeChatRepository implements ChatRepository {
   }
 
   @override
+  Future<ChatMessage> sendMedia(
+    String conversationId, {
+    required String kind,
+    required String url,
+    String? replyToMessageId,
+  }) async {
+    final me = _store.currentUserId;
+    final label = kind == 'video' ? '🎥 Vídeo' : '📷 Foto';
+    final message = ChatMessage(
+      id: 'md${DateTime.now().microsecondsSinceEpoch}',
+      conversationId: conversationId,
+      senderId: me!,
+      content: label,
+      createdAt: DateTime.now(),
+      mine: true,
+      type: kind,
+      imageUrl: kind == 'image' ? url : null,
+      videoUrl: kind == 'video' ? url : null,
+      replyTo: replyToMessageId == null
+          ? null
+          : ReplyInfo(
+              id: replyToMessageId,
+              senderId: _store.currentUserId ?? "",
+              senderNickname: _store.currentUser.nickname,
+              content: "original",
+              exists: true,
+            ),
+    );
+    _store.chatMessagesByPair
+        .putIfAbsent(conversationId, () => [])
+        .add(message);
+    return message;
+  }
+
+  @override
   Future<ChatMessage> sendVoice(
     String conversationId,
     File audioFile, {
@@ -1140,6 +1175,43 @@ class _FakeChatRepository implements ChatRepository {
           ),
     ];
     return (read: read, unread: <ChatUser>[]);
+  }
+
+  @override
+  Future<ChatMessage> sendGroupMedia(
+    String groupId, {
+    required String kind,
+    required String url,
+    String? replyToMessageId,
+  }) async {
+    final me = _store.currentUserId;
+    if (me == null || !_store.groups.containsKey(groupId)) {
+      throw const ApiException(statusCode: 403, message: 'Acesso negado.');
+    }
+    final label = kind == 'video' ? '🎥 Vídeo' : '📷 Foto';
+    final message = ChatMessage(
+      id: 'gmd${DateTime.now().microsecondsSinceEpoch}',
+      groupId: groupId,
+      conversationId: groupId,
+      senderId: me,
+      content: label,
+      createdAt: DateTime.now(),
+      mine: true,
+      type: kind,
+      imageUrl: kind == 'image' ? url : null,
+      videoUrl: kind == 'video' ? url : null,
+      replyTo: replyToMessageId == null
+          ? null
+          : ReplyInfo(
+              id: replyToMessageId,
+              senderId: _store.currentUserId ?? "",
+              senderNickname: _store.currentUser.nickname,
+              content: "original",
+              exists: true,
+            ),
+    );
+    _store.groupMessagesById.putIfAbsent(groupId, () => []).add(message);
+    return message;
   }
 
   @override

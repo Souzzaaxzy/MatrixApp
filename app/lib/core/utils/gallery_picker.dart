@@ -108,3 +108,32 @@ Future<GalleryPickResult> pickGalleryVideo() async {
     return const GalleryPickResult.failure('Não foi possível abrir a galeria.');
   }
 }
+
+/// Captures a PHOTO with the device camera (image_picker).
+Future<GalleryPickResult> pickCameraImage() async {
+  try {
+    final file = await ImagePicker().pickImage(
+      source: ImageSource.camera,
+      imageQuality: 85,
+    );
+    if (file == null) {
+      return const GalleryPickResult.cancelled();
+    }
+    return GalleryPickResult.success(file);
+  } catch (_) {
+    return const GalleryPickResult.failure('Não foi possível abrir a câmera.');
+  }
+}
+
+/// Records a VIDEO with the device camera (image_picker, preserves quality).
+Future<GalleryPickResult> pickCameraVideo() async {
+  try {
+    final file = await ImagePicker().pickVideo(source: ImageSource.camera);
+    if (file == null) {
+      return const GalleryPickResult.cancelled();
+    }
+    return GalleryPickResult.success(file);
+  } catch (_) {
+    return const GalleryPickResult.failure('Não foi possível abrir a câmera.');
+  }
+}

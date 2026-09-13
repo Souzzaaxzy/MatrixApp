@@ -552,6 +552,8 @@ class ChatMessageDto {
   final String type;
   final String? audioUrl;
   final int? durationMs;
+  final String? imageUrl;
+  final String? videoUrl;
   final List<ChatMention> mentions;
   final bool mentionAll;
   final bool mentioned;
@@ -570,6 +572,8 @@ class ChatMessageDto {
     this.type = 'text',
     this.audioUrl,
     this.durationMs,
+    this.imageUrl,
+    this.videoUrl,
     this.mentions = const [],
     this.mentionAll = false,
     this.mentioned = false,
@@ -586,9 +590,16 @@ class ChatMessageDto {
         mine: mine,
         readAt: readAt,
         replyTo: replyTo?.toModel(),
-        type: type == 'voice' ? 'voice' : 'text',
+        type: switch (type) {
+          'voice' => 'voice',
+          'image' => 'image',
+          'video' => 'video',
+          _ => 'text',
+        },
         audioUrl: audioUrl,
         durationMs: durationMs,
+        imageUrl: imageUrl,
+        videoUrl: videoUrl,
         mentions: mentions,
         mentionAll: mentionAll,
         mentioned: mentioned,
@@ -617,6 +628,8 @@ class ChatMessageDto {
       type: (json['type'] as String?) ?? 'text',
       audioUrl: json['audioUrl'] as String?,
       durationMs: (json['durationMs'] as num?)?.toInt(),
+      imageUrl: json['imageUrl'] as String?,
+      videoUrl: json['videoUrl'] as String?,
       mentions: mentionsRaw is List
           ? mentionsRaw
               .whereType<Map<String, dynamic>>()

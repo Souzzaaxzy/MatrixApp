@@ -17,6 +17,8 @@ import '../../data/api_config.dart';
 import '../../data/dtos/dtos.dart';
 import '../../models/conversation.dart';
 import '../../app/routes.dart';
+import 'chat_attach_button.dart';
+import 'chat_media_bubble.dart';
 import 'chat_navigation.dart';
 import 'reply_swipe.dart';
 import 'voice_player_bubble.dart';
@@ -507,6 +509,33 @@ class _GroupConversationScreenState extends State<GroupConversationScreen>
     final pos = _scroll.position.maxScrollExtent;
     _scroll.jumpTo(pos);
     _followBottom = true;
+  }
+
+  /// Sends a GROUP media message (image/video), preserving the active reply.
+  Future<void> _sendGroupMedia(String kind, String url) async {
+    final state = _state;
+    if (state == null) return;
+    final reply = _replyTarget;
+    try {
+      final message = await state.sendGroupMediaMessage(
+        _groupId,
+        kind: kind,
+        url: url,
+        replyToMessageId: reply?.id,
+      );
+      if (!mounted) return;
+      setState(() {
+        _replyTarget = null;
+        _showMentionSuggestions = false;
+        _mentionQuery = '';
+      });
+      _appendMessage(message);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Não foi possível enviar a mídia.')),
+      );
+    }
   }
 
   Future<void> _send() async {
@@ -1339,6 +1368,11 @@ class _GroupConversationScreenState extends State<GroupConversationScreen>
               onFieldSubmitted: (_) => _send(),
             ),
           ),
+          const SizedBox(width: 2),
+          ChatAttachButton(
+            iconColor: AppColors.holographicBlue,
+            onSendMedia: _sendGroupMedia,
+          ),
           const SizedBox(width: 8),
           _recording
               ? _GroupPill(
@@ -1681,6 +1715,9 @@ class _MessageContent extends StatelessWidget {
           message: message,
           mine: message.senderId ==
               AppStateScope.maybeOf(context)?.currentUser?.id);
+    }
+    if (message.isMedia) {
+      return ChatMediaBubble(message: message);
     }
     final selfId = AppStateScope.maybeOf(context)?.currentUser?.id;
     final spans = <TextSpan>[];

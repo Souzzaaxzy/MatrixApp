@@ -135,6 +135,8 @@ class ChatMessage {
     this.type = 'text',
     this.audioUrl,
     this.durationMs,
+    this.imageUrl,
+    this.videoUrl,
     this.mentions = const [],
     this.mentionAll = false,
     this.mentioned = false,
@@ -171,6 +173,16 @@ class ChatMessage {
   /// Recorded length in milliseconds (voice only).
   final int? durationMs;
 
+  /// Absolute URL of the persisted image (media messages only).
+  final String? imageUrl;
+
+  /// Absolute URL of the persisted video (media messages only).
+  final String? videoUrl;
+
+  bool get isImage => type == 'image';
+  bool get isVideo => type == 'video';
+  bool get isMedia => isImage || isVideo;
+
   /// Structured mentions embedded in this (group) message — every mentioned
   /// user id + live nickname. Empty for non-mention messages and DMs.
   final List<ChatMention> mentions;
@@ -196,6 +208,8 @@ class ChatMessage {
     String? type,
     String? audioUrl,
     int? durationMs,
+    String? imageUrl,
+    String? videoUrl,
     ChatUser? sender,
     List<ChatMention>? mentions,
     bool? mentionAll,
@@ -215,6 +229,8 @@ class ChatMessage {
         type: type ?? this.type,
         audioUrl: audioUrl ?? this.audioUrl,
         durationMs: durationMs ?? this.durationMs,
+        imageUrl: imageUrl ?? this.imageUrl,
+        videoUrl: videoUrl ?? this.videoUrl,
         mentions: mentions ?? this.mentions,
         mentionAll: mentionAll ?? this.mentionAll,
         mentioned: mentioned ?? this.mentioned,

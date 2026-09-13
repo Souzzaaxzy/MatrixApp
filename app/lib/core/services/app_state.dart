@@ -1227,6 +1227,45 @@ class AppState extends ChangeNotifier {
     return message;
   }
 
+  /// Sends a MEDIA message (image/video) to a private conversation and
+  /// updates the cached last-message preview (same flow as chat text/voice).
+  Future<ChatMessage> sendMediaMessage(
+    String conversationId, {
+    required String kind,
+    required String url,
+    String? replyToMessageId,
+    ChatUser? otherUser,
+  }) async {
+    final message = await _chat.sendMedia(
+      conversationId,
+      kind: kind,
+      url: url,
+      replyToMessageId: replyToMessageId,
+    );
+    _applyChatMessage(message, otherUser: otherUser ?? _peerOf(conversationId));
+    notifyListeners();
+    return message;
+  }
+
+  /// Sends a GROUP media message (image/video) and updates the cached group
+  /// preview (same flow as group text/voice).
+  Future<ChatMessage> sendGroupMediaMessage(
+    String groupId, {
+    required String kind,
+    required String url,
+    String? replyToMessageId,
+  }) async {
+    final message = await _chat.sendGroupMedia(
+      groupId,
+      kind: kind,
+      url: url,
+      replyToMessageId: replyToMessageId,
+    );
+    _applyChatMessage(message);
+    notifyListeners();
+    return message;
+  }
+
   /// Sends a recorded VOICE message and (like [sendChatMessage]) updates the
   /// cached conversation's last-message slot with the server's authoritative
   /// response so the list preview ("🎤 Áudio") updates immediately.

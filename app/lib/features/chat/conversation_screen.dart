@@ -19,6 +19,8 @@ import '../../core/widgets/user_avatar.dart';
 import '../../data/api_config.dart';
 import '../../data/services.dart';
 import '../../models/conversation.dart';
+import 'chat_attach_button.dart';
+import 'chat_media_bubble.dart';
 import 'chat_navigation.dart';
 import 'reply_swipe.dart';
 import 'voice_player_bubble.dart';
@@ -287,6 +289,32 @@ class _ConversationScreenState extends State<ConversationScreen>
         _loading = false;
         _error = 'Não foi possível carregar a conversa. Verifique sua conexão.';
       });
+    }
+  }
+
+  /// Sends a MEDIA message (image/video) to the current private
+  /// conversation, preserving the active reply reference.
+  Future<void> _sendMedia(String kind, String url) async {
+    final conversationId = _conversationId;
+    final state = AppStateScope.maybeOf(context);
+    if (conversationId.isEmpty || state == null) return;
+    final reply = _replyTarget;
+    try {
+      final message = await state.sendMediaMessage(
+        conversationId,
+        kind: kind,
+        url: url,
+        replyToMessageId: reply?.id,
+        otherUser: _conversation?.otherUser ?? widget.args.otherUser,
+      );
+      if (!mounted) return;
+      setState(() => _replyTarget = null);
+      _appendMessage(message);
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Não foi possível enviar a mídia.')),
+      );
     }
   }
 
@@ -849,6 +877,7 @@ class _ConversationScreenState extends State<ConversationScreen>
               enabled: conversation != null,
               onChanged: _onInputChanged,
               onSend: _send,
+              onAttachMedia: (kind, url) => _sendMedia(kind, url),
               onPointerDown: _onMicPointerDown,
               onPointerUp: _onMicPointerUp,
               onMicDragUpdate: _onMicDrag,
@@ -1496,6 +1525,8 @@ class _MessageBubble extends StatelessWidget {
             ),
           if (message.isVoice)
             VoicePlayerBubble(message: message, mine: mine)
+          else if (message.isMedia)
+            ChatMediaBubble(message: message)
           else
             Text(
               message.content,
@@ -1570,6 +1601,7 @@ class _Composer extends StatefulWidget {
     required this.enabled,
     required this.onChanged,
     required this.onSend,
+    this.onAttachMedia,
     required this.onPointerDown,
     required this.onPointerUp,
     required this.onMicDragUpdate,
@@ -1586,6 +1618,9 @@ class _Composer extends StatefulWidget {
   final bool enabled;
   final ValueChanged<String> onChanged;
   final VoidCallback onSend;
+
+  /// Called after a media file is uploaded; [kind] is 'image'|'video'.
+  final Future<void> Function(String kind, String url)? onAttachMedia;
 
   /// Pointer-down starts recording immediately; pointer-up sends (or cancels on quick tap..
   final VoidCallback onPointerDown;
@@ -1697,6 +1732,13 @@ class _ComposerState extends State<_Composer> {
                       ),
               ),
               const SizedBox(width: AppDimensions.spaceSm),
+              if (widget.onAttachMedia != null) ...[
+                ChatAttachButton(
+                  iconColor: AppColors.holographicBlue,
+                  onSendMedia: widget.onAttachMedia!,
+                ),
+                const SizedBox(width: 2),
+              ],
               _MicButton(
                 onPointerDown: widget.onPointerDown,
                 onPointerUp: widget.onPointerUp,
