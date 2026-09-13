@@ -112,95 +112,102 @@ class _AddMemberSheetState extends State<AddMemberSheet> {
           color: AppColors.bluishBlack,
           borderRadius: BorderRadius.circular(AppDimensions.radiusXl),
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Padding(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: AppDimensions.spaceLg),
-              child: Text('ADICIONAR MEMBRO',
-                  style: AppTextStyles.hud
-                      .copyWith(fontSize: 14, color: AppColors.techWhite)),
-            ),
-            const SizedBox(height: AppDimensions.spaceSm),
-            if (_loading)
-              Padding(
-                padding: EdgeInsets.all(24),
-                child:
-                    Center(child: HudLabel(text: 'CARREGANDO...', dot: true)),
-              )
-            else if (_friends.isEmpty)
-              Padding(
-                padding: EdgeInsets.all(24),
-                child: Center(
-                  child: Text('Nenhum amigo disponível para adicionar.',
-                      style: AppTextStyles.bodyMuted,
-                      textAlign: TextAlign.center),
-                ),
-              )
-            else ...[
-              Flexible(
-                child: ListView(
-                  shrinkWrap: true,
-                  children: [
-                    for (final u in _friends)
-                      ListTile(
-                        leading: FramedAvatar(
-                          frame: u.frame,
-                          size: 44,
-                          child: UserAvatar(
-                            name: u.nickname,
-                            seed: u.nickname,
-                            imageUrl: u.avatarUrl,
-                            size: 36,
-                          ),
-                        ),
-                        title: NicknameRenderer(
-                          displayNickname(u.nickname),
-                          baseStyle: AppTextStyles.body.copyWith(fontSize: 15),
-                          background: AppColors.bluishBlack,
-                          nameColor: u.nameColor,
-                        ),
-                        trailing: Checkbox(
-                          value: _selected.contains(u.id),
-                          onChanged: (_) => _toggle(u),
-                          activeColor: AppColors.holographicBlue,
-                          checkColor: AppColors.absoluteBlack,
-                        ),
-                        onTap: () => _toggle(u),
-                      ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: AppDimensions.spaceSm),
+        // Transparent Material so the ListTiles below find a Material
+        // ancestor (the Container's decoration would otherwise hide their
+        // ink splashes — newer Flutter asserts on that).
+        child: Material(
+          color: Colors.transparent,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
               Padding(
                 padding: const EdgeInsets.symmetric(
                     horizontal: AppDimensions.spaceLg),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: MatrixButton(
-                        label: 'CANCELAR',
-                        expanded: true,
-                        onPressed: () => Navigator.of(context).pop(),
-                      ),
-                    ),
-                    const SizedBox(width: AppDimensions.spaceMd),
-                    Expanded(
-                      child: MatrixButton(
-                        label: _selected.isEmpty
-                            ? 'ADICIONAR'
-                            : 'ADICIONAR (${_selected.length})',
-                        expanded: true,
-                        onPressed: _selected.isEmpty ? null : _confirm,
-                      ),
-                    ),
-                  ],
-                ),
+                child: Text('ADICIONAR MEMBRO',
+                    style: AppTextStyles.hud
+                        .copyWith(fontSize: 14, color: AppColors.techWhite)),
               ),
               const SizedBox(height: AppDimensions.spaceSm),
+              if (_loading)
+                Padding(
+                  padding: EdgeInsets.all(24),
+                  child:
+                      Center(child: HudLabel(text: 'CARREGANDO...', dot: true)),
+                )
+              else if (_friends.isEmpty)
+                Padding(
+                  padding: EdgeInsets.all(24),
+                  child: Center(
+                    child: Text('Nenhum amigo disponível para adicionar.',
+                        style: AppTextStyles.bodyMuted,
+                        textAlign: TextAlign.center),
+                  ),
+                )
+              else ...[
+                Flexible(
+                  child: ListView(
+                    shrinkWrap: true,
+                    children: [
+                      for (final u in _friends)
+                        ListTile(
+                          leading: FramedAvatar(
+                            frame: u.frame,
+                            size: 44,
+                            child: UserAvatar(
+                              name: u.nickname,
+                              seed: u.nickname,
+                              imageUrl: u.avatarUrl,
+                              size: 36,
+                            ),
+                          ),
+                          title: NicknameRenderer(
+                            displayNickname(u.nickname),
+                            baseStyle:
+                                AppTextStyles.body.copyWith(fontSize: 15),
+                            background: AppColors.bluishBlack,
+                            nameColor: u.nameColor,
+                          ),
+                          trailing: Checkbox(
+                            value: _selected.contains(u.id),
+                            onChanged: (_) => _toggle(u),
+                            activeColor: AppColors.holographicBlue,
+                            checkColor: AppColors.absoluteBlack,
+                          ),
+                          onTap: () => _toggle(u),
+                        ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: AppDimensions.spaceSm),
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: AppDimensions.spaceLg),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: MatrixButton(
+                          label: 'CANCELAR',
+                          expanded: true,
+                          onPressed: () => Navigator.of(context).pop(),
+                        ),
+                      ),
+                      const SizedBox(width: AppDimensions.spaceMd),
+                      Expanded(
+                        child: MatrixButton(
+                          label: _selected.isEmpty
+                              ? 'ADICIONAR'
+                              : 'ADICIONAR (${_selected.length})',
+                          expanded: true,
+                          onPressed: _selected.isEmpty ? null : _confirm,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: AppDimensions.spaceSm),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );

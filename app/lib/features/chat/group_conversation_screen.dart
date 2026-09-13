@@ -373,7 +373,9 @@ class _GroupConversationScreenState extends State<GroupConversationScreen>
     if (event.typing) {
       if (idKey.isNotEmpty) {
         _typingUsers.add(idKey);
-        if (idKey == id && event.nickname != null && event.nickname!.isNotEmpty) {
+        if (idKey == id &&
+            event.nickname != null &&
+            event.nickname!.isNotEmpty) {
           _typingNames[idKey] = event.nickname!;
         }
       }
@@ -402,7 +404,9 @@ class _GroupConversationScreenState extends State<GroupConversationScreen>
     if (event.recording) {
       if (idKey.isNotEmpty) {
         _recordingUsers.add(idKey);
-        if (idKey == id && event.nickname != null && event.nickname!.isNotEmpty) {
+        if (idKey == id &&
+            event.nickname != null &&
+            event.nickname!.isNotEmpty) {
           _recordingNames[idKey] = event.nickname!;
         }
       }
@@ -679,7 +683,8 @@ class _GroupConversationScreenState extends State<GroupConversationScreen>
         ),
         title: Text(
           'Banir usuário?',
-          style: AppTextStyles.hud.copyWith(fontSize: 16, color: AppColors.techWhite),
+          style: AppTextStyles.hud
+              .copyWith(fontSize: 16, color: AppColors.techWhite),
         ),
         content: Text(
           'Banir $nickname do grupo? Ele não poderá mais acessar nem enviar mensagens.',
@@ -688,7 +693,8 @@ class _GroupConversationScreenState extends State<GroupConversationScreen>
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: Text('Cancelar', style: TextStyle(color: AppColors.holographicBlue)),
+            child: Text('Cancelar',
+                style: TextStyle(color: AppColors.holographicBlue)),
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
@@ -782,7 +788,7 @@ class _GroupConversationScreenState extends State<GroupConversationScreen>
                   Text(
                     '$_groupMemberCount membro${_groupMemberCount == 1 ? '' : 's'}',
                     style: AppTextStyles.caption.copyWith(
-                        fontSize:  11, color: AppColors.holographicBlue),
+                        fontSize: 11, color: AppColors.holographicBlue),
                   ),
               ],
             ),
@@ -848,7 +854,8 @@ class _GroupConversationScreenState extends State<GroupConversationScreen>
     }
     if (typingNames.isNotEmpty && recordingNames.isNotEmpty) {
       if (typingNames.length == 1 && recordingNames.length == 1) {
-        label = '${typingNames.first} digita e ${recordingNames.first} grava áudio';
+        label =
+            '${typingNames.first} digita e ${recordingNames.first} grava áudio';
       } else {
         label =
             '${typingNames.length} digitando • ${recordingNames.length} gravando áudio';
@@ -875,7 +882,6 @@ class _GroupConversationScreenState extends State<GroupConversationScreen>
             )
           : const SizedBox(width: 0, height: 0),
     );
-
   }
 
   /// Opens the group profile menu (stage 3). The header (avatar/name)
@@ -938,9 +944,8 @@ class _GroupConversationScreenState extends State<GroupConversationScreen>
           transitionBuilder: (child, anim) => FadeTransition(
             opacity: anim,
             child: SlideTransition(
-              position:
-                  Tween(begin: const Offset(0, 0.05), end: Offset.zero)
-                      .animate(anim),
+              position: Tween(begin: const Offset(0, 0.05), end: Offset.zero)
+                  .animate(anim),
               child: child,
             ),
           ),
@@ -1237,12 +1242,14 @@ class _GroupMessageBubble extends StatelessWidget {
                   : () => onOpenReplyTarget!(message.replyTo!.id),
               child: Container(
                 margin: const EdgeInsets.only(bottom: 6),
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 decoration: BoxDecoration(
                   color: AppColors.absoluteBlack.withValues(alpha: 0.5),
                   borderRadius: BorderRadius.circular(10),
                   border: Border(
-                    left: BorderSide(color: AppColors.holographicBlue, width: 3),
+                    left:
+                        BorderSide(color: AppColors.holographicBlue, width: 3),
                   ),
                 ),
                 child: Column(
@@ -1498,33 +1505,41 @@ class _MessageActionSheet extends StatelessWidget {
               color: AppColors.bluishBlack,
               borderRadius: BorderRadius.circular(AppDimensions.radiusLg),
             ),
-            child: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _ActionItem(
-                      icon: Icons.reply_rounded,
-                      label: 'Responder',
-                      onTap: () =>
-                          Navigator.of(context).pop(_MessageAction.reply)),
-                  _ActionItem(
-                      icon: Icons.delete_outline_rounded,
-                      label: 'Excluir para mim',
-                      onTap: () => Navigator.of(context)
-                          .pop(_MessageAction.deleteForMe)),
-                  if (canDeleteAnyone)
+            // The Container's box decoration creates a DecoratedBox — ListTile
+            // paints its ink splash on the nearest Material ancestor, so a
+            // transparent Material is required here (same pattern as the DM
+            // menu) or newer Flutter versions assert "ListTile background
+            // color or ink splashes may be invisible".
+            child: Material(
+              color: Colors.transparent,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
                     _ActionItem(
-                        icon: Icons.delete_forever_rounded,
-                        label: 'Excluir para todos',
-                        onTap: () => Navigator.of(context)
-                            .pop(_MessageAction.deleteForEveryone)),
-                  if (canBan)
+                        icon: Icons.reply_rounded,
+                        label: 'Responder',
+                        onTap: () =>
+                            Navigator.of(context).pop(_MessageAction.reply)),
                     _ActionItem(
-                        icon: Icons.block_rounded,
-                        label: 'Banir usuário',
+                        icon: Icons.delete_outline_rounded,
+                        label: 'Excluir para mim',
                         onTap: () => Navigator.of(context)
-                            .pop(_MessageAction.banUser)),
-                ],
+                            .pop(_MessageAction.deleteForMe)),
+                    if (canDeleteAnyone)
+                      _ActionItem(
+                          icon: Icons.delete_forever_rounded,
+                          label: 'Excluir para todos',
+                          onTap: () => Navigator.of(context)
+                              .pop(_MessageAction.deleteForEveryone)),
+                    if (canBan)
+                      _ActionItem(
+                          icon: Icons.block_rounded,
+                          label: 'Banir usuário',
+                          onTap: () => Navigator.of(context)
+                              .pop(_MessageAction.banUser)),
+                  ],
+                ),
               ),
             ),
           ),
