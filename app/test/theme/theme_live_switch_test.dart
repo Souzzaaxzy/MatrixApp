@@ -5,6 +5,7 @@ import 'package:matrix_app/app/theme/app_colors.dart';
 import 'package:matrix_app/app/theme/app_palette.dart';
 import 'package:matrix_app/core/services/theme_controller.dart';
 import 'package:matrix_app/features/auth/login/login_screen.dart';
+import 'package:matrix_app/features/splash/splash_screen.dart';
 
 /// Regression: switching the theme must repaint the WHOLE app immediately —
 /// no restart, no navigation, no reload. The single source of truth is
@@ -86,9 +87,9 @@ void main() {
     addTearDown(() => controller.setMode(MatrixThemeMode.dark));
 
     await tester.pumpWidget(const MatrixApp());
-    // Splash animation (1.8s) completes → session restore fails (no
-    // Services in tests) → lands on the login screen.
-    await tester.pump(const Duration(seconds: 2));
+    // Splash animation completes → session restore fails (no Services in
+    // tests) → lands on the login screen.
+    await tester.pump(const Duration(milliseconds: splashDurationMs));
     await tester.pump(const Duration(milliseconds: 300));
     expect(find.byType(LoginScreen), findsOneWidget);
     expect(scaffoldColor(tester), MatrixPalette.dark.scaffold);

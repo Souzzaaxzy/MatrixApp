@@ -6,6 +6,7 @@ import 'package:matrix_app/core/services/app_state.dart';
 import 'package:matrix_app/core/widgets/app_state_scope.dart';
 import 'package:matrix_app/features/home/home_screen.dart';
 import 'package:matrix_app/features/profile/profile_screen.dart';
+import 'package:matrix_app/features/splash/splash_screen.dart';
 
 import '../helpers/fake_repositories.dart';
 
@@ -25,8 +26,10 @@ Future<void> pumpRealApp(WidgetTester tester, AppState state) async {
       ),
     ),
   );
-  // Splash delay (1800ms) + fade transition (250ms).
-  await tester.pump(const Duration(seconds: 2));
+  // Splash animation (4.8s) + fade transition (250ms). Fake repos restore
+  // the session instantly, so navigation happens right when the scene is
+  // ready and the restore result is known — both well inside the cap.
+  await tester.pump(const Duration(milliseconds: splashDurationMs));
   await tester.pump(const Duration(milliseconds: 300));
 }
 
