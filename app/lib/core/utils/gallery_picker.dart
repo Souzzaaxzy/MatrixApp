@@ -54,7 +54,8 @@ Future<GalleryPickResult> pickGalleryImage({
           ? const GalleryPickResult.cancelled()
           : GalleryPickResult.success(file);
     } catch (_) {
-      return const GalleryPickResult.failure('Não foi possível abrir a galeria.');
+      return const GalleryPickResult.failure(
+          'Não foi possível abrir a galeria.');
     }
   }
 
@@ -84,6 +85,21 @@ Future<GalleryPickResult> pickGalleryImage({
       maxWidth: maxWidth,
       maxHeight: maxHeight,
     );
+    if (file == null) {
+      return const GalleryPickResult.cancelled();
+    }
+    return GalleryPickResult.success(file);
+  } catch (_) {
+    return const GalleryPickResult.failure('Não foi possível abrir a galeria.');
+  }
+}
+
+/// Picks a VIDEO from the device gallery (image_picker's pickVideo). No
+/// permission prompts beyond what Android's photo picker requires; returns
+/// the [XFile] as-is (videos are not re-encoded).
+Future<GalleryPickResult> pickGalleryVideo() async {
+  try {
+    final file = await ImagePicker().pickVideo(source: ImageSource.gallery);
     if (file == null) {
       return const GalleryPickResult.cancelled();
     }

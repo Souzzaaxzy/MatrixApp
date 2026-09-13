@@ -14,6 +14,7 @@ class Post {
     this.authorFrameId,
     this.authorFrameAsset,
     this.imageUrl,
+    this.videoUrl,
     this.likes = 0,
     this.liked = false,
     this.commentCount = 0,
@@ -48,6 +49,13 @@ class Post {
   final String? authorFrameAsset;
   final String? imageUrl;
 
+  /// Remote URL of the post's VIDEO (video posts). Mutually exclusive with
+  /// [imageUrl] server-side.
+  final String? videoUrl;
+
+  /// Whether this post's media is a video.
+  bool get isVideo => videoUrl != null && videoUrl!.isNotEmpty;
+
   int likes;
   bool liked;
 
@@ -59,6 +67,7 @@ class Post {
   Post copyWith({
     String? text,
     String? imageUrl,
+    String? videoUrl,
     int? likes,
     bool? liked,
     int? commentCount,
@@ -76,6 +85,7 @@ class Post {
         authorFrameId: authorFrameId,
         authorFrameAsset: authorFrameAsset,
         imageUrl: imageUrl ?? this.imageUrl,
+        videoUrl: videoUrl ?? this.videoUrl,
         likes: likes ?? this.likes,
         liked: liked ?? this.liked,
         commentCount: commentCount ?? this.commentCount,

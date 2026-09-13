@@ -129,10 +129,18 @@ class PostRepository {
     return FeedPostDto.fromJson(json).toModel();
   }
 
-  Future<Post> create({required String text, String? imageUrl}) async {
+  Future<Post> create({
+    required String text,
+    String? imageUrl,
+    String? videoUrl,
+  }) async {
     final json = await _api.post<Map<String, dynamic>>(
       '/api/posts',
-      data: {'text': text, if (imageUrl != null) 'imageUrl': imageUrl},
+      data: {
+        'text': text,
+        if (imageUrl != null) 'imageUrl': imageUrl,
+        if (videoUrl != null) 'videoUrl': videoUrl,
+      },
     );
     return FeedPostDto.fromJson(json).toModel();
   }
@@ -911,6 +919,17 @@ class UploadRepository {
     final multipart = await MultipartFile.fromFile(file.path);
     final json = await _api.upload<Map<String, dynamic>>(
       '/api/uploads',
+      file: multipart,
+    );
+    return json['url'] as String;
+  }
+
+  /// Uploads a VIDEO file for a Post and returns the public URL. The server
+  /// validates the real MP4 bytes + size cap (100MB).
+  Future<String> uploadVideo(File file) async {
+    final multipart = await MultipartFile.fromFile(file.path);
+    final json = await _api.upload<Map<String, dynamic>>(
+      '/api/uploads/video',
       file: multipart,
     );
     return json['url'] as String;

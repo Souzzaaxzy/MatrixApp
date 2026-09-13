@@ -19,6 +19,15 @@ class FeedScreen extends StatefulWidget {
 }
 
 class _FeedScreenState extends State<FeedScreen> {
+  final ScrollController _scroll = ScrollController();
+
+  /// Id of the post whose video preview should be playing (single-active).
+  /// Updated on scroll; passed down so only ONE video ever autoplays.
+  String? _activeVideoId;
+
+  /// Global keys for the video posts, used to compute the most visible one.
+  final Map<String, GlobalKey> _videoKeys = {};
+
   @override
   void initState() {
     super.initState();
@@ -26,10 +35,47 @@ class _FeedScreenState extends State<FeedScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       AppStateScope.of(context).loadFeed();
     });
+    _scroll.addListener(_updateActiveVideo);
+  }
+
+  @override
+  void dispose() {
+    _scroll.removeListener(_updateActiveVideo);
+    _scroll.dispose();
+    super.dispose();
   }
 
   Future<void> _refresh() async {
     await AppStateScope.of(context).loadFeed();
+    _updateActiveVideo();
+  }
+
+  /// Picks the video post that is CLOSEST to the viewport center and makes
+  /// it the active (playing) preview; all others pause.
+  void _updateActiveVideo() {
+    if (!mounted || _videoKeys.isEmpty) return;
+    final renderView = View.of(context);
+    final viewportHeight =
+        renderView.physicalSize.height / renderView.devicePixelRatio;
+    double? closestDist;
+    String? closestId;
+    for (final entry in _videoKeys.entries) {
+      final ctx = entry.value.currentContext;
+      if (ctx == null) continue;
+      final box = ctx.findRenderObject();
+      if (box is! RenderBox) continue;
+      final y = box.localToGlobal(Offset.zero).dy;
+      final h = box.size.height;
+      final center = y + h / 2;
+      final dist = (center - viewportHeight / 2).abs();
+      if (closestDist == null || dist < closestDist) {
+        closestDist = dist;
+        closestId = entry.key;
+      }
+    }
+    if (closestId != _activeVideoId) {
+      setState(() => _activeVideoId = closestId);
+    }
   }
 
   @override
@@ -44,6 +90,7 @@ class _FeedScreenState extends State<FeedScreen> {
         backgroundColor: AppColors.nightBlue,
         onRefresh: _refresh,
         child: CustomScrollView(
+          controller: _scroll,
           slivers: [
             SliverAppBar(
               pinned: true,
@@ -53,9 +100,11 @@ class _FeedScreenState extends State<FeedScreen> {
               title: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text('MATRIX', style: AppTextStyles.title.copyWith(fontSize: 22)),
+                  Text('MATRIX',
+                      style: AppTextStyles.title.copyWith(fontSize: 22)),
                   const SizedBox(width: AppDimensions.spaceLg),
-                  const HudLabel(text: 'ONLINE', color: AppColors.success, dot: true),
+                  const HudLabel(
+                      text: 'ONLINE', color: AppColors.success, dot: true),
                 ],
               ),
             ),
@@ -94,9 +143,20 @@ class _FeedScreenState extends State<FeedScreen> {
                   itemCount: posts.length,
                   itemBuilder: (context, i) {
                     final post = posts[i];
-                    return PostCard(
-                      post: post,
-                      onComment: () => CommentsSheet.show(context, post: post),
+                    final isVideo = post.isVideo;
+                    // Register a key for video posts so the feed can pick the
+                    // most-visible one for autoplay.
+                    final videoKey =
+                        isVideo ? (_videoKeys[post.id] ??= GlobalKey()) : null;
+                    return KeyedSubtree(
+                      key: ObjectKey(post.id),
+                      child: PostCard(
+                        post: post,
+                        onComment: () =>
+                            CommentsSheet.show(context, post: post),
+                        videoActive: isVideo && _activeVideoId == post.id,
+                        videoKey: videoKey,
+                      ),
                     );
                   },
                 ),

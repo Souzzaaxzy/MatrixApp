@@ -28,6 +28,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
   final _formKey = GlobalKey<FormState>();
   final _controller = TextEditingController();
   String? _imagePath;
+  String? _videoPath;
   bool _publishing = false;
 
   @override
@@ -40,14 +41,38 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
     final result = await pickGalleryImage(imageQuality: 80);
     if (!mounted) return;
     if (!result.isSuccess) {
-      if (!result.cancelled && result.error != null && result.error!.isNotEmpty) {
+      if (!result.cancelled &&
+          result.error != null &&
+          result.error!.isNotEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(result.error!)),
         );
       }
       return;
     }
-    setState(() => _imagePath = result.file!.path);
+    setState(() {
+      _imagePath = result.file!.path;
+      _videoPath = null; // image and video are mutually exclusive
+    });
+  }
+
+  Future<void> _pickVideo() async {
+    final result = await pickGalleryVideo();
+    if (!mounted) return;
+    if (!result.isSuccess) {
+      if (!result.cancelled &&
+          result.error != null &&
+          result.error!.isNotEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(result.error!)),
+        );
+      }
+      return;
+    }
+    setState(() {
+      _videoPath = result.file!.path;
+      _imagePath = null; // image and video are mutually exclusive
+    });
   }
 
   Future<void> _publish() async {
@@ -58,12 +83,26 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
     final state = AppStateScope.of(context);
     try {
       String? imageUrl;
+      String? videoUrl;
       if (_imagePath != null) {
         imageUrl = await Services.instance.uploads.upload(File(_imagePath!));
+      } else if (_videoPath != null) {
+        // Videos can be large; the server caps at 100 MB — surface a clear
+        // error instead of leaving a broken post.
+        final f = File(_videoPath!);
+        final sizeMb = f.lengthSync() / (1024 * 1024);
+        if (sizeMb > 100) {
+          throw ApiException(
+            statusCode: 413,
+            message: 'O vídeo excede o tamanho permitido (máx. 100 MB).',
+          );
+        }
+        videoUrl = await Services.instance.uploads.uploadVideo(f);
       }
       await state.createPost(
         text: _controller.text,
         imageUrl: imageUrl,
+        videoUrl: videoUrl,
       );
       if (!mounted) return;
       // Return to the caller (own profile or feed) — replacing the route
@@ -74,7 +113,8 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
       messenger.showSnackBar(SnackBar(content: Text(e.message)));
     } catch (_) {
       if (!mounted) return;
-      messenger.showSnackBar(const SnackBar(content: Text('Erro ao publicar.')));
+      messenger
+          .showSnackBar(const SnackBar(content: Text('Erro ao publicar.')));
     } finally {
       if (mounted) setState(() => _publishing = false);
     }
@@ -90,11 +130,13 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
           icon: Icon(Icons.close_rounded, color: AppColors.techWhite),
           onPressed: () => Navigator.of(context).pop(),
         ),
-        title: Text('NOVA PUBLICAÇÃO', style: AppTextStyles.title.copyWith(fontSize: 18)),
+        title: Text('NOVA PUBLICAÇÃO',
+            style: AppTextStyles.title.copyWith(fontSize: 18)),
       ),
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: AppDimensions.spaceLg),
+          padding:
+              const EdgeInsets.symmetric(horizontal: AppDimensions.spaceLg),
           child: Form(
             key: _formKey,
             child: Column(
@@ -108,10 +150,40 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
                   maxLines: 5,
                   minLines: 3,
                   textCapitalization: TextCapitalization.sentences,
-                  validator: (v) => Validators.required(v, label: 'Escreva algo'),
+                  validator: (v) =>
+                      Validators.required(v, label: 'Escreva algo'),
                 ),
                 const SizedBox(height: AppDimensions.spaceLg),
-                if (_imagePath != null) ...[
+                if (_videoPath != null) ...[
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(AppDimensions.radiusLg),
+                    child: Container(
+                      height: 180,
+                      color: AppColors.nightBlue,
+                      alignment: Alignment.center,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.videocam_rounded, size: 44),
+                          const SizedBox(height: 6),
+                          Text('VÍDEO SELECIONADO', style: AppTextStyles.hud),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: AppDimensions.spaceSm),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton.icon(
+                      icon: const Icon(Icons.delete_outline_rounded,
+                          color: AppColors.error, size: 18),
+                      label: Text('Remover vídeo',
+                          style: AppTextStyles.caption
+                              .copyWith(color: AppColors.error)),
+                      onPressed: () => setState(() => _videoPath = null),
+                    ),
+                  ),
+                ] else if (_imagePath != null) ...[
                   ClipRRect(
                     borderRadius: BorderRadius.circular(AppDimensions.radiusLg),
                     child: AspectRatio(
@@ -129,11 +201,12 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
                       icon: const Icon(Icons.delete_outline_rounded,
                           color: AppColors.error, size: 18),
                       label: Text('Remover imagem',
-                          style: AppTextStyles.caption.copyWith(color: AppColors.error)),
+                          style: AppTextStyles.caption
+                              .copyWith(color: AppColors.error)),
                       onPressed: () => setState(() => _imagePath = null),
                     ),
                   ),
-                ] else
+                ] else ...[
                   MatrixButton(
                     label: 'Adicionar imagem',
                     icon: Icons.add_photo_alternate_outlined,
@@ -141,12 +214,22 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
                     expanded: true,
                     onPressed: _pickImage,
                   ),
+                  const SizedBox(height: AppDimensions.spaceSm),
+                  MatrixButton(
+                    label: 'Adicionar vídeo',
+                    icon: Icons.videocam_outlined,
+                    variant: MatrixButtonVariant.outline,
+                    expanded: true,
+                    onPressed: _pickVideo,
+                  ),
+                ],
                 const SizedBox(height: AppDimensions.spaceXxl),
                 Row(
                   children: [
                     Expanded(child: Divider(color: AppColors.deepBlue)),
                     Padding(
-                      padding: EdgeInsets.symmetric(horizontal: AppDimensions.spaceMd),
+                      padding: EdgeInsets.symmetric(
+                          horizontal: AppDimensions.spaceMd),
                       child: HudLabel(text: 'PUBLISH'),
                     ),
                     Expanded(child: Divider(color: AppColors.deepBlue)),

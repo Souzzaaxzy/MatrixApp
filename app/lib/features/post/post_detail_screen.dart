@@ -17,6 +17,8 @@ import '../../models/cosmetic_item.dart';
 import '../../models/post.dart';
 import '../feed/responsive_post_image.dart';
 import '../feed/comments_sheet.dart';
+import '../feed/post_video_preview.dart';
+import 'video_player_screen.dart';
 
 /// Post detail screen — opened by tapping a post in the feed or in the
 /// profile grid. Loads the post fresh from the server by its real id.
@@ -198,6 +200,25 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     );
   }
 
+  /// Renders the detail-view video: a muted autoplay preview with a clear
+  /// PLAY affordance that opens the fullscreen player on tap.
+  Widget _detailVideo(Post post) {
+    return PostVideoPreview(
+      videoUrl: ApiConfig.resolveUrl(post.videoUrl!),
+      active: true,
+      onTap: () {
+        Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => VideoPlayerScreen(
+              videoUrl: ApiConfig.resolveUrl(post.videoUrl!),
+            ),
+          ),
+        );
+      },
+      maxHeightFraction: 0.85,
+    );
+  }
+
   Widget _buildBody() {
     if (_loading) {
       return const Center(child: HudLabel(text: 'LOADING POST...', dot: true));
@@ -224,7 +245,9 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const SizedBox(height: AppDimensions.spaceLg),
-          if (post.imageUrl != null)
+          if (post.isVideo)
+            _detailVideo(post)
+          else if (post.imageUrl != null)
             ResponsivePostImage(
               imageUrl: ApiConfig.resolveUrl(post.imageUrl!),
               borderRadius: AppDimensions.radiusLg,

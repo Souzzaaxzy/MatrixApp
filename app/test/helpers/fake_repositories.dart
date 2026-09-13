@@ -306,7 +306,11 @@ class _FakePostRepository implements PostRepository {
   }
 
   @override
-  Future<Post> create({required String text, String? imageUrl}) async {
+  Future<Post> create({
+    required String text,
+    String? imageUrl,
+    String? videoUrl,
+  }) async {
     final u = _store.currentUser;
     final post = Post(
       id: 'p${DateTime.now().millisecondsSinceEpoch}',
@@ -317,6 +321,7 @@ class _FakePostRepository implements PostRepository {
       avatarSeed: u.avatarSeed,
       authorAvatarUrl: u.avatarUrl,
       imageUrl: imageUrl,
+      videoUrl: videoUrl,
       likes: 0,
       liked: false,
       comments: const [],
@@ -512,6 +517,10 @@ class _FakeUploadRepository implements UploadRepository {
   @override
   Future<String> upload(File file) async =>
       'https://fake.matrix.app/u/test.png';
+
+  @override
+  Future<String> uploadVideo(File file) async =>
+      'https://fake.matrix.app/u/test.mp4';
 }
 
 /// In-memory cosmetics: the session user "owns" everything they equip —

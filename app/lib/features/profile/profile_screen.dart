@@ -173,8 +173,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       onPressed: () => SettingsSheet.open(context),
                     )
                   : null,
-              title:
-                  Text('PERFIL', style: AppTextStyles.title.copyWith(fontSize: 18)),
+              title: Text('PERFIL',
+                  style: AppTextStyles.title.copyWith(fontSize: 18)),
             ),
             if (loading)
               const SliverFillRemaining(
@@ -214,7 +214,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
               const SliverToBoxAdapter(
                 child: Padding(
-                  padding: EdgeInsets.symmetric(vertical: AppDimensions.spaceMd),
+                  padding:
+                      EdgeInsets.symmetric(vertical: AppDimensions.spaceMd),
                   child: Center(child: HudLabel(text: 'PUBLICAÇÕES')),
                 ),
               ),
@@ -236,7 +237,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     horizontal: AppDimensions.spaceLg,
                   ),
                   sliver: SliverGrid(
-                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    gridDelegate:
+                        const SliverGridDelegateWithFixedCrossAxisCount(
                       crossAxisCount: 2,
                       mainAxisSpacing: AppDimensions.spaceMd,
                       crossAxisSpacing: AppDimensions.spaceMd,
@@ -319,8 +321,8 @@ class _ProfileHeader extends StatelessWidget {
             // Long press must be held ~2 seconds before it fires — a plain
             // tap never opens the enlarged photo.
             gestures: {
-              LongPressGestureRecognizer:
-                  GestureRecognizerFactoryWithHandlers<LongPressGestureRecognizer>(
+              LongPressGestureRecognizer: GestureRecognizerFactoryWithHandlers<
+                  LongPressGestureRecognizer>(
                 () => LongPressGestureRecognizer(
                   duration: const Duration(seconds: 2),
                 ),
@@ -529,9 +531,6 @@ class _StatColumn extends StatelessWidget {
   }
 }
 
-
-
-
 /// The floating "+" button — only rendered on the own profile. Reuses the
 /// existing create-post flow (same target the old menu entry used).
 class CreatePostFab extends StatelessWidget {
@@ -576,7 +575,9 @@ class _ProfilePostTile extends StatelessWidget {
           child: Stack(
             fit: StackFit.expand,
             children: [
-              if (post.imageUrl != null)
+              if (post.isVideo)
+                const _VideoPlaceholder()
+              else if (post.imageUrl != null)
                 CachedNetworkImage(
                   imageUrl: ApiConfig.resolveUrl(post.imageUrl!),
                   fit: BoxFit.cover,
@@ -620,7 +621,8 @@ class _ProfilePostTile extends StatelessWidget {
                       Icon(Icons.chat_bubble_outline_rounded,
                           color: AppColors.holographicBlue, size: 13),
                       const SizedBox(width: AppDimensions.spaceXs),
-                      Text('${post.commentCount}', style: AppTextStyles.caption),
+                      Text('${post.commentCount}',
+                          style: AppTextStyles.caption),
                     ],
                   ),
                 ),
@@ -644,6 +646,22 @@ class _ProfilePostTile extends StatelessWidget {
         textAlign: TextAlign.center,
         style: AppTextStyles.caption,
       ),
+    );
+  }
+}
+
+/// Square grid placeholder for VIDEO posts in the profile grid: a dark tile
+/// with a play badge (no thumbnail generation needed — keeps the grid light).
+class _VideoPlaceholder extends StatelessWidget {
+  const _VideoPlaceholder();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: AppColors.nightBlue,
+      alignment: Alignment.center,
+      child: Icon(Icons.play_circle_outline_rounded,
+          color: AppColors.holographicBlue, size: 34),
     );
   }
 }

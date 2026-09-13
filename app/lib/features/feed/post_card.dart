@@ -14,7 +14,9 @@ import '../../core/widgets/matrix_card.dart';
 import '../../core/widgets/nickname_renderer.dart';
 import '../../core/widgets/user_avatar.dart';
 import '../../models/cosmetic_item.dart';
+import 'post_video_preview.dart';
 import 'responsive_post_image.dart';
+import '../post/video_player_screen.dart';
 
 /// Reusable post card for the feed.
 ///
@@ -26,10 +28,19 @@ class PostCard extends StatefulWidget {
     super.key,
     required this.post,
     required this.onComment,
+    this.videoActive = false,
+    this.videoKey,
   });
 
   final Post post;
   final VoidCallback onComment;
+
+  /// Whether this post's video preview should autoplay (single-active: the
+  /// feed keeps exactly one active video at a time).
+  final bool videoActive;
+
+  /// GlobalKey the feed attaches to the video frame for visibility tracking.
+  final GlobalKey? videoKey;
 
   @override
   State<PostCard> createState() => _PostCardState();
@@ -67,6 +78,18 @@ class _PostCardState extends State<PostCard>
         ),
       );
     }
+  }
+
+  /// Opens the fullscreen video player for this post's video.
+  void _openVideo() {
+    if (!widget.post.isVideo) return;
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => VideoPlayerScreen(
+          videoUrl: ApiConfig.resolveUrl(widget.post.videoUrl!),
+        ),
+      ),
+    );
   }
 
   void _openDetail() {
@@ -146,7 +169,17 @@ class _PostCardState extends State<PostCard>
               const SizedBox(height: AppDimensions.spaceLg),
               Text(post.text, style: AppTextStyles.body),
             ],
-            if (post.imageUrl != null) ...[
+            if (post.isVideo) ...[
+              const SizedBox(height: AppDimensions.spaceMd),
+              KeyedSubtree(
+                key: widget.videoKey,
+                child: PostVideoPreview(
+                  videoUrl: ApiConfig.resolveUrl(post.videoUrl!),
+                  active: widget.videoActive,
+                  onTap: _openVideo,
+                ),
+              ),
+            ] else if (post.imageUrl != null) ...[
               const SizedBox(height: AppDimensions.spaceMd),
               ResponsivePostImage(
                   imageUrl: ApiConfig.resolveUrl(post.imageUrl!)),
