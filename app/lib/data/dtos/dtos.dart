@@ -263,7 +263,8 @@ CosmeticMap parseCustomization(Object? raw) {
           name: name,
           assetUrl: (value['assetUrl'] as String?) ?? '',
           rarity: (value['rarity'] as String?) ?? 'COMMON',
-          config: (value['config'] as Map?)?.cast<String, dynamic>() ?? const {},
+          config:
+              (value['config'] as Map?)?.cast<String, dynamic>() ?? const {},
         );
       }
     }
@@ -485,7 +486,8 @@ class ConversationDto {
     final last = json['lastMessage'];
     return ConversationDto(
       id: json['id'] as String,
-      otherUser: ChatUserDto.fromJson(json['otherUser'] as Map<String, dynamic>),
+      otherUser:
+          ChatUserDto.fromJson(json['otherUser'] as Map<String, dynamic>),
       lastMessage: last is Map<String, dynamic>
           ? ConversationLastMessageDto.fromJson(last)
           : null,
@@ -498,12 +500,12 @@ class ConversationDto {
 
 class ConversationLastMessageDto {
   final String id;
-   final String content;
-   final String senderId;
-   final DateTime createdAt;
-   final String? senderNickname;
+  final String content;
+  final String senderId;
+  final DateTime createdAt;
+  final String? senderNickname;
 
-   const ConversationLastMessageDto({
+  const ConversationLastMessageDto({
     required this.id,
     required this.content,
     required this.senderId,
@@ -546,6 +548,9 @@ class ChatMessageDto {
   final String type;
   final String? audioUrl;
   final int? durationMs;
+  final List<ChatMention> mentions;
+  final bool mentionAll;
+  final bool mentioned;
 
   const ChatMessageDto({
     required this.id,
@@ -561,6 +566,9 @@ class ChatMessageDto {
     this.type = 'text',
     this.audioUrl,
     this.durationMs,
+    this.mentions = const [],
+    this.mentionAll = false,
+    this.mentioned = false,
   });
 
   ChatMessage toModel() => ChatMessage(
@@ -577,12 +585,16 @@ class ChatMessageDto {
         type: type == 'voice' ? 'voice' : 'text',
         audioUrl: audioUrl,
         durationMs: durationMs,
+        mentions: mentions,
+        mentionAll: mentionAll,
+        mentioned: mentioned,
       );
 
   factory ChatMessageDto.fromJson(Map<String, dynamic> json) {
     final raw = json['readAt'];
     final replyRaw = json['replyTo'];
     final senderRaw = json['sender'];
+    final mentionsRaw = json['mentions'];
     return ChatMessageDto(
       id: json['id'] as String,
       conversationId: json['conversationId'] as String?,
@@ -601,8 +613,41 @@ class ChatMessageDto {
       type: (json['type'] as String?) ?? 'text',
       audioUrl: json['audioUrl'] as String?,
       durationMs: (json['durationMs'] as num?)?.toInt(),
+      mentions: mentionsRaw is List
+          ? mentionsRaw
+              .whereType<Map<String, dynamic>>()
+              .map((m) => ChatMentionDto.fromJson(m).toModel())
+              .toList()
+          : const <ChatMention>[],
+      mentionAll: (json['mentionAll'] as bool?) ?? false,
+      mentioned: (json['mentioned'] as bool?) ?? false,
     );
   }
+}
+
+/// Structured mention payload (server resolves nickname live from the id).
+class ChatMentionDto {
+  final String userId;
+  final String nickname;
+  final bool all;
+
+  const ChatMentionDto({
+    required this.userId,
+    required this.nickname,
+    this.all = false,
+  });
+
+  ChatMention toModel() => ChatMention(
+        userId: userId,
+        nickname: nickname,
+        all: all,
+      );
+
+  factory ChatMentionDto.fromJson(Map<String, dynamic> json) => ChatMentionDto(
+        userId: json['userId'] as String? ?? '',
+        nickname: json['nickname'] as String? ?? '',
+        all: (json['all'] as bool?) ?? false,
+      );
 }
 
 /// Server-resolved preview of the original message a reply answers. Only the
@@ -763,12 +808,15 @@ class GroupInfoDto {
     this.bannedMembers = const [],
   });
 
-  ({GroupHeader group, List<GroupMemberInfoModel> members, List<GroupMemberInfoModel> bannedMembers})
-      toModel() => (
-            group: group.toModel(),
-            members: members.map((m) => m.toModel()).toList(),
-            bannedMembers: bannedMembers.map((m) => m.toModel()).toList(),
-          );
+  ({
+    GroupHeader group,
+    List<GroupMemberInfoModel> members,
+    List<GroupMemberInfoModel> bannedMembers
+  }) toModel() => (
+        group: group.toModel(),
+        members: members.map((m) => m.toModel()).toList(),
+        bannedMembers: bannedMembers.map((m) => m.toModel()).toList(),
+      );
 
   factory GroupInfoDto.fromJson(Map<String, dynamic> json) => GroupInfoDto(
         group: GroupHeaderDto.fromJson(json['group'] as Map<String, dynamic>),
@@ -793,6 +841,7 @@ class GroupConversationDto {
   final bool lastMine;
   final int unreadCount;
   final DateTime updatedAt;
+  final bool mentioned;
 
   const GroupConversationDto({
     required this.id,
@@ -801,6 +850,7 @@ class GroupConversationDto {
     required this.lastMine,
     required this.unreadCount,
     required this.updatedAt,
+    this.mentioned = false,
   });
 
   GroupConversation toModel() => GroupConversation(
@@ -810,6 +860,7 @@ class GroupConversationDto {
         lastMine: lastMine,
         unreadCount: unreadCount,
         updatedAt: updatedAt,
+        mentioned: mentioned,
       );
 
   factory GroupConversationDto.fromJson(Map<String, dynamic> json) {
@@ -823,9 +874,11 @@ class GroupConversationDto {
       lastMine: (json['lastMine'] as bool?) ?? false,
       unreadCount: (json['unreadCount'] as num?)?.toInt() ?? 0,
       updatedAt: DateTime.parse(json['updatedAt'] as String),
+      mentioned: (json['mentioned'] as bool?) ?? false,
     );
   }
 }
+
 /// A paginated messages page: the chronological batch plus whether older
 /// messages exist to paginate into (`before`).
 class MessagePageDto {

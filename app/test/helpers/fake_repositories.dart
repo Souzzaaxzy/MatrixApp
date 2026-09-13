@@ -1068,11 +1068,24 @@ class _FakeChatRepository implements ChatRepository {
     String groupId,
     String content, {
     String? replyToMessageId,
+    List<String> mentionUserIds = const [],
+    bool mentionAll = false,
   }) async {
     final me = _store.currentUserId;
     if (me == null || !_store.groups.containsKey(groupId)) {
       throw const ApiException(statusCode: 403, message: 'Acesso negado.');
     }
+    // @todos is owner-only (mirrors the server rule).
+    if (mentionAll && _store.groups[groupId]!.group.createdById != me) {
+      throw const ApiException(
+          statusCode: 403,
+          message: 'Somente o dono do grupo pode usar "@todos".');
+    }
+    final mentions = <ChatMention>[
+      for (final id in mentionUserIds)
+        ChatMention(
+            userId: id, nickname: _store.users[id]?.nickname ?? 'desconhecido'),
+    ];
     final message = ChatMessage(
       id: 'gm${DateTime.now().microsecondsSinceEpoch}',
       groupId: groupId,
@@ -1090,9 +1103,34 @@ class _FakeChatRepository implements ChatRepository {
               content: "original",
               exists: true,
             ),
+      mentions: mentions,
+      mentionAll: mentionAll,
+      mentioned: mentionAll || mentions.any((m) => m.userId == me),
     );
     _store.groupMessagesById.putIfAbsent(groupId, () => []).add(message);
     return message;
+  }
+
+  @override
+  Future<
+      ({
+        List<ChatUser> read,
+        List<ChatUser> unread,
+      })> groupMessageReaders(
+    String groupId,
+    String messageId,
+  ) async {
+    // Fake: everyone except the sender is "read" (enough for widget tests).
+    final members = _store.groupMemberIds[groupId] ?? const <String>{};
+    final read = <ChatUser>[
+      for (final id in members)
+        if (id != _store.currentUserId)
+          ChatUser(
+            id: id,
+            nickname: _store.users[id]?.nickname ?? 'membro',
+          ),
+    ];
+    return (read: read, unread: <ChatUser>[]);
   }
 
   @override

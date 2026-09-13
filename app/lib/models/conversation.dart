@@ -135,6 +135,9 @@ class ChatMessage {
     this.type = 'text',
     this.audioUrl,
     this.durationMs,
+    this.mentions = const [],
+    this.mentionAll = false,
+    this.mentioned = false,
   });
 
   final String id;
@@ -168,7 +171,24 @@ class ChatMessage {
   /// Recorded length in milliseconds (voice only).
   final int? durationMs;
 
+  /// Structured mentions embedded in this (group) message — every mentioned
+  /// user id + live nickname. Empty for non-mention messages and DMs.
+  final List<ChatMention> mentions;
+
+  /// True when this message contains `@todos`.
+  final bool mentionAll;
+
+  /// True when the SESSION user is directly mentioned (individual @user or
+  /// @todos). Powers the visual highlight + "@" indicator.
+  final bool mentioned;
+
   bool get isVoice => type == 'voice';
+
+  /// Whether the session user (@[selfId]) is the target of the mention (for
+  /// highlight rendering): @todos always "mentions" everyone; otherwise the
+  /// mention must equal [selfId].
+  bool mentionsUser(String selfId) =>
+      mentionAll || mentions.any((m) => m.userId == selfId);
 
   ChatMessage copyWith({
     DateTime? readAt,
@@ -177,6 +197,9 @@ class ChatMessage {
     String? audioUrl,
     int? durationMs,
     ChatUser? sender,
+    List<ChatMention>? mentions,
+    bool? mentionAll,
+    bool? mentioned,
   }) =>
       ChatMessage(
         id: id,
@@ -192,7 +215,22 @@ class ChatMessage {
         type: type ?? this.type,
         audioUrl: audioUrl ?? this.audioUrl,
         durationMs: durationMs ?? this.durationMs,
+        mentions: mentions ?? this.mentions,
+        mentionAll: mentionAll ?? this.mentionAll,
+        mentioned: mentioned ?? this.mentioned,
       );
+}
+
+/// A structured mention inside a group message — always the real user id
+/// (never the display nickname: nicknames are mutable). When [all] is true
+/// this denotes `@todos` (no real single user).
+class ChatMention {
+  const ChatMention(
+      {required this.userId, required this.nickname, this.all = false});
+
+  final String userId;
+  final String nickname;
+  final bool all;
 }
 
 /// A group as returned by the server's group-list endpoint. Carries the full
@@ -207,6 +245,7 @@ class GroupConversation {
     required this.lastMine,
     required this.unreadCount,
     required this.updatedAt,
+    this.mentioned = false,
   });
 
   final String id;
@@ -216,6 +255,10 @@ class GroupConversation {
   final int unreadCount;
   final DateTime updatedAt;
 
+  /// True when the last visible message of this group mentions the viewer
+  /// (individual @user or @todos) → the "@" indicator in the Chat list.
+  final bool mentioned;
+
   GroupConversation copyWith({
     String? id,
     GroupHeader? group,
@@ -223,6 +266,7 @@ class GroupConversation {
     bool? lastMine,
     int? unreadCount,
     DateTime? updatedAt,
+    bool? mentioned,
   }) =>
       GroupConversation(
         id: id ?? this.id,
@@ -231,6 +275,7 @@ class GroupConversation {
         lastMine: lastMine ?? this.lastMine,
         unreadCount: unreadCount ?? this.unreadCount,
         updatedAt: updatedAt ?? this.updatedAt,
+        mentioned: mentioned ?? this.mentioned,
       );
 }
 

@@ -190,8 +190,16 @@ class _MatrixAppState extends State<MatrixApp> {
     final groupId = data['groupId'] as String?;
     final conversationId = data['conversationId'] as String?;
     if (conversationId == null && groupId == null) return;
+    final rawMessageIds = data['messageIds'];
     state.handleIncomingChatRead(
-      ChatReadEvent(groupId: groupId, conversationId: conversationId),
+      ChatReadEvent(
+        groupId: groupId,
+        conversationId: conversationId,
+        userId: data['userId'] as String?,
+        messageIds: rawMessageIds is List
+            ? rawMessageIds.whereType<String>().toList()
+            : const <String>[],
+      ),
     );
   }
 

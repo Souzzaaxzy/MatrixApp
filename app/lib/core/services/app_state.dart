@@ -1250,16 +1250,31 @@ class AppState extends ChangeNotifier {
 
   /// Sends a GROUP message and, on success, optimistically records it in the
   /// cached group's last-message slot (the server's response is authoritative).
+  /// [mentionUserIds] / [mentionAll] power @user / @todos.
   Future<ChatMessage> sendGroupChatMessage(
     String groupId,
     String content, {
     String? replyToMessageId,
+    List<String> mentionUserIds = const [],
+    bool mentionAll = false,
   }) async {
     final message = await _chat.sendGroupMessage(groupId, content,
-        replyToMessageId: replyToMessageId);
+        replyToMessageId: replyToMessageId,
+        mentionUserIds: mentionUserIds,
+        mentionAll: mentionAll);
     _applyChatMessage(message);
     notifyListeners();
     return message;
+  }
+
+  /// Visto/Enviado — who already read a group message and who hasn't (the
+  /// full breakdown is only returned to the sender; others get their own
+  /// state). Used by the long-press "Visto/Enviado" panel.
+  Future<({List<ChatUser> read, List<ChatUser> unread})> groupMessageReaders(
+    String groupId,
+    String messageId,
+  ) {
+    return _chat.groupMessageReaders(groupId, messageId);
   }
 
   /// Sends a recorded VOICE message to a GROUP (same rules as DMs).
@@ -1848,9 +1863,16 @@ class ChatReadEvent {
   const ChatReadEvent({
     this.conversationId,
     this.groupId,
+    this.userId,
+    this.messageIds = const [],
   });
   final String? conversationId;
   final String? groupId;
+
+  /// Group read receipts: WHO read and WHICH messages (powers the live
+  /// "Visto/Enviado" panel). Null for DMs.
+  final String? userId;
+  final List<String> messageIds;
 
   String get chatId => groupId ?? conversationId ?? '';
 }

@@ -556,11 +556,17 @@ class ChatRepository {
   /// sender is always auth-derived). Returns the persisted message (with
   /// embedded sender identity). [replyToMessageId] optional, validated
   /// to belong to the same group by the server.
+  ///
+  /// [mentionUserIds] lists the real user ids mentioned (server validates
+  /// each is an ACTIVE member). [mentionAll] requests `@todos` — ONLY the
+  /// group owner is authorized (the server rejects forged payloads).
 
   Future<ChatMessage> sendGroupMessage(
     String groupId,
     String content, {
     String? replyToMessageId,
+    List<String> mentionUserIds = const [],
+    bool mentionAll = false,
   }) async {
     final json = await _api.post<Map<String, dynamic>>(
       '/api/groups/$groupId/messages',
@@ -568,10 +574,42 @@ class ChatRepository {
         'content': content,
         if (replyToMessageId != null && replyToMessageId.isNotEmpty)
           'replyToMessageId': replyToMessageId,
+        if (mentionUserIds.isNotEmpty) 'mentionUserIds': mentionUserIds,
+        if (mentionAll) 'mentionAll': true,
       },
     );
     return ChatMessageDto.fromJson(json['message'] as Map<String, dynamic>)
         .toModel();
+  }
+
+  /// Visto/Enviado — who already read a specific group message and who has
+  /// NOT yet (from the persisted per-user read receipts). The server only
+  /// returns the full breakdown to the message SENDER; other members get
+  /// their own state.
+  Future<({List<ChatUser> read, List<ChatUser> unread})> groupMessageReaders(
+    String groupId,
+    String messageId,
+  ) async {
+    final json = await _api.get<Map<String, dynamic>>(
+        '/api/groups/$groupId/messages/$messageId/readers');
+    final readRaw = json['read'];
+    final unreadRaw = json['unread'];
+    return (
+      read: readRaw is List
+          ? readRaw
+              .whereType<Map<String, dynamic>>()
+              .map(ChatUserDto.fromJson)
+              .map((d) => d.toModel())
+              .toList()
+          : const <ChatUser>[],
+      unread: unreadRaw is List
+          ? unreadRaw
+              .whereType<Map<String, dynamic>>()
+              .map(ChatUserDto.fromJson)
+              .map((d) => d.toModel())
+              .toList()
+          : const <ChatUser>[],
+    );
   }
 
   /// Sends a VOICE group message (multipart, same rules as DMs).

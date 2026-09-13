@@ -81,6 +81,24 @@ class _GroupConversationScreenState extends State<GroupConversationScreen>
   bool _typingLastSent = false;
   bool _loadRequested = false;
 
+  // ── Mentions (@user + @todos) ──
+  List<GroupMemberInfoModel> _mentionMembers = const [];
+  bool _mentionMembersLoaded = false;
+
+  /// The member picker term the user typed after "@" (empty = show all).
+  String _mentionQuery = '';
+
+  /// Real user ids selected for the CURRENT draft (sent with the message).
+  final Set<String> _draftMentionIds = <String>{};
+
+  bool get _isGroupOwner =>
+      _groupOwnerId != null &&
+      _groupOwnerId!.isNotEmpty &&
+      _state?.currentUser?.id == _groupOwnerId;
+
+  /// Guards against reopening the mention sheet on every "@" keystroke.
+  bool _mentionSheetOpen = false;
+
   AppState? _resolvedState;
   AppState? get _state => _resolvedState;
   String get _groupId => widget.args.groupId;
@@ -456,8 +474,21 @@ class _GroupConversationScreenState extends State<GroupConversationScreen>
   }
 
   void _scrollListener() {
-    if (_scroll.position.pixels <= 120.0 && _hasMore && !_loadingOlder) {
+    if (!_scroll.hasClients) return;
+    final position = _scroll.position;
+    // Paginate older messages near the top.
+    if (position.pixels <= 120.0 && _hasMore && !_loadingOlder) {
       unawaited(_loadOlderMessages());
+    }
+    // Smart auto-scroll: follow the bottom ONLY when the user is actually AT
+    // (or within a tiny threshold of) the newest message. Scrolling up to
+    // read history turns _followBottom OFF immediately, so inbound messages
+    // are appended without yanking the reader back down.
+    final nearBottom = position.maxScrollExtent - position.pixels < 140.0;
+    if (nearBottom && !_followBottom) {
+      setState(() => _followBottom = true);
+    } else if (!nearBottom && _followBottom) {
+      setState(() => _followBottom = false);
     }
   }
 
@@ -465,18 +496,28 @@ class _GroupConversationScreenState extends State<GroupConversationScreen>
     if (!mounted || !_scroll.hasClients) return;
     final pos = _scroll.position.maxScrollExtent;
     _scroll.jumpTo(pos);
+    _followBottom = true;
   }
 
   Future<void> _send() async {
     final text = _input.text.trim();
     if (text.isEmpty || _sending) return;
     final reply = _replyTarget;
-    setState(() => _sending = true);
+    // Snapshot the draft mentions (real user ids) and clear them so the next
+    // draft starts fresh.
+    final mentionIds = _draftMentionIds.toList();
+    final mentionAll = text.contains('@todos');
+    setState(() {
+      _sending = true;
+      _draftMentionIds.clear();
+    });
     try {
       final message = await _state!.sendGroupChatMessage(
         _groupId,
         text,
         replyToMessageId: reply?.id,
+        mentionUserIds: mentionIds,
+        mentionAll: mentionAll,
       );
       if (!mounted) return;
       _input.clear();
@@ -489,11 +530,14 @@ class _GroupConversationScreenState extends State<GroupConversationScreen>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(e.message)),
       );
+      // Re-add the draft mentions on failure so the user can retry.
+      setState(() => _draftMentionIds.addAll(mentionIds));
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Não foi possível enviar a mensagem.')),
       );
+      setState(() => _draftMentionIds.addAll(mentionIds));
     } finally {
       if (mounted) setState(() => _sending = false);
     }
@@ -592,12 +636,105 @@ class _GroupConversationScreenState extends State<GroupConversationScreen>
     switch (action) {
       case _MessageAction.reply:
         _startReply(_messages.indexOf(message));
+      case _MessageAction.seenInfo:
+        await _openSeenInfo(message);
       case _MessageAction.deleteForMe:
         await _confirmDeleteForMe(message);
       case _MessageAction.deleteForEveryone:
         await _confirmDeleteForEveryone(message);
       case _MessageAction.banUser:
         await _confirmBanUser(message);
+    }
+  }
+
+  /// Visto/Enviado — opens the bottom panel listing WHO read this own
+  /// message ([VISTO]) and who has not ([ENVIADO]). The chat stays visible
+  /// behind; tapping outside closes it.
+  Future<void> _openSeenInfo(ChatMessage message) async {
+    if (!message.mine || message.groupId == null) return;
+    final state = _state;
+    if (state == null) return;
+    final messenger = ScaffoldMessenger.of(context);
+    var ok = true;
+    var readers = <ChatUser>[];
+    var unread = <ChatUser>[];
+    try {
+      final result = await state.groupMessageReaders(_groupId, message.id);
+      readers = result.read;
+      unread = result.unread;
+    } catch (_) {
+      ok = false;
+    }
+    if (!mounted) return;
+    if (!ok) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Não foi possível carregar as leituras.')),
+      );
+      return;
+    }
+    // Live updates: a `chat_read` frame for THIS message moves the reader
+    // from ENVIADO → VISTO while the sheet is open.
+    final stateNotifier =
+        ValueNotifier<({List<ChatUser> read, List<ChatUser> unread})>(
+      (read: readers, unread: unread),
+    );
+    final readSub = state.onChatRead.listen((event) {
+      if (!mounted) return;
+      if (event.groupId != _groupId) return;
+      if (!event.messageIds.contains(message.id)) return;
+      final readerId = event.userId;
+      if (readerId == null) return;
+      final current = stateNotifier.value;
+      final remainingUnread =
+          current.unread.where((u) => u.id != readerId).toList();
+      var updatedRead = current.read;
+      if (!updatedRead.any((r) => r.id == readerId)) {
+        updatedRead = [
+          ...updatedRead,
+          ChatUser(
+            id: readerId,
+            nickname: _state?.currentUser?.id == readerId
+                ? _state?.currentUser?.nickname ?? ''
+                : '...',
+            avatarUrl: _state?.currentUser?.id == readerId
+                ? _state?.currentUser?.avatarUrl
+                : null,
+          ),
+        ];
+      }
+      stateNotifier.value = (read: updatedRead, unread: remainingUnread);
+    });
+    try {
+      await showModalBottomSheet<void>(
+        context: context,
+        useSafeArea: true,
+        backgroundColor: Colors.transparent,
+        barrierColor: Colors.black.withValues(alpha: 0.5),
+        isScrollControlled: true,
+        builder: (_) => ValueListenableBuilder<
+            ({List<ChatUser> read, List<ChatUser> unread})>(
+          valueListenable: stateNotifier,
+          builder: (context, snapshot, _) => _SeenInfoSheet(
+            read: snapshot.read,
+            unread: snapshot.unread,
+            message: message,
+            onRefresh: () async {
+              try {
+                final result =
+                    await state.groupMessageReaders(_groupId, message.id);
+                if (!mounted) return;
+                stateNotifier.value =
+                    (read: result.read, unread: result.unread);
+              } catch (_) {
+                // keep current state
+              }
+            },
+          ),
+        ),
+      );
+    } finally {
+      await readSub.cancel();
+      stateNotifier.dispose();
     }
   }
 
@@ -744,8 +881,8 @@ class _GroupConversationScreenState extends State<GroupConversationScreen>
     }
   }
 
-  void _onComposerChanged(String _) {
-    final typing = _input.text.trim().isNotEmpty;
+  void _onComposerChanged(String value) {
+    final typing = value.trim().isNotEmpty;
     if (typing != _typingLastSent) {
       _typingLastSent = typing;
       _typingSendDebounce?.cancel();
@@ -753,6 +890,123 @@ class _GroupConversationScreenState extends State<GroupConversationScreen>
         _state?.sendGroupTyping(_groupId, typing);
       });
     }
+    // Mentions: detect a tail "@" (or "@query") and show the member picker.
+    final at = value.lastIndexOf('@');
+    if (at != -1 && at == value.length - 1) {
+      _mentionQuery = '';
+      _openMentionPicker();
+    } else if (at != -1 &&
+        at < value.length - 1 &&
+        _isMentionPatron(value, at)) {
+      _mentionQuery = value.substring(at + 1);
+      if (_mentionMembers.isNotEmpty) _openMentionPicker();
+    } else if (_mentionQuery.isNotEmpty) {
+      _mentionQuery = '';
+    }
+  }
+
+  bool _isMentionPatron(String value, int at) {
+    // A mention token is "@Nickname" where the char before '@' is whitespace
+    // or start-of-text (WhatsApp-style trigger).
+    if (at == 0) return true;
+    final prev = value[at - 1];
+    return prev == ' ' || prev == '\n';
+  }
+
+  /// Loads the group's members once and opens the soft mention sheet above
+  /// the keyboard (never covering the composer).
+  Future<void> _openMentionPicker() async {
+    final state = _state;
+    if (state == null) return;
+    if (!_mentionMembersLoaded) {
+      try {
+        final info = await state.fetchGroupInfo(_groupId);
+        if (!mounted) return;
+        setState(() {
+          _mentionMembers = info.members;
+          _mentionMembersLoaded = true;
+        });
+      } catch (_) {
+        return; // best-effort
+      }
+    }
+    // Only show when the composer still has a trailing "@".
+    if (!mounted) return;
+    final text = _input.text;
+    if (!text.endsWith('@') && _mentionQuery.isEmpty) {
+      // no trailing mention context anymore — do not show
+    }
+    await _showMentionSheet();
+  }
+
+  /// Bottom sheet listing the mentionable members (and @todos for the
+  /// owner). Selecting a member inserts "@Nickname " into the composer and
+  /// records its real user id for the send payload.
+  Future<void> _showMentionSheet() async {
+    final state = _state;
+    if (state == null) return;
+    if (_mentionSheetOpen) return; // already showing
+    _mentionSheetOpen = true;
+    try {
+      final me = state.currentUser;
+      final candidates = _mentionMembers
+          .where((m) =>
+              m.id != me?.id &&
+              (_mentionQuery.isEmpty ||
+                  m.nickname
+                      .toLowerCase()
+                      .contains(_mentionQuery.toLowerCase())))
+          .toList();
+      final action = await showModalBottomSheet<_MentionPick>(
+        context: context,
+        useSafeArea: true,
+        backgroundColor: Colors.transparent,
+        barrierColor: Colors.black.withValues(alpha: 0.5),
+        isScrollControlled: true,
+        builder: (_) => _MentionSheet(
+          members: candidates,
+          query: _mentionQuery,
+          showAll: _isGroupOwner,
+          selfNickname: me?.nickname ?? '',
+        ),
+      );
+      if (action == null || !mounted) return;
+      _insertMention(action);
+    } finally {
+      _mentionSheetOpen = false;
+    }
+  }
+
+  void _insertMention(_MentionPick pick) {
+    final controller = _input;
+    final text = controller.text;
+    final at = text.lastIndexOf('@');
+    // Replace the exact "@token" (everything from @ to the next whitespace
+    // or end of text); keep any text typed AFTER the token.
+    var tokenEnd = text.length;
+    if (at != -1) {
+      final afterAt = text.substring(at + 1);
+      var idx = 0;
+      while (idx < afterAt.length && !RegExp(r'\s').hasMatch(afterAt[idx])) {
+        idx++;
+      }
+      tokenEnd = at + 1 + idx;
+    }
+    final before = at == -1 ? text : text.substring(0, at);
+    final after = at == -1 ? '' : text.substring(tokenEnd);
+    final inserted = '${pick.all ? '@todos' : '@${pick.nickname}'} ';
+    controller
+      ..text = '$before$inserted$after'
+      ..selection = TextSelection.collapsed(offset: controller.text.length);
+    setState(() {
+      _mentionQuery = '';
+      if (pick.all) {
+        _draftMentionIds.clear();
+      } else {
+        _draftMentionIds.add(pick.userId);
+      }
+    });
+    _onComposerChanged(controller.text);
   }
 
   void _onMicTap() async {
@@ -1409,10 +1663,49 @@ class _MessageContent extends StatelessWidget {
           mine: message.senderId ==
               AppStateScope.maybeOf(context)?.currentUser?.id);
     }
-    return Text(
-      message.content,
-      style: AppTextStyles.body.copyWith(color: AppColors.techWhite),
-    );
+    final selfId = AppStateScope.maybeOf(context)?.currentUser?.id;
+    final spans = <TextSpan>[];
+    final mentionAll = message.mentionAll;
+    final mentionById = <String, String>{
+      for (final m in message.mentions) m.userId: m.nickname,
+    };
+    final reg = RegExp(r'@(\w+)');
+    var last = 0;
+    for (final match in reg.allMatches(message.content)) {
+      if (match.start > last) {
+        spans.add(TextSpan(
+            text: message.content.substring(last, match.start),
+            style: AppTextStyles.body.copyWith(color: AppColors.techWhite)));
+      }
+      final token = match.group(0)!;
+      final nickname = match.group(1)!;
+      final isMention = mentionAll ||
+          mentionById.values
+              .any((n) => n.toLowerCase() == nickname.toLowerCase());
+      final isSelf = mentionAll ||
+          (selfId != null &&
+              mentionById[selfId]?.toLowerCase() == nickname.toLowerCase());
+      spans.add(TextSpan(
+        text: token,
+        style: AppTextStyles.body.copyWith(
+          // The MENTIONED user sees @me highlighted (WhatsApp-style); other
+          // mentions stay subtle. @todos lights up for everyone.
+          color: isSelf ? AppColors.electricBlue : AppColors.holographicBlue,
+          fontWeight: isMention ? FontWeight.w800 : FontWeight.w600,
+          backgroundColor: isSelf
+              ? AppColors.electricBlue.withValues(alpha: 0.22)
+              : Colors.transparent,
+        ),
+      ));
+      last = match.end;
+    }
+    if (last < message.content.length) {
+      spans.add(TextSpan(
+          text: message.content.substring(last),
+          style: AppTextStyles.body.copyWith(color: AppColors.techWhite)));
+    }
+    return Text.rich(TextSpan(children: spans),
+        style: AppTextStyles.body.copyWith(color: AppColors.techWhite));
   }
 }
 
@@ -1493,7 +1786,13 @@ class _GroupReplyPreviewBar extends StatelessWidget {
   }
 }
 
-enum _MessageAction { reply, deleteForMe, deleteForEveryone, banUser }
+enum _MessageAction {
+  reply,
+  deleteForMe,
+  deleteForEveryone,
+  banUser,
+  seenInfo,
+}
 
 class _MessageActionSheet extends StatelessWidget {
   const _MessageActionSheet({
@@ -1559,6 +1858,12 @@ class _MessageActionSheet extends StatelessWidget {
                         label: 'Responder',
                         onTap: () =>
                             Navigator.of(context).pop(_MessageAction.reply)),
+                    if (message.mine)
+                      _ActionItem(
+                          icon: Icons.done_all_rounded,
+                          label: 'Visto/Enviado',
+                          onTap: () => Navigator.of(context)
+                              .pop(_MessageAction.seenInfo)),
                     _ActionItem(
                         icon: Icons.delete_outline_rounded,
                         label: 'Excluir para mim',
@@ -1601,6 +1906,241 @@ class _ActionItem extends StatelessWidget {
       title: Text(label,
           style: AppTextStyles.body.copyWith(color: AppColors.techWhite)),
       onTap: onTap,
+    );
+  }
+}
+
+/// Result of choosing a member (or @todos) in the mention sheet.
+class _MentionPick {
+  const _MentionPick({
+    this.userId = '',
+    this.nickname = '',
+    this.all = false,
+  });
+
+  final String userId;
+  final String nickname;
+  final bool all;
+}
+
+/// Member picker opened when the user types "@" in the group composer.
+/// Lists the group's members (nickname WITHOUT the @ prefix, per MATRIX) and
+/// `@todos` for the owner. Respects keyboard insets; never covers the field.
+class _MentionSheet extends StatelessWidget {
+  const _MentionSheet({
+    required this.members,
+    required this.query,
+    required this.showAll,
+    required this.selfNickname,
+  });
+
+  final List<GroupMemberInfoModel> members;
+  final String query;
+  final bool showAll;
+  final String selfNickname;
+
+  @override
+  Widget build(BuildContext context) {
+    final keyboard = MediaQuery.of(context).viewInsets.bottom;
+    final filtered = members
+        .where((m) =>
+            query.isEmpty ||
+            m.nickname.toLowerCase().contains(query.toLowerCase()))
+        .toList();
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: EdgeInsets.only(bottom: keyboard),
+        child: Container(
+          constraints: BoxConstraints(maxHeight: 260),
+          margin: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: AppColors.bluishBlack,
+            borderRadius: BorderRadius.circular(AppDimensions.radiusLg),
+            border: Border.all(color: AppColors.deepBlue),
+          ),
+          child: Material(
+            color: Colors.transparent,
+            child: ListView(
+              shrinkWrap: true,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
+                  child: Text('MENCIONAR',
+                      style: AppTextStyles.hud.copyWith(
+                          fontSize: 10, color: AppColors.holographicBlue)),
+                ),
+                if (showAll)
+                  ListTile(
+                    leading: Icon(Icons.groups_rounded,
+                        color: AppColors.holographicBlue),
+                    title: Text('@todos',
+                        style: AppTextStyles.body
+                            .copyWith(color: AppColors.techWhite)),
+                    subtitle: Text('mencionar todos os participantes',
+                        style: AppTextStyles.caption.copyWith(
+                            fontSize: 10, color: AppColors.holographicBlue)),
+                    onTap: () => Navigator.of(context).pop(const _MentionPick(
+                        userId: '', nickname: '', all: true)),
+                  ),
+                for (final m in filtered)
+                  ListTile(
+                    leading: UserAvatar(
+                        name: m.nickname,
+                        seed: m.nickname,
+                        imageUrl: m.avatarUrl,
+                        size: 32),
+                    title: Text(displayNickname(m.nickname),
+                        style: AppTextStyles.body
+                            .copyWith(color: AppColors.techWhite)),
+                    onTap: () => Navigator.of(context)
+                        .pop(_MentionPick(userId: m.id, nickname: m.nickname)),
+                  ),
+                if (filtered.isEmpty && !showAll)
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Text('Nenhum membro encontrado',
+                        style: AppTextStyles.bodyMuted),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Visto/Enviado bottom panel: lists who already read (VISTO) and who has
+/// NOT yet (ENVIADO) — the chat stays visible behind; tapping outside closes.
+class _SeenInfoSheet extends StatefulWidget {
+  const _SeenInfoSheet({
+    required this.read,
+    required this.unread,
+    required this.message,
+    required this.onRefresh,
+  });
+
+  final List<ChatUser> read;
+  final List<ChatUser> unread;
+  final ChatMessage message;
+  final Future<void> Function() onRefresh;
+
+  @override
+  State<_SeenInfoSheet> createState() => _SeenInfoSheetState();
+}
+
+class _SeenInfoSheetState extends State<_SeenInfoSheet> {
+  bool _refreshing = false;
+
+  @override
+  void didUpdateWidget(covariant _SeenInfoSheet oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // The parent refreshes the lists live (inbound chat_read frames) — the
+    // sheet just re-renders the new snapshots.
+    if (oldWidget.read != widget.read || oldWidget.unread != widget.unread) {
+      // no local state — we read straight from widget
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      top: false,
+      child: Container(
+        margin: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        decoration: BoxDecoration(
+          color: AppColors.bluishBlack,
+          borderRadius: BorderRadius.circular(AppDimensions.radiusXl),
+          border: Border.all(color: AppColors.deepBlue),
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Row(
+                  children: [
+                    Text('VISTO/ENVIADO',
+                        style: AppTextStyles.hud.copyWith(
+                            fontSize: 12, color: AppColors.techWhite)),
+                    const Spacer(),
+                    IconButton(
+                      icon: Icon(Icons.refresh_rounded,
+                          size: 18, color: AppColors.holographicBlue),
+                      onPressed: _refreshing
+                          ? null
+                          : () async {
+                              setState(() => _refreshing = true);
+                              await widget.onRefresh();
+                              if (mounted) setState(() => _refreshing = false);
+                            },
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 4),
+              _readerSection('VISTO', widget.read, AppColors.success),
+              _readerSection(
+                  'ENVIADO', widget.unread, AppColors.holographicBlue),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _readerSection(String label, List<ChatUser> users, Color color) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.done_all_rounded, size: 16, color: color),
+              const SizedBox(width: 6),
+              Text('$label (${users.length})',
+                  style: AppTextStyles.caption.copyWith(
+                      fontSize: 11, color: color, fontWeight: FontWeight.w700)),
+            ],
+          ),
+          const SizedBox(height: 4),
+          if (users.isEmpty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: Text('Nenhum',
+                  style: AppTextStyles.caption.copyWith(
+                      fontSize: 11, color: AppColors.holographicBlue)),
+            )
+          else
+            Wrap(
+              spacing: 12,
+              runSpacing: 8,
+              children: [
+                for (final u in users)
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      UserAvatar(
+                          name: u.nickname,
+                          seed: u.nickname,
+                          imageUrl: u.avatarUrl,
+                          size: 26),
+                      const SizedBox(width: 4),
+                      Text(displayNickname(u.nickname),
+                          style: AppTextStyles.caption.copyWith(
+                              fontSize: 11, color: AppColors.techWhite)),
+                    ],
+                  ),
+              ],
+            ),
+        ],
+      ),
     );
   }
 }

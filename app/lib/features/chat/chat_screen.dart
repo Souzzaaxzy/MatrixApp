@@ -265,7 +265,8 @@ class _ChatScreenState extends State<ChatScreen> {
               const SliverToBoxAdapter(
                 child: Padding(
                   padding: EdgeInsets.all(AppDimensions.spaceXl),
-                  child: Center(child: HudLabel(text: 'BUSCANDO...', dot: true)),
+                  child:
+                      Center(child: HudLabel(text: 'BUSCANDO...', dot: true)),
                 ),
               )
             else if (_searched && _searchResults.isEmpty)
@@ -282,8 +283,8 @@ class _ChatScreenState extends State<ChatScreen> {
               )
             else
               SliverPadding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: AppDimensions.spaceLg),
+                padding: const EdgeInsets.symmetric(
+                    horizontal: AppDimensions.spaceLg),
                 sliver: SliverList.builder(
                   itemCount: _searchResults.length,
                   itemBuilder: (context, i) {
@@ -375,7 +376,8 @@ class _ChatScreenState extends State<ChatScreen> {
               _groupsBody(groups),
             ],
           ],
-          const SliverToBoxAdapter(child: SizedBox(height: AppDimensions.spaceXxl)),
+          const SliverToBoxAdapter(
+              child: SizedBox(height: AppDimensions.spaceXxl)),
         ],
       ),
     );
@@ -391,9 +393,11 @@ class _ChatScreenState extends State<ChatScreen> {
         child: ListView.separated(
           scrollDirection: Axis.horizontal,
           physics: const BouncingScrollPhysics(),
-          padding: const EdgeInsets.symmetric(horizontal: AppDimensions.spaceLg),
+          padding:
+              const EdgeInsets.symmetric(horizontal: AppDimensions.spaceLg),
           itemCount: _friends.length + 1,
-          separatorBuilder: (_, __) => const SizedBox(width: AppDimensions.spaceMd),
+          separatorBuilder: (_, __) =>
+              const SizedBox(width: AppDimensions.spaceMd),
           itemBuilder: (context, i) {
             if (i == 0) {
               return _AkameCard(
@@ -421,8 +425,7 @@ class _ChatScreenState extends State<ChatScreen> {
                     width: 64,
                     child: NicknameRenderer(
                       friend.nickname,
-                      baseStyle:
-                          AppTextStyles.caption.copyWith(fontSize: 11),
+                      baseStyle: AppTextStyles.caption.copyWith(fontSize: 11),
                       background: AppColors.absoluteBlack,
                       nameColor: friend.nameColor,
                       textAlign: TextAlign.center,
@@ -510,9 +513,7 @@ class _ConversationTile extends StatelessWidget {
     final lastText = last == null
         ? 'Sem mensagens ainda'
         : (conversation.lastMine ? 'Você: ' : '') + last.content;
-    final time = last == null
-        ? ''
-        : chatListTime(last.createdAt);
+    final time = last == null ? '' : chatListTime(last.createdAt);
 
     return MatrixCard(
       margin: const EdgeInsets.symmetric(vertical: AppDimensions.spaceSm),
@@ -677,8 +678,7 @@ class _AkameCard extends StatelessWidget {
                           textAlign: TextAlign.center,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style:
-                              AppTextStyles.caption.copyWith(fontSize: 11),
+                          style: AppTextStyles.caption.copyWith(fontSize: 11),
                         ),
                       ],
                     ),
@@ -762,13 +762,11 @@ class _GroupTile extends StatelessWidget {
     final lastText = last == null
         ? 'Sem mensagens ainda'
         : '${group.lastMine ? 'Você: ' : ''}${last.senderNickname != null ? '${last.senderNickname}: ' : ''}${last.content}';
-    final time = last == null
-        ? ''
-        : chatListTime(last.createdAt);
+    final time = last == null ? '' : chatListTime(last.createdAt);
 
     return MatrixCard(
       margin: const EdgeInsets.symmetric(vertical: AppDimensions.spaceSm),
-      onTap:onTap,
+      onTap: onTap,
       child: Row(
         children: [
           FramedAvatar(
@@ -817,6 +815,25 @@ class _GroupTile extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(time, style: AppTextStyles.hud.copyWith(fontSize: 10)),
+                if (group.mentioned) ...[
+                  const SizedBox(height: 4),
+                  // "@" indicator: the last message mentions the viewer.
+                  Container(
+                    constraints:
+                        const BoxConstraints(minWidth: 20, minHeight: 20),
+                    alignment: Alignment.center,
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    decoration: BoxDecoration(
+                      color: AppColors.electricBlue.withValues(alpha: 0.25),
+                      borderRadius: BorderRadius.circular(999),
+                      border: Border.all(
+                          color: AppColors.electricBlue.withValues(alpha: 0.6)),
+                    ),
+                    child: Text('@',
+                        style: AppTextStyles.hud.copyWith(
+                            fontSize: 11, color: AppColors.electricBlue)),
+                  ),
+                ],
                 if (group.unreadCount > 0) ...[
                   const SizedBox(height: 4),
                   _UnreadDot(count: group.unreadCount),
