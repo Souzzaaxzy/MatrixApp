@@ -119,7 +119,8 @@ class AppState extends ChangeNotifier {
 
   final _chatRecording = StreamController<ChatRecordingEvent>.broadcast();
   Stream<ChatRecordingEvent> get onChatRecording => _chatRecording.stream;
-/// Real-time group identity updates (name/avatar/description/membership)
+
+  /// Real-time group identity updates (name/avatar/description/membership)
   /// pushed by the server after an owner edit. Open conversation / profile
   /// screens refresh their header live..
   final _groupUpdated = StreamController<GroupUpdatedEvent>.broadcast();
@@ -130,6 +131,13 @@ class AppState extends ChangeNotifier {
   /// open group screens close themselves so nothing stays stale.
   final _groupBanned = StreamController<GroupBannedEvent>.broadcast();
   Stream<GroupBannedEvent> get onGroupBanned => _groupBanned.stream;
+
+  /// Real-time signal that the session user LOST ACCESS to a group — either
+  /// the owner permanently deleted it or the user left it. Identical payload
+  /// to [_groupBanned]; handled the same way (drop cache + close open
+  /// screens).
+  final _groupDeleted = StreamController<GroupDeletedEvent>.broadcast();
+  Stream<GroupDeletedEvent> get onGroupDeleted => _groupDeleted.stream;
 
   /// Emits when a message in a conversation is deleted FOR EVERYONE by the
   /// peer (realtime). Open conversation screens remove the bubble live.
@@ -1070,7 +1078,6 @@ class AppState extends ChangeNotifier {
   /// group is inserted into the cached list immediately so it shows up in the
   /// Chat tab without a refetch.
 
-
   /// Full group info (profile menu.: identity + member list with owner flag).
   /// The group header is ALSO upserted into the local groups cache so an
   /// open conversation header reflects the persisted identity immediately..
@@ -1144,7 +1151,10 @@ class AppState extends ChangeNotifier {
 
   /// Owner-only member addition. Refreshes the caller's cached group item
   /// (the server response embeds the fresh member count).
-  Future<void> addGroupMember(String groupId, String newUserId,) async {
+  Future<void> addGroupMember(
+    String groupId,
+    String newUserId,
+  ) async {
     final group = await _chat.addGroupMember(groupId, newUserId);
     final idx = _groups.indexWhere((g) => g.id == group.id);
     if (idx != -1) _groups[idx] = group;
@@ -1348,6 +1358,19 @@ class AppState extends ChangeNotifier {
     _groups.removeWhere((g) => g.id == event.groupId);
     _recomputeUnreadBadge();
     if (!_groupBanned.isClosed) _groupBanned.add(event);
+    notifyListeners();
+  }
+
+  /// A real-time `chat_group_deleted` frame arrived → the session user lost
+  /// access to a group (owner deleted it permanently or the user left).
+  /// Drop the group from the local cache, recompute the unread badge and
+  /// notify open group screens so they close — same semantics as a ban.
+  void handleIncomingGroupDeleted(GroupDeletedEvent event) {
+    if (_disposed) return;
+    if (event.groupId.isEmpty) return;
+    _groups.removeWhere((g) => g.id == event.groupId);
+    _recomputeUnreadBadge();
+    if (!_groupDeleted.isClosed) _groupDeleted.add(event);
     notifyListeners();
   }
 
@@ -1555,6 +1578,39 @@ class AppState extends ChangeNotifier {
   Future<bool> hideGroup(String groupId) async {
     try {
       await _chat.hideGroup(groupId);
+      _groups.removeWhere((g) => g.id == groupId);
+      _recomputeUnreadBadge();
+      notifyListeners();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// PERMANENTLY deletes a group (owner-only; the server re-validates).
+  /// The server removes the group + all related rows in one transaction and
+  /// broadcasts `chat_group_deleted` to every participant; on success the
+  /// local cache drops the group immediately (the realtime frame covers the
+  /// other devices).
+  Future<bool> deleteGroup(String groupId) async {
+    try {
+      await _chat.deleteGroup(groupId);
+      _groups.removeWhere((g) => g.id == groupId);
+      _recomputeUnreadBadge();
+      notifyListeners();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// SAIR DO GRUPO — removes the SESSION user from the group (member-only;
+  /// the server rejects the owner so the group never ends up ownerless).
+  /// The group keeps existing for the other members. On success the local
+  /// cache drops the group and open group screens close themselves.
+  Future<bool> leaveGroup(String groupId) async {
+    try {
+      await _chat.leaveGroup(groupId);
       _groups.removeWhere((g) => g.id == groupId);
       _recomputeUnreadBadge();
       notifyListeners();
@@ -1817,6 +1873,15 @@ class ChatMessageDeletedEvent {
 /// user out of every open surface for that group.
 class GroupBannedEvent {
   const GroupBannedEvent({required this.groupId, required this.groupName});
+  final String groupId;
+  final String groupName;
+}
+
+/// A realtime signal that the session user LOST ACCESS to a group — either
+/// the owner permanently deleted it or the user left it. The app drops the
+/// group from the cache and open group screens close themselves.
+class GroupDeletedEvent {
+  const GroupDeletedEvent({required this.groupId, required this.groupName});
   final String groupId;
   final String groupName;
 }

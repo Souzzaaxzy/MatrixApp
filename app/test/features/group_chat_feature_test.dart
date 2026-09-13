@@ -77,7 +77,8 @@ Widget _groupScreen(String groupId, String name, String? avatar) {
 
 void main() {
   group('Group avatar sync (Etapa 3)', () {
-    testWidgets('group photo appears in the Chat list, in the conversation and in the profile',
+    testWidgets(
+        'group photo appears in the Chat list, in the conversation and in the profile',
         (tester) async {
       final state = await seededGroup(avatarUrl: '/static/g1.png');
       await pumpMatrixApp(
@@ -148,7 +149,8 @@ void main() {
     testWidgets('typing indicator shows single user and hides on stop',
         (tester) async {
       final state = await seededGroup();
-      await pumpMatrixApp(tester, _groupScreen('g1', 'Equipe MATRIX', null), state: state);
+      await pumpMatrixApp(tester, _groupScreen('g1', 'Equipe MATRIX', null),
+          state: state);
       await tester.pumpAndSettle();
 
       expect(find.textContaining('digitando'), findsNothing);
@@ -161,7 +163,6 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 200));
       expect(find.textContaining('joao está digitando'), findsOneWidget);
-
 
       state.handleIncomingChatTyping(const ChatTypingEvent(
         groupId: 'g1',
@@ -176,7 +177,8 @@ void main() {
 
     testWidgets('recording indicator shows single user', (tester) async {
       final state = await seededGroup();
-      await pumpMatrixApp(tester, _groupScreen('g1', 'Equipe MATRIX', null), state: state);
+      await pumpMatrixApp(tester, _groupScreen('g1', 'Equipe MATRIX', null),
+          state: state);
       await tester.pumpAndSettle();
 
       expect(find.textContaining('gravando'), findsNothing);
@@ -189,7 +191,6 @@ void main() {
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 200));
       expect(find.textContaining('joao está gravando áudio'), findsOneWidget);
-
 
       state.handleIncomingChatRecording(const ChatRecordingEvent(
         groupId: 'g1',
@@ -204,14 +205,21 @@ void main() {
 
     testWidgets('multiple typing users show the plural label', (tester) async {
       final state = await seededGroup();
-      await pumpMatrixApp(tester, _groupScreen('g1', 'Equipe MATRIX', null), state: state);
+      await pumpMatrixApp(tester, _groupScreen('g1', 'Equipe MATRIX', null),
+          state: state);
       await tester.pumpAndSettle();
 
       state.handleIncomingChatTyping(const ChatTypingEvent(
-        groupId: 'g1', userId: 'u2', nickname: 'joao', typing: true,
+        groupId: 'g1',
+        userId: 'u2',
+        nickname: 'joao',
+        typing: true,
       ));
       state.handleIncomingChatTyping(const ChatTypingEvent(
-        groupId: 'g1', userId: 'u3', nickname: 'maria', typing: true,
+        groupId: 'g1',
+        userId: 'u3',
+        nickname: 'maria',
+        typing: true,
       ));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 200));
@@ -227,7 +235,8 @@ void main() {
         (i) => i.isEven ? 'minha $i' : 'dela $i',
       );
       final state = await seededGroup(messages: messages);
-      await pumpMatrixApp(tester, _groupScreen('g1', 'Equipe MATRIX', null), state: state);
+      await pumpMatrixApp(tester, _groupScreen('g1', 'Equipe MATRIX', null),
+          state: state);
       await tester.pumpAndSettle();
       await tester.pump(const Duration(milliseconds: 50));
       // Scroll na parte inferior para revelar a última mensagem.
@@ -241,7 +250,6 @@ void main() {
       expect(find.textContaining('dela 39'), findsOneWidget);
 
       final original = tester.view.physicalSize;
-
 
       tester.view.physicalSize = Size(
         original.width,
@@ -259,7 +267,8 @@ void main() {
   });
 
   group('GroupProfileScreen participantes', () {
-    testWidgets('participant tap opens the correct profile and back returns',
+    testWidgets(
+        'participant tap opens the mini menu, then Ver perfil opens the profile',
         (tester) async {
       final state = await seededGroup();
       await pumpMatrixApp(
@@ -287,8 +296,17 @@ void main() {
       expect(find.text('joao'), findsWidgets);
       expect(find.byType(BackButton), findsWidgets);
 
-      // Tap the member → opens the correct profile.
+      // Tapping a participant now opens the participant mini menu (with the
+      // existing "Ver perfil" action + "Sair do grupo" for a member).
       await tester.tap(find.text('joao').first);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Ver perfil'), findsOneWidget);
+
+      // "Ver perfil" opens the correct profile.
+      await tester.tap(find.text('Ver perfil'));
       await tester.pump();
       await tester.pump(const Duration(milliseconds: 300));
 
@@ -349,7 +367,8 @@ void main() {
   });
 
   group('GroupProfileScreen edit menu (Etapa 2)', () {
-    testWidgets('owner sees pencil and can open the mini edit menu', (tester) async {
+    testWidgets('owner sees pencil and can open the mini edit menu',
+        (tester) async {
       final state = await seededGroup();
       await pumpMatrixApp(
         tester,

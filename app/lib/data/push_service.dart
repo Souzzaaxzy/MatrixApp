@@ -62,6 +62,12 @@ class PushService {
   /// kicks the user out of the group live.
   void Function(Map<String, dynamic> data)? onChatGroupBanned;
 
+  /// Called when the session user LOST ACCESS to a group (kind
+  /// `chat_group_deleted` — the owner permanently deleted it or the user
+  /// left). Payload carries {groupId, groupName}; the UI drops the group
+  /// from the cache and closes any open screen for it.
+  void Function(Map<String, dynamic> data)? onChatGroupDeleted;
+
   /// Called when a comment was deleted (kind `comment_deleted`). Payload
   /// carries {postId, commentId}.
   void Function(Map<String, dynamic> data)? onCommentDeleted;
@@ -258,6 +264,12 @@ class PushService {
       onChatGroupBanned?.call(data);
       return;
     }
+    if (message['kind'] == 'chat_group_deleted') {
+      final data =
+          (message['data'] as Map?)?.cast<String, dynamic>() ?? const {};
+      onChatGroupDeleted?.call(data);
+      return;
+    }
     if (message['kind'] == 'comment_deleted') {
       final data =
           (message['data'] as Map?)?.cast<String, dynamic>() ?? const {};
@@ -265,14 +277,11 @@ class PushService {
       return;
     }
     if (message['kind'] != 'notification') return;
-    final data =
-        (message['data'] as Map?)?.cast<String, dynamic>() ?? const {};
+    final data = (message['data'] as Map?)?.cast<String, dynamic>() ?? const {};
     final id = data['notificationId'] as String? ?? '';
     if (id.isNotEmpty && !_shown.add(id)) return; // dedupe, once per id
     await _plugin.show(
-      id.isEmpty
-          ? DateTime.now().millisecondsSinceEpoch ~/ 1000
-          : id.hashCode,
+      id.isEmpty ? DateTime.now().millisecondsSinceEpoch ~/ 1000 : id.hashCode,
       message['title'] as String? ?? _channelName,
       message['body'] as String? ?? '',
       const NotificationDetails(
@@ -295,7 +304,8 @@ class PushService {
   /// a single, auto-collapsed notification instead of a flood of bubbles.
   /// The body shows the latest message; tapping deep-links to that DM.
   Future<void> _showChatNotification(Map<String, dynamic> data) async {
-    final message = (data['message'] as Map?)?.cast<String, dynamic>() ?? const {};
+    final message =
+        (data['message'] as Map?)?.cast<String, dynamic>() ?? const {};
     final peer = (data['peer'] as Map?)?.cast<String, dynamic>() ?? const {};
     final conversationId =
         (data['conversationId'] ?? message['conversationId']) as String? ?? '';
@@ -316,7 +326,10 @@ class PushService {
         final uri = _resolveAssetUrl(ApiConfig.baseUrl, avatarUrl);
         final req = await client.getUrl(uri);
         final res = await req.close();
-        avatars = await consolidateHttpClientResponseBytes(res, onBytesReceived: (total, _) { if (total > 200000) throw const FormatException(); });
+        avatars = await consolidateHttpClientResponseBytes(res,
+            onBytesReceived: (total, _) {
+          if (total > 200000) throw const FormatException();
+        });
         client.close();
       } catch (_) {
         avatars = null;
@@ -339,9 +352,7 @@ class PushService {
           importance: Importance.high,
           priority: Priority.high,
           color: const Color(0xFF00B4FF),
-          largeIcon: avatars != null
-              ? ByteArrayAndroidBitmap(avatars)
-              : null,
+          largeIcon: avatars != null ? ByteArrayAndroidBitmap(avatars) : null,
           styleInformation: avatars != null
               ? MessagingStyleInformation(
                   Person(name: nickname),

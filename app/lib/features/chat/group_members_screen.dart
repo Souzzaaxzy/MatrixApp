@@ -39,6 +39,7 @@ class _GroupMembersScreenState extends State<GroupMembersScreen> {
   String _groupName = '';
   String? _ownerId;
   StreamSubscription<GroupUpdatedEvent>? _groupSub;
+  StreamSubscription<GroupDeletedEvent>? _groupDeletedSub;
 
   AppState? _resolvedState;
   AppState? get _state => _resolvedState;
@@ -70,13 +71,34 @@ class _GroupMembersScreenState extends State<GroupMembersScreen> {
       _resolvedState = state;
       _groupSub?.cancel();
       _groupSub = state?.onGroupUpdated.listen(_onGroupUpdated);
+      _groupDeletedSub?.cancel();
+      _groupDeletedSub = state?.onGroupDeleted.listen(_onGroupDeleted);
     }
   }
 
   @override
   void dispose() {
     _groupSub?.cancel();
+    _groupDeletedSub?.cancel();
     super.dispose();
+  }
+
+  /// The session user LOST ACCESS to this group (realtime — the owner
+  /// permanently deleted it or the user left from another device). Close the
+  /// participants screen.
+  void _onGroupDeleted(GroupDeletedEvent event) {
+    if (!mounted) return;
+    if (event.groupId != _groupId) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          event.groupName.isEmpty
+              ? 'Você não faz mais parte deste grupo.'
+              : '"${event.groupName}" já não está disponível.',
+        ),
+      ),
+    );
+    Navigator.of(context).maybePop();
   }
 
   Future<void> _load() async {
@@ -152,7 +174,9 @@ class _GroupMembersScreenState extends State<GroupMembersScreen> {
       await state.addGroupMember(_groupId, chosen.userId);
       await _load();
       messenger.showSnackBar(
-        SnackBar(content: Text('${displayNickname(chosen.nickname)} entrou no grupo.')),
+        SnackBar(
+            content:
+                Text('${displayNickname(chosen.nickname)} entrou no grupo.')),
       );
     } on ApiException catch (e) {
       messenger.showSnackBar(SnackBar(content: Text(e.message)));
@@ -163,15 +187,99 @@ class _GroupMembersScreenState extends State<GroupMembersScreen> {
     }
   }
 
+  /// Opens the participant's personal mini menu (bottom sheet): "Ver perfil"
+  /// (existing behavior) plus "Sair do grupo" for the SESSION user when they
+  /// are an active non-owner member. "Sair do grupo" affects the CURRENT
+  /// user — never the tapped participant.
+  Future<void> _showParticipantMenu(GroupMemberInfoModel member) async {
+    final state = _state;
+    if (state == null) return;
+    final me = state.currentUser;
+    final canLeave = me != null && _ownerId != null && me.id != _ownerId;
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      useSafeArea: true,
+      backgroundColor: Colors.transparent,
+      barrierColor: Colors.black.withValues(alpha: 0.5),
+      builder: (_) => _ParticipantMiniMenu(
+        member: member,
+        canLeave: canLeave,
+      ),
+    );
+    if (action == null || !mounted) return;
+    switch (action) {
+      case 'profile':
+        openProfileById(
+          context,
+          id: member.id,
+          nickname: member.nickname,
+        );
+      case 'leave':
+        await _confirmLeaveGroup();
+    }
+  }
+
+  /// SAIR DO GRUPO — removes the SESSION user from this group only. The
+  /// group keeps existing for the other members. The server re-validates
+  /// membership and rejects the OWNER (a group must never be orphaned).
+  Future<void> _confirmLeaveGroup() async {
+    final state = _state;
+    if (state == null) return;
+    final messenger = ScaffoldMessenger.of(context);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.bluishBlack,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppDimensions.radiusLg),
+          side: BorderSide(color: AppColors.deepBlue),
+        ),
+        title: Text(
+          'Sair do grupo?',
+          style: AppTextStyles.hud
+              .copyWith(fontSize: 16, color: AppColors.techWhite),
+        ),
+        content: Text(
+          'Você sairá de "$_groupName". O grupo continuará existindo para '
+          'os outros participantes e você não receberá mais as mensagens.',
+          style: AppTextStyles.bodyMuted,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text('Cancelar',
+                style: TextStyle(color: AppColors.holographicBlue)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text('Sair', style: TextStyle(color: AppColors.error)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    final ok = await state.leaveGroup(_groupId);
+    if (!mounted) return;
+    if (ok) {
+      // The server removed the session user; pop every group surface. The
+      // realtime `chat_group_deleted` frame also covers other devices.
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Você saiu do grupo.')),
+      );
+      Navigator.of(context).popUntil((route) => route.isFirst);
+    } else {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Não foi possível sair do grupo.')),
+      );
+    }
+  }
+
   Widget _memberTile(GroupMemberInfoModel m) {
     final isOwner = m.isOwner || (_ownerId != null && m.id == _ownerId);
     return ListTile(
       contentPadding: EdgeInsets.zero,
-      onTap: () => openProfileById(
-        context,
-        id: m.id,
-        nickname: m.nickname,
-      ),
+      onTap: () => _showParticipantMenu(m),
       leading: UserAvatar(
         name: m.nickname,
         seed: m.nickname,
@@ -305,12 +413,12 @@ class _GroupMembersScreenState extends State<GroupMembersScreen> {
     }
     return ListView.separated(
       padding: const EdgeInsets.symmetric(
-          horizontal: AppDimensions.spaceLg,
-          vertical: AppDimensions.spaceLg,
+        horizontal: AppDimensions.spaceLg,
+        vertical: AppDimensions.spaceLg,
       ),
       itemCount: _members.length + (_bannedMembers.isEmpty ? 1 : 2),
       separatorBuilder: (_, __) => const SizedBox(height: 4),
-      itemBuilder: (context,i) {
+      itemBuilder: (context, i) {
         final activeEnd = _members.length;
         if (i == 0) {
           return _isOwner
@@ -376,6 +484,112 @@ class _GroupMembersScreenState extends State<GroupMembersScreen> {
         ),
       ),
       body: SafeArea(child: _buildBody()),
+    );
+  }
+}
+
+/// Participant mini menu — opened when tapping a member in the group's
+/// participants screen. Shows the tapped participant's identity and the
+/// existing "Ver perfil" action; "Sair do grupo" is added for the SESSION
+/// user (an active NON-owner member). The leave action ALWAYS affects the
+/// session user — never the tapped participant.
+class _ParticipantMiniMenu extends StatelessWidget {
+  const _ParticipantMiniMenu({
+    required this.member,
+    required this.canLeave,
+  });
+
+  final GroupMemberInfoModel member;
+  final bool canLeave;
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Container(
+        margin: const EdgeInsets.all(8),
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        decoration: BoxDecoration(
+          color: AppColors.bluishBlack,
+          borderRadius: BorderRadius.circular(AppDimensions.radiusXl),
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (member.nickname.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: AppDimensions.spaceLg,
+                    vertical: AppDimensions.spaceSm,
+                  ),
+                  child: Text(
+                    displayNickname(member.nickname),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTextStyles.hud
+                        .copyWith(fontSize: 14, color: AppColors.techWhite),
+                  ),
+                ),
+              const SizedBox(height: AppDimensions.spaceSm),
+              _ParticipantMenuItem(
+                icon: Icons.person_outline_rounded,
+                label: 'Ver perfil',
+                color: AppColors.holographicBlue,
+                onTap: () => Navigator.of(context).pop('profile'),
+              ),
+              if (canLeave) ...[
+                Divider(
+                  height: AppDimensions.spaceLg,
+                  thickness: 1,
+                  color: AppColors.deepBlue.withValues(alpha: 0.5),
+                ),
+                _ParticipantMenuItem(
+                  icon: Icons.exit_to_app_rounded,
+                  label: 'Sair do grupo',
+                  color: AppColors.error,
+                  onTap: () => Navigator.of(context).pop('leave'),
+                ),
+              ],
+              const SizedBox(height: AppDimensions.spaceXs),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ParticipantMenuItem extends StatelessWidget {
+  const _ParticipantMenuItem({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.color,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = color ?? AppColors.holographicBlue;
+    return Material(
+      color: AppColors.cardSurface,
+      borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
+      child: ListTile(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
+        ),
+        leading: Icon(icon, color: accent, size: 24),
+        title: Text(
+          label,
+          style: AppTextStyles.body.copyWith(color: AppColors.techWhite),
+        ),
+        onTap: onTap,
+      ),
     );
   }
 }

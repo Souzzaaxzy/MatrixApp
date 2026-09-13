@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_dimensions.dart';
 import '../../app/theme/app_text_styles.dart';
+import '../../core/services/app_state.dart';
 import '../../core/utils/chat_format.dart';
 import '../../core/utils/gallery_picker.dart';
 import '../../core/utils/profile_navigation.dart';
@@ -41,6 +42,7 @@ class _GroupProfileScreenState extends State<GroupProfileScreen> {
   String? _error;
   bool _saving = false;
   StreamSubscription<GroupUpdatedEvent>? _groupSub;
+  StreamSubscription<GroupDeletedEvent>? _groupDeletedSub;
 
   String? get _myId => AppStateScope.maybeOf(context)?.currentUser?.id;
 
@@ -71,13 +73,33 @@ class _GroupProfileScreenState extends State<GroupProfileScreen> {
     final state = AppStateScope.maybeOf(context);
     if (state != null && _groupSub == null) {
       _groupSub = state.onGroupUpdated.listen(_onGroupUpdated);
+      _groupDeletedSub = state.onGroupDeleted.listen(_onGroupDeleted);
     }
   }
 
   @override
   void dispose() {
     _groupSub?.cancel();
+    _groupDeletedSub?.cancel();
     super.dispose();
+  }
+
+  /// The session user LOST ACCESS to this group (realtime — the owner
+  /// permanently deleted it or the user left from another device). Close the
+  /// profile screen; nothing stale remains for this group.
+  void _onGroupDeleted(GroupDeletedEvent event) {
+    if (!mounted) return;
+    if (event.groupId != _groupId) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          event.groupName.isEmpty
+              ? 'Você não faz mais parte deste grupo.'
+              : '"${event.groupName}" já não está disponível.',
+        ),
+      ),
+    );
+    Navigator.of(context).maybePop();
   }
 
   Future<void> _load() async {
@@ -170,7 +192,8 @@ class _GroupProfileScreenState extends State<GroupProfileScreen> {
       messenger.showSnackBar(SnackBar(content: Text(e.message)));
     } catch (_) {
       messenger.showSnackBar(
-        const SnackBar(content: Text('Não foi possível atualizar a descrição.')),
+        const SnackBar(
+            content: Text('Não foi possível atualizar a descrição.')),
       );
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -195,6 +218,78 @@ class _GroupProfileScreenState extends State<GroupProfileScreen> {
         await _changeAvatar();
       case 'description':
         await _editDescription();
+      case 'delete':
+        await _confirmDeleteGroup();
+    }
+  }
+
+  /// EXCLUIR GRUPO — destructive, owner-only. Asks for an explicit
+  /// confirmation (the group, its members, messages and media are removed
+  /// for EVERYONE — this is NOT a simple leave) before calling the server,
+  /// which re-validates ownership and deletes the group in one transaction.
+  Future<void> _confirmDeleteGroup() async {
+    if (!_isOwner || _saving) return;
+    final messenger = ScaffoldMessenger.of(context);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.bluishBlack,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppDimensions.radiusLg),
+          side: BorderSide(color: AppColors.deepBlue),
+        ),
+        title: Text(
+          'Excluir grupo?',
+          style: AppTextStyles.hud
+              .copyWith(fontSize: 16, color: AppColors.techWhite),
+        ),
+        content: Text(
+          'O grupo "${_name ?? ''}" será excluído permanentemente. '
+          'Todos os membros serão removidos, o histórico e os dados '
+          'relacionados serão apagados conforme as regras do MATRIX, e '
+          'nenhum participante poderá mais acessá-lo. Esta ação não pode '
+          'ser desfeita e não é uma simples saída.',
+          style: AppTextStyles.bodyMuted,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text('Cancelar',
+                style: TextStyle(color: AppColors.holographicBlue)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text(
+              'Excluir',
+              style: TextStyle(color: AppColors.error),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    final state = AppStateScope.maybeOf(context);
+    if (state == null) return;
+    setState(() => _saving = true);
+    try {
+      final ok = await state.deleteGroup(_groupId);
+      if (!mounted) return;
+      if (ok) {
+        messenger.showSnackBar(
+          SnackBar(content: Text('Grupo "${_name ?? ''}" excluído.')),
+        );
+        // Drop every open surface for this group (profile + conversation).
+        Navigator.of(context).popUntil((route) => route.isFirst);
+      } else {
+        messenger.showSnackBar(
+          const SnackBar(
+            content: Text('Não foi possível excluir o grupo.'),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
     }
   }
 
@@ -203,7 +298,9 @@ class _GroupProfileScreenState extends State<GroupProfileScreen> {
     final result = await pickGalleryImage(imageQuality: 80);
     if (!mounted) return;
     if (!result.isSuccess) {
-      if (!result.cancelled && result.error != null && result.error!.isNotEmpty) {
+      if (!result.cancelled &&
+          result.error != null &&
+          result.error!.isNotEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(result.error!)),
         );
@@ -215,7 +312,8 @@ class _GroupProfileScreenState extends State<GroupProfileScreen> {
     setState(() => _saving = true);
     final messenger = ScaffoldMessenger.of(context);
     try {
-      final url = await Services.instance.uploads.upload(File(result.file!.path));
+      final url =
+          await Services.instance.uploads.upload(File(result.file!.path));
       await state.updateGroupAvatar(_groupId, url);
       await _refreshSilent();
       messenger.showSnackBar(
@@ -359,7 +457,6 @@ class _GroupProfileScreenState extends State<GroupProfileScreen> {
   }
 }
 
-
 /// Mini menu of group editing options (Etapa 2). Opened by the pencil icon
 /// in the group profile AppBar (owner-only).
 class _EditGroupMenu extends StatelessWidget {
@@ -401,6 +498,21 @@ class _EditGroupMenu extends StatelessWidget {
               label: 'Editar descrição',
               value: 'description',
             ),
+            const SizedBox(height: AppDimensions.spaceSm),
+            // EXCLUIR GRUPO — same edit menu, owner-only (the sheet is only
+            // reachable through the owner AppBar pencil). Destructive action,
+            // visually separated from the non-destructive edits.
+            Divider(
+              height: AppDimensions.spaceLg,
+              thickness: 1,
+              color: AppColors.deepBlue.withValues(alpha: 0.5),
+            ),
+            _EditMenuTile(
+              icon: Icons.delete_forever_rounded,
+              label: 'Excluir grupo',
+              value: 'delete',
+              destructive: true,
+            ),
             const SizedBox(height: AppDimensions.spaceXs),
           ],
         ),
@@ -414,14 +526,20 @@ class _EditMenuTile extends StatelessWidget {
     required this.icon,
     required this.label,
     required this.value,
+    this.destructive = false,
   });
 
   final IconData icon;
   final String label;
   final String value;
 
+  /// Destructive actions (Excluir grupo) render in MATRIX's error red to
+  /// signal irreversible consequences.
+  final bool destructive;
+
   @override
   Widget build(BuildContext context) {
+    final color = destructive ? AppColors.error : AppColors.holographicBlue;
     return Material(
       color: AppColors.cardSurface,
       borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
@@ -429,10 +547,14 @@ class _EditMenuTile extends StatelessWidget {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
         ),
-        leading: Icon(icon, color: AppColors.holographicBlue, size: 24),
-        title: Text(label, style: AppTextStyles.body),
-        trailing: Icon(Icons.chevron_right_rounded,
-            color: AppColors.holographicBlue, size: 20),
+        leading: Icon(icon, color: color, size: 24),
+        title: Text(
+          label,
+          style: AppTextStyles.body.copyWith(
+            color: destructive ? AppColors.error : AppColors.techWhite,
+          ),
+        ),
+        trailing: Icon(Icons.chevron_right_rounded, color: color, size: 20),
         onTap: () => Navigator.of(context).pop(value),
       ),
     );
@@ -536,7 +658,8 @@ class _DescriptionEditDialogState extends State<_DescriptionEditDialog> {
         ),
         TextButton(
           onPressed: () => Navigator.of(context).pop(''),
-          child: Text('Remover descrição', style: TextStyle(color: AppColors.error)),
+          child: Text('Remover descrição',
+              style: TextStyle(color: AppColors.error)),
         ),
       ],
     );
@@ -566,11 +689,13 @@ class _MembersSection extends StatelessWidget {
       children: [
         Row(
           children: [
-            Icon(Icons.group_rounded, color: AppColors.holographicBlue, size: 22),
+            Icon(Icons.group_rounded,
+                color: AppColors.holographicBlue, size: 22),
             const SizedBox(width: 8),
             Text(
               'Membros',
-              style: AppTextStyles.hud.copyWith(fontSize: 14, color: AppColors.techWhite),
+              style: AppTextStyles.hud
+                  .copyWith(fontSize: 14, color: AppColors.techWhite),
             ),
             const Spacer(),
             Text(
@@ -583,11 +708,11 @@ class _MembersSection extends StatelessWidget {
         const SizedBox(height: AppDimensions.spaceMd),
         if (preview.isEmpty)
           Padding(
-            padding: const EdgeInsets.symmetric(vertical: AppDimensions.spaceMd),
+            padding:
+                const EdgeInsets.symmetric(vertical: AppDimensions.spaceMd),
             child: Center(
               child: Text('Sem membros.',
-                  style: AppTextStyles.bodyMuted,
-                  textAlign: TextAlign.center),
+                  style: AppTextStyles.bodyMuted, textAlign: TextAlign.center),
             ),
           )
         else
@@ -604,8 +729,8 @@ class _MembersSection extends StatelessWidget {
             onTap: onOpen,
             child: Padding(
               padding: const EdgeInsets.symmetric(
-                  horizontal: AppDimensions.spaceLg,
-                  vertical: AppDimensions.spaceMd,
+                horizontal: AppDimensions.spaceLg,
+                vertical: AppDimensions.spaceMd,
               ),
               child: Row(
                 children: [
@@ -615,7 +740,8 @@ class _MembersSection extends StatelessWidget {
                   Expanded(
                     child: Text(
                       'Ver todos',
-                      style: AppTextStyles.body.copyWith(color: AppColors.techWhite),
+                      style: AppTextStyles.body
+                          .copyWith(color: AppColors.techWhite),
                     ),
                   ),
                   Text(
@@ -661,7 +787,7 @@ class _MemberRow extends StatelessWidget {
         displayNickname(member.nickname),
         style: AppTextStyles.body.copyWith(fontSize: 15),
       ),
-      trailing:isOwner
+      trailing: isOwner
           ? Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
               decoration: BoxDecoration(

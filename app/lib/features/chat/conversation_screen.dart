@@ -20,18 +20,13 @@ import '../../data/api_config.dart';
 import '../../data/services.dart';
 import '../../models/conversation.dart';
 import 'chat_navigation.dart';
+import 'reply_swipe.dart';
 import 'voice_player_bubble.dart';
 import 'voice_recorder.dart';
 
 /// How long the "digitando..." hint stays on screen without a new typing
 /// frame before it auto-clears (peer stopped or its app closed silently).
 const _typingTimeout = Duration(seconds: 4);
-
-/// Vertical offset the reply quote is capped at while swiping.
-const _replySwipeThreshold = 96.0;
-
-/// Minimum horizontal drag distance to activate reply selection.
-const _replyDragThreshold = 90.0;
 
 /// Private conversation screen — the single DM UI reached from every entry
 /// point (Chat search / friends / conversations list / profile "Mensagem").
@@ -1159,12 +1154,10 @@ class _ConversationScreenState extends State<ConversationScreen>
           !prev.mine &&
           prev.senderId == m.senderId &&
           prev.replyTo == null;
-      final interrupted = m.mine ||
-          prev == null ||
-          !prevSameNormalSender ||
-          m.replyTo != null;
-      final showAvatar = !m.mine &&
-          (interrupted || m.isVoice || normalShownCounter >= 5);
+      final interrupted =
+          m.mine || prev == null || !prevSameNormalSender || m.replyTo != null;
+      final showAvatar =
+          !m.mine && (interrupted || m.isVoice || normalShownCounter >= 5);
       if (m.mine) {
         normalShownCounter = 0;
       } else if (m.isVoice || m.replyTo != null) {
@@ -1419,7 +1412,6 @@ class _MessageBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final mine = message.mine;
-    final align = mine ? CrossAxisAlignment.end : CrossAxisAlignment.start;
 
     // "enviado"/"visto agora" only on the SESSION user's newest message.
     final showStatus = mine && isLast;
@@ -1529,18 +1521,26 @@ class _MessageBubble extends StatelessWidget {
       ),
     );
 
-    return _ReplySwipe(
-      message: message,
-      index: index,
+    return ReplySwipe(
       mine: mine,
-      align: align,
       bubble: bubble,
-      firstOfRun: firstOfRun,
-      peerName: peerName,
-      peerAvatar: peerAvatar,
-      onStartReply: onStartReply,
+      onStartReply: () => onStartReply(index),
       onLongPress: onLongPress,
       replySelected: replySelected,
+      leading: (!mine && peerName != null && firstOfRun)
+          ? Padding(
+              padding: const EdgeInsets.only(right: 5, bottom: 4),
+              child: UserAvatar(
+                key: ValueKey('peer-avatar-${message.id}'),
+                name: peerName!,
+                imageUrl: peerAvatar,
+                // Proportional to the 300px-max bubble — keeping the
+                // received layout balanced (MATRIX's visual format).
+                size: 38,
+                seed: peerName,
+              ),
+            )
+          : null,
     );
   }
 
@@ -1560,140 +1560,6 @@ class _MessageBubble extends StatelessWidget {
             : AppColors.holographicBlue,
         fontFamily: 'JetBrainsMono',
       );
-}
-
-/// Wraps a bubble with the left→right swipe-to-reply gesture. Each bubble
-/// carries its OWN drag state (StatefulWidget) so swiping one never affects
-/// its siblings. During the drag the bubble follows the finger (capped at
-/// [_replySwipeThreshold], so it can never leave the screen); when the drag
-/// releases past the threshold the message is selected for reply, otherwise
-/// it snaps back with a short ease-out animation.
-class _ReplySwipe extends StatefulWidget {
-  const _ReplySwipe({
-    required this.message,
-    required this.index,
-    required this.mine,
-    required this.align,
-    required this.bubble,
-    this.firstOfRun = true,
-    this.peerName,
-    this.peerAvatar,
-    required this.onStartReply,
-    required this.onLongPress,
-    this.replySelected = false,
-  });
-
-  final ChatMessage message;
-  final int index;
-  final bool mine;
-  final CrossAxisAlignment align;
-  final Widget bubble;
-  final bool firstOfRun;
-  final String? peerName;
-  final String? peerAvatar;
-  final void Function(int index) onStartReply;
-  final VoidCallback onLongPress;
-  final bool replySelected;
-
-  @override
-  State<_ReplySwipe> createState() => _ReplySwipeState();
-}
-
-class _ReplySwipeState extends State<_ReplySwipe> {
-  /// Current displacement magnitude (0 when idle/selected.). Direction
-  /// is implied by the owner: theirs drags left→right (positive); mine drags
-  /// right→left toward the reply affordance (also positive after flipping).
-  double _dx = 0;
-
-  bool get _selected => widget.replySelected;
-
-  @override
-  void didUpdateWidget(covariant _ReplySwipe old) {
-    super.didUpdateWidget(old);
-    // When the parent marks this message as the reply target, settle at the
-    // pinned offset; when it deselects, snap back.
-    if (widget.replySelected != old.replySelected) {
-      _dx = widget.replySelected ? _replySwipeThreshold : 0;
-    }
-  }
-
-  void _endDragAndMaybeSelect() {
-    if (_dx >= _replyDragThreshold) {
-      widget.onStartReply(widget.index);
-    } else {
-      setState(() => _dx = 0); // snap back
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final mine = widget.mine;
-    final dir =
-        mine ? -1.0 : 1.0; // flip drag so BOTH sides swipe toward the arrow
-    return GestureDetector(
-      // Long-press on a message bubble opens the contextual actions menu
-      // (Responder / Excluir / Excluir para todos).
-      onLongPress: widget.onLongPress,
-      onHorizontalDragUpdate: (details) {
-        if (_selected) return; // already replying another message
-        setState(() {
-          _dx = (_dx + details.delta.dx * dir).clamp(0.0, _replySwipeThreshold);
-        });
-      },
-      onHorizontalDragEnd: (_) => _endDragAndMaybeSelect(),
-      onHorizontalDragCancel: () => setState(() => _dx = 0),
-      child: AnimatedContainer(
-        duration: _selected ? Duration.zero : const Duration(milliseconds: 160),
-        curve: Curves.easeOut,
-        transform: Matrix4.translationValues(_dx * dir, 0, 0),
-        alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
-        child: Column(
-          crossAxisAlignment: widget.align,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                // Profile picture of the OTHER sender, shown to the LEFT of
-                // received messages (matches [FOTO] [MENSAGEM]). Hidden
-                // on my own messages —the layout stays clean. Replies and
-                // voice messages ALWAYS keep it (firstOfRun force-cs true,
-                // so a burst of five normal bubbles wears it only once,, then
-                // the next group's first normal brings it back).
-                if (!widget.mine &&
-                    widget.peerName != null &&
-                    widget.firstOfRun)
-                  Padding(
-                    padding: const EdgeInsets.only(right: 5, bottom: 4),
-                    child: UserAvatar(
-                      key: ValueKey('peer-avatar-${widget.message.id}'),
-                      name: widget.peerName!,
-                      imageUrl: widget.peerAvatar,
-                      // Proportional to the 300px-max bubble — keeping the
-                      // received layout balanced (MATRIX's visual format).
-                      size: 38,
-                      seed: widget.peerName,
-                    ),
-                  ),
-                // Reply affordance that lights up as the swipe approaches.
-                AnimatedOpacity(
-                  opacity: _selected || _dx > 8 ? 0.9 : 0,
-                  duration: const Duration(milliseconds: 120),
-                  child: Icon(
-                    Icons.reply_rounded,
-                    color: AppColors.electricBlue,
-                    size: 18,
-                  ),
-                ),
-                widget.bubble,
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 }
 
 /// Bottom composer: message input + send button, riding the keyboard.
@@ -2314,7 +2180,8 @@ class _MessageActionMenu extends StatelessWidget {
           ),
           child: Container(
             margin: const EdgeInsets.all(AppDimensions.spaceMd),
-            padding: const EdgeInsets.symmetric(vertical: AppDimensions.spaceXs),
+            padding:
+                const EdgeInsets.symmetric(vertical: AppDimensions.spaceXs),
             decoration: BoxDecoration(
               color: AppColors.bluishBlack,
               borderRadius: BorderRadius.circular(AppDimensions.radiusXl),

@@ -53,27 +53,27 @@ Future<AppState> seededGroupForBan() async {
   );
   store.groups[id] = g;
   store.groupMessagesById[id] = <ChatMessage>[
-        ChatMessage(
-          id: 'gm0',
-          groupId: id,
-          conversationId: null,
-          senderId: 'u0',
-          sender: const ChatUser(id: 'u0', nickname: 'leonardo'),
-          content: 'Olá grupo',
-          createdAt: DateTime(2024, 1, 1, 20, 0),
-          mine: true,
-        ),
-        ChatMessage(
-          id: 'gm1',
-          groupId: id,
-          conversationId: null,
-          senderId: 'u2',
-          sender: const ChatUser(id: 'u2', nickname: 'joao'),
-          content: 'Oi leo',
-          createdAt: DateTime(2024, 1, 1, 20, 1),
-          mine: false,
-        ),
-      ];
+    ChatMessage(
+      id: 'gm0',
+      groupId: id,
+      conversationId: null,
+      senderId: 'u0',
+      sender: const ChatUser(id: 'u0', nickname: 'leonardo'),
+      content: 'Olá grupo',
+      createdAt: DateTime(2024, 1, 1, 20, 0),
+      mine: true,
+    ),
+    ChatMessage(
+      id: 'gm1',
+      groupId: id,
+      conversationId: null,
+      senderId: 'u2',
+      sender: const ChatUser(id: 'u2', nickname: 'joao'),
+      content: 'Oi leo',
+      createdAt: DateTime(2024, 1, 1, 20, 1),
+      mine: false,
+    ),
+  ];
   store.groupMemberIds[id] = {'u0', 'u2'};
   final state = AppState(repositories: repos);
   await state.restoreSession();
@@ -127,8 +127,51 @@ void main() {
     });
   });
 
+  group('real-time group deletion/leave (chat_group_deleted)', () {
+    testWidgets('closes the open group screen when the owner deletes the group',
+        (tester) async {
+      final state = await seededGroupForBan();
+      await pumpGroupPushed(tester, state);
+      expect(find.byType(GroupConversationScreen), findsOneWidget);
+
+      state.handleIncomingGroupDeleted(
+        const GroupDeletedEvent(groupId: 'g1', groupName: 'Equipe MATRIX'),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(GroupConversationScreen), findsNothing);
+      expect(find.textContaining('já não está disponível'), findsOneWidget);
+    });
+
+    testWidgets('drops the group from the cached list', (tester) async {
+      final state = await seededGroupForBan();
+      expect(state.groups.where((g) => g.id == 'g1'), hasLength(1));
+
+      state.handleIncomingGroupDeleted(
+        const GroupDeletedEvent(groupId: 'g1', groupName: 'Equipe MATRIX'),
+      );
+      await pumpMatrixApp(tester, const SizedBox(), state: state);
+      await tester.pumpAndSettle();
+
+      expect(state.groups.where((g) => g.id == 'g1'), isEmpty);
+    });
+
+    testWidgets('does not close unrelated group screens', (tester) async {
+      final state = await seededGroupForBan();
+      await pumpGroupPushed(tester, state);
+
+      state.handleIncomingGroupDeleted(
+        const GroupDeletedEvent(groupId: 'g9', groupName: 'Outro'),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byType(GroupConversationScreen), findsOneWidget);
+    });
+  });
+
   group('reply quote tap-to-locate', () {
-    testWidgets('tapping the server-resolved quote scrolls in the DM when the target is loaded',
+    testWidgets(
+        'tapping the server-resolved quote scrolls in the DM when the target is loaded',
         (tester) async {
       final repos = FakeRepositories();
       final store = repos.store;
@@ -177,7 +220,8 @@ void main() {
       ));
       await tester.pumpAndSettle();
 
-      expect(find.text('mensagem original'), findsNWidgets(2)); // quote + bubble
+      expect(
+          find.text('mensagem original'), findsNWidgets(2)); // quote + bubble
       expect(find.text('respondendo…'), findsOneWidget);
     });
   });

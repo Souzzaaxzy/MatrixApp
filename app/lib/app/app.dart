@@ -38,6 +38,7 @@ class _MatrixAppState extends State<MatrixApp> {
       Services.instance.push.onChatMessageDeleted = _onChatMessageDeleted;
       Services.instance.push.onChatGroupUpdated = _onChatGroupUpdated;
       Services.instance.push.onChatGroupBanned = _onChatGroupBanned;
+      Services.instance.push.onChatGroupDeleted = _onChatGroupDeleted;
       Services.instance.push.onCommentDeleted = _onCommentDeleted;
     }
   }
@@ -85,6 +86,21 @@ class _MatrixAppState extends State<MatrixApp> {
     final groupId = data['groupId'] as String? ?? '';
     if (groupId.isEmpty) return;
     state.handleIncomingGroupBanned(GroupBannedEvent(
+      groupId: groupId,
+      groupName: data['groupName'] as String? ?? '',
+    ));
+  }
+
+  /// The session user LOST ACCESS to a group (realtime) — the owner
+  /// permanently deleted it or the user left it. AppState drops the group
+  /// from the cache; open group screens close via the
+  /// [AppState.onGroupDeleted] stream.
+  void _onChatGroupDeleted(Map<String, dynamic> data) {
+    final state = _state;
+    if (state == null) return;
+    final groupId = data['groupId'] as String? ?? '';
+    if (groupId.isEmpty) return;
+    state.handleIncomingGroupDeleted(GroupDeletedEvent(
       groupId: groupId,
       groupName: data['groupName'] as String? ?? '',
     ));

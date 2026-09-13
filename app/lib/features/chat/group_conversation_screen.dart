@@ -18,6 +18,7 @@ import '../../data/dtos/dtos.dart';
 import '../../models/conversation.dart';
 import '../../app/routes.dart';
 import 'chat_navigation.dart';
+import 'reply_swipe.dart';
 import 'voice_player_bubble.dart';
 import 'voice_recorder.dart';
 
@@ -67,6 +68,7 @@ class _GroupConversationScreenState extends State<GroupConversationScreen>
   StreamSubscription<ChatReadEvent>? _readSub;
   StreamSubscription<ChatMessageDeletedEvent>? _deletedSub;
   StreamSubscription<GroupBannedEvent>? _bannedSub;
+  StreamSubscription<GroupDeletedEvent>? _groupDeletedSub;
 
   bool _followBottom = true;
   final Set<String> _typingUsers = <String>{};
@@ -109,6 +111,8 @@ class _GroupConversationScreenState extends State<GroupConversationScreen>
       _groupSub = state?.onGroupUpdated.listen(_onGroupUpdated);
       _bannedSub?.cancel();
       _bannedSub = state?.onGroupBanned.listen(_onGroupBanned);
+      _groupDeletedSub?.cancel();
+      _groupDeletedSub = state?.onGroupDeleted.listen(_onGroupDeleted);
     }
     if (!_loadRequested) {
       _loadRequested = true;
@@ -139,6 +143,7 @@ class _GroupConversationScreenState extends State<GroupConversationScreen>
     _deletedSub?.cancel();
     _groupSub?.cancel();
     _bannedSub?.cancel();
+    _groupDeletedSub?.cancel();
     if (_recListener != null) {
       _recorder.removeListener(_recListener!);
       _recListener = null;
@@ -283,6 +288,24 @@ class _GroupConversationScreenState extends State<GroupConversationScreen>
           event.groupName.isEmpty
               ? 'Você foi banido deste grupo.'
               : 'Você foi banido de "${event.groupName}".',
+        ),
+      ),
+    );
+    Navigator.of(context).maybePop();
+  }
+
+  /// The session user LOST ACCESS to this group (realtime) — the owner
+  /// permanently deleted it or the user left. Drop the screen so nothing
+  /// stays stale (the server revoked membership already).
+  void _onGroupDeleted(GroupDeletedEvent event) {
+    if (!mounted) return;
+    if (event.groupId != _groupId) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          event.groupName.isEmpty
+              ? 'Você não faz mais parte deste grupo.'
+              : '"${event.groupName}" já não está disponível.',
         ),
       ),
     );
@@ -992,6 +1015,8 @@ class _GroupConversationScreenState extends State<GroupConversationScreen>
         message: m,
         mine: m.senderId == _state?.currentUser?.id,
         onLongPress: () => _showMessageMenu(i),
+        onStartReply: () => _startReply(i),
+        replySelected: _replyTarget?.id == m.id,
         replyingTo: (_replyTarget?.id == m.id) ? _replyTarget : null,
         onOpenReplyTarget: _openReplyTarget,
       ));
@@ -1138,6 +1163,8 @@ class _GroupMessageBubble extends StatelessWidget {
     this.onLongPress,
     this.replyingTo,
     this.onOpenReplyTarget,
+    this.onStartReply,
+    this.replySelected = false,
   });
 
   final ChatMessage message;
@@ -1147,6 +1174,14 @@ class _GroupMessageBubble extends StatelessWidget {
 
   /// Tapping a reply quote scrolls to the ORIGINAL message (when loaded).
   final void Function(String messageId)? onOpenReplyTarget;
+
+  /// Called when a horizontal swipe (left→right on received / right→left on
+  /// mine) crosses the reply threshold — activates the reply composer.
+  final VoidCallback? onStartReply;
+
+  /// True while this message is the currently-selected reply target (the
+  /// bubble stays pinned at the swipe offset until canceled).
+  final bool replySelected;
 
   /// Opens the REAL sender's profile (id/nickname come from the embedded
   /// sender identity — never the session user, never client-inferred state).
@@ -1321,9 +1356,12 @@ class _GroupMessageBubble extends StatelessWidget {
             ),
           ],
           Flexible(
-            child: GestureDetector(
-              onLongPress: onLongPress,
-              child: bubble,
+            child: ReplySwipe(
+              mine: mine,
+              bubble: bubble,
+              onStartReply: onStartReply ?? () {},
+              onLongPress: onLongPress ?? () {},
+              replySelected: replySelected,
             ),
           ),
         ],

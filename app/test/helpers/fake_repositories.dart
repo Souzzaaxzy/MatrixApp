@@ -930,14 +930,14 @@ class _FakeChatRepository implements ChatRepository {
       audioUrl: 'memory://voice-${DateTime.now().microsecondsSinceEpoch}.m4a',
       durationMs: durationMs,
       replyTo: replyToMessageId == null
-        ? null
-        : ReplyInfo(
-            id: replyToMessageId,
-            senderId: _store.currentUserId ?? "",
-            senderNickname: _store.currentUser.nickname,
-            content: "original",
-            exists: true,
-          ),
+          ? null
+          : ReplyInfo(
+              id: replyToMessageId,
+              senderId: _store.currentUserId ?? "",
+              senderNickname: _store.currentUser.nickname,
+              content: "original",
+              exists: true,
+            ),
     );
     _store.chatMessagesByPair
         .putIfAbsent(conversationId, () => [])
@@ -1049,7 +1049,8 @@ class _FakeChatRepository implements ChatRepository {
       if (sender == null || bannedIds.contains(sender.id) == sender.banned) {
         return m;
       }
-      return m.copyWith(sender: sender.copyWith(banned: bannedIds.contains(sender.id)));
+      return m.copyWith(
+          sender: sender.copyWith(banned: bannedIds.contains(sender.id)));
     }).toList();
     if (before != null) {
       final index = visible.indexWhere((m) => m.id == before);
@@ -1081,14 +1082,14 @@ class _FakeChatRepository implements ChatRepository {
       createdAt: DateTime.now(),
       mine: true,
       replyTo: replyToMessageId == null
-        ? null
-        : ReplyInfo(
-            id: replyToMessageId,
-            senderId: _store.currentUserId ?? "",
-            senderNickname: _store.currentUser.nickname,
-            content: "original",
-            exists: true,
-          ),
+          ? null
+          : ReplyInfo(
+              id: replyToMessageId,
+              senderId: _store.currentUserId ?? "",
+              senderNickname: _store.currentUser.nickname,
+              content: "original",
+              exists: true,
+            ),
     );
     _store.groupMessagesById.putIfAbsent(groupId, () => []).add(message);
     return message;
@@ -1114,14 +1115,14 @@ class _FakeChatRepository implements ChatRepository {
       audioUrl: 'memory://voice-${DateTime.now().microsecondsSinceEpoch}.m4a',
       durationMs: durationMs,
       replyTo: replyToMessageId == null
-        ? null
-        : ReplyInfo(
-            id: replyToMessageId,
-            senderId: _store.currentUserId ?? "",
-            senderNickname: _store.currentUser.nickname,
-            content: "original",
-            exists: true,
-          ),
+          ? null
+          : ReplyInfo(
+              id: replyToMessageId,
+              senderId: _store.currentUserId ?? "",
+              senderNickname: _store.currentUser.nickname,
+              content: "original",
+              exists: true,
+            ),
     );
     _store.groupMessagesById.putIfAbsent(groupId, () => []).add(message);
     return message;
@@ -1147,6 +1148,33 @@ class _FakeChatRepository implements ChatRepository {
   @override
   Future<void> hideGroup(String groupId) async {
     _store.groupHides.add('$groupId|${_store.currentUserId}');
+  }
+
+  @override
+  Future<void> deleteGroup(String groupId) async {
+    if (_store.groups.containsKey(groupId)) {
+      _store.groups.remove(groupId);
+      _store.groupMessagesById.remove(groupId);
+      _store.groupMemberIds.remove(groupId);
+      _store.groupBannedIds.remove(groupId);
+    }
+  }
+
+  @override
+  Future<void> leaveGroup(String groupId) async {
+    final me = _store.currentUserId;
+    if (me == null) return;
+    // Mirrors the server: an active member removes their OWN membership row.
+    // The OWNER cannot leave (rejected — a group must never be orphaned).
+    final ownerId = _store.groups[groupId]?.group.createdById;
+    if (me == ownerId) {
+      throw const ApiException(
+        statusCode: 403,
+        message:
+            'O dono do grupo não pode sair. Para encerrar o grupo, use "Excluir grupo".',
+      );
+    }
+    _store.groupMemberIds[groupId]?.remove(me);
   }
 
   @override
@@ -1286,8 +1314,8 @@ class _FakeChatRepository implements ChatRepository {
     _store.groupBannedIds[groupId]?.remove(targetUserId);
     final memberIds = _store.groupMemberIds[groupId] ??= {};
     if (targetUserId != g.group.createdById) memberIds.add(targetUserId);
-    final updated = g.copyWith(
-        group: g.group.copyWith(memberCount: memberIds.length));
+    final updated =
+        g.copyWith(group: g.group.copyWith(memberCount: memberIds.length));
     _store.groups[groupId] = updated;
     return updated;
   }

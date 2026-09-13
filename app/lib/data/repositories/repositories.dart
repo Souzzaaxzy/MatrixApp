@@ -114,9 +114,11 @@ class PostRepository {
   }) async {
     final query = <String, dynamic>{'limit': limit};
     if (cursor != null) query['cursor'] = cursor;
-    final json = await _api.get<Map<String, dynamic>>('/api/posts', queryParameters: query);
+    final json = await _api.get<Map<String, dynamic>>('/api/posts',
+        queryParameters: query);
     final list = (json['posts'] as List).cast<Map<String, dynamic>>();
-    final posts = list.map(FeedPostDto.fromJson).map((d) => d.toModel()).toList();
+    final posts =
+        list.map(FeedPostDto.fromJson).map((d) => d.toModel()).toList();
     final next = json['nextCursor'] as String?;
     return (posts: posts, nextCursor: next);
   }
@@ -148,7 +150,8 @@ class LikeRepository {
 
   /// Toggles the like on a post. Returns the new state and count.
   Future<({bool liked, int likeCount})> toggle(String postId) async {
-    final json = await _api.post<Map<String, dynamic>>('/api/posts/$postId/like');
+    final json =
+        await _api.post<Map<String, dynamic>>('/api/posts/$postId/like');
     return (
       liked: json['liked'] as bool,
       likeCount: (json['likeCount'] as num).toInt(),
@@ -163,7 +166,8 @@ class CommentRepository {
   final ApiClient _api;
 
   Future<List<Comment>> list(String postId) async {
-    final json = await _api.get<Map<String, dynamic>>('/api/posts/$postId/comments');
+    final json =
+        await _api.get<Map<String, dynamic>>('/api/posts/$postId/comments');
     final list = (json['comments'] as List).cast<Map<String, dynamic>>();
     return list.map(CommentDto.fromJson).map((d) => d.toModel()).toList();
   }
@@ -208,7 +212,8 @@ class CommentRepository {
       {required bool liked}) async {
     final json = liked
         ? await _api.post<Map<String, dynamic>>('/api/comments/$commentId/like')
-        : await _api.delete<Map<String, dynamic>>('/api/comments/$commentId/like');
+        : await _api
+            .delete<Map<String, dynamic>>('/api/comments/$commentId/like');
     return (
       liked: json['liked'] as bool,
       likeCount: (json['likeCount'] as num).toInt(),
@@ -229,11 +234,13 @@ class UserRepository {
   ) async {
     // Nicknames are full Unicode (emojis, spaces, symbols) — the path
     // segment must be percent-encoded or the URL breaks.
-    final json = await _api
-        .get<Map<String, dynamic>>('/api/users/${Uri.encodeComponent(nickname)}');
-    final user = PublicUserDto.fromJson(json['user'] as Map<String, dynamic>).toModel();
+    final json = await _api.get<Map<String, dynamic>>(
+        '/api/users/${Uri.encodeComponent(nickname)}');
+    final user =
+        PublicUserDto.fromJson(json['user'] as Map<String, dynamic>).toModel();
     final list = (json['posts'] as List).cast<Map<String, dynamic>>();
-    final posts = list.map(FeedPostDto.fromJson).map((d) => d.toModel()).toList();
+    final posts =
+        list.map(FeedPostDto.fromJson).map((d) => d.toModel()).toList();
     final raw = json['friendship'];
     final friendship = raw is String ? Friendship.fromApi(raw) : null;
     return (user: user, posts: posts, friendship: friendship);
@@ -273,7 +280,8 @@ class FriendRepository {
   final ApiClient _api;
 
   Future<FriendRequest> send(String userId) async {
-    final json = await _api.post<Map<String, dynamic>>('/api/friend-requests/$userId');
+    final json =
+        await _api.post<Map<String, dynamic>>('/api/friend-requests/$userId');
     return FriendRequestDto.fromJson(json).toModel();
   }
 
@@ -307,7 +315,8 @@ class FriendRepository {
 
   /// Current friendship state with another user, per the server.
   Future<Friendship> state(String userId) async {
-    final json = await _api.get<Map<String, dynamic>>('/api/users/$userId/friendship');
+    final json =
+        await _api.get<Map<String, dynamic>>('/api/users/$userId/friendship');
     return Friendship.fromApi(json['state'] as String?);
   }
 
@@ -325,7 +334,8 @@ class FriendRepository {
     );
     final list = (json['friends'] as List).cast<Map<String, dynamic>>();
     return (
-      friends: list.map(PublicUserDto.fromJson).map((d) => d.toModel()).toList(),
+      friends:
+          list.map(PublicUserDto.fromJson).map((d) => d.toModel()).toList(),
       total: (json['total'] as num?)?.toInt() ?? 0,
       page: (json['page'] as num?)?.toInt() ?? page,
       pageSize: (json['pageSize'] as num?)?.toInt() ?? pageSize,
@@ -340,7 +350,8 @@ class NotificationRepository {
   final ApiClient _api;
 
   /// Fetches the notification list plus the unread counter.
-  Future<({List<MatrixNotification> notifications, int unreadCount})> list() async {
+  Future<({List<MatrixNotification> notifications, int unreadCount})>
+      list() async {
     final json = await _api.get<Map<String, dynamic>>('/api/notifications');
     final list = (json['notifications'] as List).cast<Map<String, dynamic>>();
     final notifications =
@@ -461,7 +472,8 @@ class ChatRepository {
         if (description != null) 'description': description,
       },
     );
-    return GroupHeaderDto.fromJson(json['group'] as Map<String, dynamic>).toModel();
+    return GroupHeaderDto.fromJson(json['group'] as Map<String, dynamic>)
+        .toModel();
   }
 
   /// Owner-only group avatar replacement. The image is uploaded first via the
@@ -475,7 +487,8 @@ class ChatRepository {
       '/api/groups/$groupId/avatar',
       data: {'avatarUrl': avatarUrl},
     );
-    return GroupHeaderDto.fromJson((json['group'] as Map<String, dynamic>)).toModel();
+    return GroupHeaderDto.fromJson((json['group'] as Map<String, dynamic>))
+        .toModel();
   }
 
   /// Owner-only member addition. The server re-checks friendship and
@@ -574,8 +587,7 @@ class ChatRepository {
     final replyQuery = (replyToMessageId != null && replyToMessageId.isNotEmpty)
         ? '&replyToMessageId=$replyToMessageId'
         : '';
-    final uri =
-        '/api/groups/$groupId/voice?durationMs=$durationMs$replyQuery';
+    final uri = '/api/groups/$groupId/voice?durationMs=$durationMs$replyQuery';
     final json = await _api.upload<Map<String, dynamic>>(
       uri,
       file: multipart,
@@ -593,25 +605,21 @@ class ChatRepository {
   /// in a group. Ephemeral realtime frame — nothing persists.
 
   void setGroupTyping(String groupId, bool typing) {
-    _api
-        .post<void>('/api/groups/$groupId/typing',
-            data: {'typing': typing})
-        .catchError((_) {});
+    _api.post<void>('/api/groups/$groupId/typing',
+        data: {'typing': typing}).catchError((_) {});
   }
 
   /// Signals the other members that the session user is (or stopped) recording
   /// a voice message in a group. Ephemeral realtime frame; best-effort.
 
   void setGroupRecording(String groupId, bool recording) {
-    _api
-        .post<void>('/api/groups/$groupId/recording',
-            data: {'recording': recording})
-        .catchError((_) {});
+    _api.post<void>('/api/groups/$groupId/recording',
+        data: {'recording': recording}).catchError((_) {});
   }
 
   /// "Excluir mensagem para mim" (group) — hide for the current user only.
 
-  Future<void> deleteGroupMessageForMe(String groupId,String messageId) async {
+  Future<void> deleteGroupMessageForMe(String groupId, String messageId) async {
     await _api.delete('/api/groups/$groupId/messages/$messageId');
   }
 
@@ -631,12 +639,30 @@ class ChatRepository {
     await _api.delete('/api/groups/$groupId');
   }
 
+  /// PERMANENTLY deletes a group — owner-only (the server re-validates the
+  /// persisted owner; a forged flag is never trusted). Membership rows,
+  /// messages, replies/audio and per-user hides are removed in one server
+  /// transaction; every participant's live sockets receive a
+  /// `chat_group_deleted` frame so the group vanishes everywhere.
+  Future<void> deleteGroup(String groupId) async {
+    await _api.delete('/api/groups/$groupId/permanent');
+  }
+
+  /// "Sair do grupo" — removes the session user from the group only. The
+  /// group keeps existing for the other members. Server-side: only ACTIVE
+  /// members may call it; the OWNER is rejected (no transfer mechanism — a
+  /// leaving owner would orphan the group).
+  Future<void> leaveGroup(String groupId) async {
+    await _api.post('/api/groups/$groupId/leave');
+  }
+
   /// Returns the ONE conversation with [otherUserId], creating it when none
   /// exists yet (friends only — the server enforces this).
   Future<Conversation> getOrCreate(String otherUserId) async {
     final json = await _api
         .post<Map<String, dynamic>>('/api/conversations/$otherUserId');
-    return ConversationDto.fromJson(json['conversation'] as Map<String, dynamic>)
+    return ConversationDto.fromJson(
+            json['conversation'] as Map<String, dynamic>)
         .toModel();
   }
 
@@ -716,7 +742,8 @@ class ChatRepository {
   /// "Excluir mensagem para mim" — the message disappears for the CURRENT
   /// user only (the peer keeps seeing it). Server-persisted (MessageHide
   /// row), so it survives app restarts and re-logins. Idempotent.
-  Future<void> deleteMessageForMe(String conversationId, String messageId) async {
+  Future<void> deleteMessageForMe(
+      String conversationId, String messageId) async {
     await _api.delete('/api/conversations/$conversationId/messages/$messageId');
   }
 
@@ -725,7 +752,8 @@ class ChatRepository {
   /// caller is a member of the conversation). The peer gets a realtime
   /// `chat_message_deleted` frame so an open conversation updates live.
   /// Idempotent; errors (403/404) surface as [ApiException].
-  Future<void> deleteMessageForEveryone(String conversationId, String messageId) async {
+  Future<void> deleteMessageForEveryone(
+      String conversationId, String messageId) async {
     await _api.delete(
       '/api/conversations/$conversationId/messages/$messageId/everyone',
     );
@@ -744,10 +772,8 @@ class ChatRepository {
   void setTyping(String conversationId, bool typing) {
     // Fire-and-forget: typing state is transient and non-critical.
 
-    _api
-        .post<void>('/api/conversations/$conversationId/typing',
-            data: {'typing': typing})
-        .catchError((_) {});
+    _api.post<void>('/api/conversations/$conversationId/typing',
+        data: {'typing': typing}).catchError((_) {});
   }
 
   /// Signals the peer that the session user is (or stopped) recording a voice
@@ -756,13 +782,9 @@ class ChatRepository {
   /// auto-clears it). Mirrors [setTyping]: same auth + membership rules,
   /// best-effort (a failed signal must never break the recording flow).
   void setRecording(String conversationId, bool recording) {
-
-    _api
-        .post<void>('/api/conversations/$conversationId/recording',
-            data: {'recording': recording})
-        .catchError((_) {});
+    _api.post<void>('/api/conversations/$conversationId/recording',
+        data: {'recording': recording}).catchError((_) {});
   }
-
 }
 
 /// Profile customization (cosmetics): catalog, inventory and equipped
