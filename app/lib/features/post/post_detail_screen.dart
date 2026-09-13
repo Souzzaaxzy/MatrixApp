@@ -1,4 +1,3 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 import '../../app/theme/app_colors.dart';
@@ -16,6 +15,7 @@ import '../../core/widgets/user_avatar.dart';
 import '../../data/api_config.dart';
 import '../../models/cosmetic_item.dart';
 import '../../models/post.dart';
+import '../feed/responsive_post_image.dart';
 import '../feed/comments_sheet.dart';
 
 /// Post detail screen — opened by tapping a post in the feed or in the
@@ -145,7 +145,8 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     if (!ok) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Não foi possível atualizar a curtida. Tente novamente.'),
+          content:
+              Text('Não foi possível atualizar a curtida. Tente novamente.'),
         ),
       );
     }
@@ -161,12 +162,12 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
           icon: Icon(Icons.arrow_back_rounded, color: AppColors.techWhite),
           onPressed: () => Navigator.of(context).pop(),
         ),
-        title: Text('PUBLICAÇÃO', style: AppTextStyles.title.copyWith(fontSize: 18)),
+        title: Text('PUBLICAÇÃO',
+            style: AppTextStyles.title.copyWith(fontSize: 18)),
         actions: [
           if (_isAuthor)
             PopupMenuButton<String>(
-              icon: Icon(Icons.more_vert_rounded,
-                  color: AppColors.techWhite),
+              icon: Icon(Icons.more_vert_rounded, color: AppColors.techWhite),
               color: AppColors.bluishBlack,
               enabled: !_deleting,
               onSelected: (value) {
@@ -224,14 +225,11 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
         children: [
           const SizedBox(height: AppDimensions.spaceLg),
           if (post.imageUrl != null)
-            ClipRRect(
-              borderRadius: BorderRadius.circular(AppDimensions.radiusLg),
-              child: CachedNetworkImage(
-                imageUrl: ApiConfig.resolveUrl(post.imageUrl!),
-                fit: BoxFit.cover,
-                placeholder: (_, __) => _imagePlaceholder(),
-                errorWidget: (_, __, ___) => _imagePlaceholder(),
-              ),
+            ResponsivePostImage(
+              imageUrl: ApiConfig.resolveUrl(post.imageUrl!),
+              borderRadius: AppDimensions.radiusLg,
+              // The detail screen can show taller photos comfortably.
+              maxHeightFraction: 0.85,
             ),
           const SizedBox(height: AppDimensions.spaceLg),
           GestureDetector(
@@ -315,14 +313,6 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
       ),
     );
   }
-
-  Widget _imagePlaceholder() => Container(
-        height: 220,
-        color: AppColors.nightBlue,
-        alignment: Alignment.center,
-        child: Icon(Icons.broken_image_outlined,
-            color: AppColors.deepBlue, size: 32),
-      );
 }
 
 class _DetailAction extends StatelessWidget {

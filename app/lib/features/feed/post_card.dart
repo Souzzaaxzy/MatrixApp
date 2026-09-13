@@ -1,4 +1,3 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 import '../../app/routes.dart';
@@ -15,6 +14,7 @@ import '../../core/widgets/matrix_card.dart';
 import '../../core/widgets/nickname_renderer.dart';
 import '../../core/widgets/user_avatar.dart';
 import '../../models/cosmetic_item.dart';
+import 'responsive_post_image.dart';
 
 /// Reusable post card for the feed.
 ///
@@ -62,7 +62,8 @@ class _PostCardState extends State<PostCard>
     if (!ok && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Não foi possível atualizar a curtida. Tente novamente.'),
+          content:
+              Text('Não foi possível atualizar a curtida. Tente novamente.'),
         ),
       );
     }
@@ -147,18 +148,8 @@ class _PostCardState extends State<PostCard>
             ],
             if (post.imageUrl != null) ...[
               const SizedBox(height: AppDimensions.spaceMd),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
-                child: AspectRatio(
-                  aspectRatio: 16 / 10,
-                  child: CachedNetworkImage(
-                    imageUrl: ApiConfig.resolveUrl(post.imageUrl!),
-                    fit: BoxFit.cover,
-                    placeholder: (context, _) => _imagePlaceholder(),
-                    errorWidget: (context, _, __) => _imagePlaceholder(),
-                  ),
-                ),
-              ),
+              ResponsivePostImage(
+                  imageUrl: ApiConfig.resolveUrl(post.imageUrl!)),
             ],
             const SizedBox(height: AppDimensions.spaceLg),
             Row(
@@ -170,7 +161,9 @@ class _PostCardState extends State<PostCard>
                         ? Icons.favorite_rounded
                         : Icons.favorite_border_rounded,
                     label: post.likes.toString(),
-                    color: post.liked ? AppColors.error : AppColors.holographicBlue,
+                    color: post.liked
+                        ? AppColors.error
+                        : AppColors.holographicBlue,
                     onTap: _toggleLike,
                     semanticLabel: post.liked
                         ? 'Descurtir publicação'
@@ -192,13 +185,6 @@ class _PostCardState extends State<PostCard>
       ),
     );
   }
-
-  Widget _imagePlaceholder() => Container(
-        color: AppColors.nightBlue,
-        alignment: Alignment.center,
-        child: Icon(Icons.broken_image_outlined,
-            color: AppColors.deepBlue, size: 32),
-      );
 }
 
 class _ActionButton extends StatelessWidget {

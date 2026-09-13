@@ -47,6 +47,7 @@ class _GroupConversationScreenState extends State<GroupConversationScreen>
   StreamSubscription<GroupUpdatedEvent>? _groupSub;
 
   final TextEditingController _input = TextEditingController();
+  final FocusNode _inputFocus = FocusNode();
   final ScrollController _scroll = ScrollController();
   final List<ChatMessage> _messages = [];
   bool _loading = true;
@@ -81,12 +82,16 @@ class _GroupConversationScreenState extends State<GroupConversationScreen>
   bool _typingLastSent = false;
   bool _loadRequested = false;
 
-  // ── Mentions (@user + @todos) ──
+  // ── Mentions (@user + @todos) — WhatsApp-style inline suggestions ──
   List<GroupMemberInfoModel> _mentionMembers = const [];
   bool _mentionMembersLoaded = false;
 
   /// The member picker term the user typed after "@" (empty = show all).
   String _mentionQuery = '';
+
+  /// Whether the inline suggestion bar is currently visible above the
+  /// composer. Driven by the composer text + keyboard focus; never a modal.
+  bool _showMentionSuggestions = false;
 
   /// Real user ids selected for the CURRENT draft (sent with the message).
   final Set<String> _draftMentionIds = <String>{};
@@ -96,9 +101,6 @@ class _GroupConversationScreenState extends State<GroupConversationScreen>
       _groupOwnerId!.isNotEmpty &&
       _state?.currentUser?.id == _groupOwnerId;
 
-  /// Guards against reopening the mention sheet on every "@" keystroke.
-  bool _mentionSheetOpen = false;
-
   AppState? _resolvedState;
   AppState? get _state => _resolvedState;
   String get _groupId => widget.args.groupId;
@@ -107,6 +109,13 @@ class _GroupConversationScreenState extends State<GroupConversationScreen>
   void initState() {
     super.initState();
     _scroll.addListener(_scrollListener);
+    // Hide the mention suggestions when the composer loses focus (tapping
+    // elsewhere, keyboard closed).
+    _inputFocus.addListener(() {
+      if (!_inputFocus.hasFocus && _showMentionSuggestions) {
+        _closeMentionSuggestions();
+      }
+    });
   }
 
   @override
@@ -175,6 +184,7 @@ class _GroupConversationScreenState extends State<GroupConversationScreen>
     WidgetsBinding.instance.removeObserver(this);
     _recorder.dispose();
     _input.dispose();
+    _inputFocus.dispose();
     _scroll.dispose();
     super.dispose();
   }
@@ -890,91 +900,77 @@ class _GroupConversationScreenState extends State<GroupConversationScreen>
         _state?.sendGroupTyping(_groupId, typing);
       });
     }
-    // Mentions: detect a tail "@" (or "@query") and show the member picker.
+    _updateMentionState(value);
+  }
+
+  /// Detects a TRAILING "@query" token in [value] (the cursor is at the end
+  /// while composing) and drives the inline suggestion bar state. The bar is
+  /// visible only while there is a valid mention intention at the caret:
+  ///   "Oi @le   " → query "le", bar visible
+  ///   "Oi @leonardo " → no trailing token, bar hidden
+  ///   "Oi " → no token, bar hidden
+  bool _currentMentionToken(String value, {bool atCaret = true}) {
+    if (!atCaret) return false;
     final at = value.lastIndexOf('@');
-    if (at != -1 && at == value.length - 1) {
-      _mentionQuery = '';
-      _openMentionPicker();
-    } else if (at != -1 &&
-        at < value.length - 1 &&
-        _isMentionPatron(value, at)) {
-      _mentionQuery = value.substring(at + 1);
-      if (_mentionMembers.isNotEmpty) _openMentionPicker();
-    } else if (_mentionQuery.isNotEmpty) {
-      _mentionQuery = '';
-    }
+    if (at == -1) return false;
+    // The @ must be at a word boundary (start or after whitespace).
+    if (at > 0 && !RegExp(r'\s').hasMatch(value[at - 1])) return false;
+    // After the '@' there must be only nickname chars (no spaces yet).
+    final tail = value.substring(at + 1);
+    if (tail.contains(' ')) return false;
+    return true;
   }
 
-  bool _isMentionPatron(String value, int at) {
-    // A mention token is "@Nickname" where the char before '@' is whitespace
-    // or start-of-text (WhatsApp-style trigger).
-    if (at == 0) return true;
-    final prev = value[at - 1];
-    return prev == ' ' || prev == '\n';
+  String _mentionTokenQuery(String value) {
+    final at = value.lastIndexOf('@');
+    return at == -1 ? '' : value.substring(at + 1);
   }
 
-  /// Loads the group's members once and opens the soft mention sheet above
-  /// the keyboard (never covering the composer).
-  Future<void> _openMentionPicker() async {
-    final state = _state;
-    if (state == null) return;
-    if (!_mentionMembersLoaded) {
-      try {
-        final info = await state.fetchGroupInfo(_groupId);
-        if (!mounted) return;
+  void _updateMentionState(String value) {
+    final hasToken = _currentMentionToken(value);
+    final query = hasToken ? _mentionTokenQuery(value) : '';
+    if (!hasToken) {
+      if (_showMentionSuggestions || _mentionQuery.isNotEmpty) {
         setState(() {
-          _mentionMembers = info.members;
-          _mentionMembersLoaded = true;
+          _showMentionSuggestions = false;
+          _mentionQuery = '';
         });
-      } catch (_) {
-        return; // best-effort
       }
+      return;
     }
-    // Only show when the composer still has a trailing "@".
-    if (!mounted) return;
-    final text = _input.text;
-    if (!text.endsWith('@') && _mentionQuery.isEmpty) {
-      // no trailing mention context anymore — do not show
+    setState(() {
+      _mentionQuery = query;
+      _showMentionSuggestions = true;
+    });
+    // Lazy-load the group members the first time a mention token appears.
+    if (!_mentionMembersLoaded) {
+      _loadMentionMembers();
     }
-    await _showMentionSheet();
   }
 
-  /// Bottom sheet listing the mentionable members (and @todos for the
-  /// owner). Selecting a member inserts "@Nickname " into the composer and
-  /// records its real user id for the send payload.
-  Future<void> _showMentionSheet() async {
+  Future<void> _loadMentionMembers() async {
     final state = _state;
     if (state == null) return;
-    if (_mentionSheetOpen) return; // already showing
-    _mentionSheetOpen = true;
     try {
-      final me = state.currentUser;
-      final candidates = _mentionMembers
-          .where((m) =>
-              m.id != me?.id &&
-              (_mentionQuery.isEmpty ||
-                  m.nickname
-                      .toLowerCase()
-                      .contains(_mentionQuery.toLowerCase())))
-          .toList();
-      final action = await showModalBottomSheet<_MentionPick>(
-        context: context,
-        useSafeArea: true,
-        backgroundColor: Colors.transparent,
-        barrierColor: Colors.black.withValues(alpha: 0.5),
-        isScrollControlled: true,
-        builder: (_) => _MentionSheet(
-          members: candidates,
-          query: _mentionQuery,
-          showAll: _isGroupOwner,
-          selfNickname: me?.nickname ?? '',
-        ),
-      );
-      if (action == null || !mounted) return;
-      _insertMention(action);
-    } finally {
-      _mentionSheetOpen = false;
+      final info = await state.fetchGroupInfo(_groupId);
+      if (!mounted) return;
+      setState(() {
+        _mentionMembers = info.members;
+        _mentionMembersLoaded = true;
+      });
+    } catch (_) {
+      // best-effort — a second "@" retries
     }
+  }
+
+  /// Called when the composer loses focus or the keyboard closes — hide the
+  /// inline suggestion bar so nothing stays stuck.
+  void _closeMentionSuggestions() {
+    if (!_showMentionSuggestions && _mentionQuery.isEmpty) return;
+    setState(() {
+      _showMentionSuggestions = false;
+      _mentionQuery = '';
+    });
   }
 
   void _insertMention(_MentionPick pick) {
@@ -982,7 +978,8 @@ class _GroupConversationScreenState extends State<GroupConversationScreen>
     final text = controller.text;
     final at = text.lastIndexOf('@');
     // Replace the exact "@token" (everything from @ to the next whitespace
-    // or end of text); keep any text typed AFTER the token.
+    // or end of text); keep any text typed AFTER the token (WhatsApp inserts
+    // at the caret, preserving the rest).
     var tokenEnd = text.length;
     if (at != -1) {
       final afterAt = text.substring(at + 1);
@@ -999,6 +996,7 @@ class _GroupConversationScreenState extends State<GroupConversationScreen>
       ..text = '$before$inserted$after'
       ..selection = TextSelection.collapsed(offset: controller.text.length);
     setState(() {
+      _showMentionSuggestions = false;
       _mentionQuery = '';
       if (pick.all) {
         _draftMentionIds.clear();
@@ -1006,7 +1004,6 @@ class _GroupConversationScreenState extends State<GroupConversationScreen>
         _draftMentionIds.add(pick.userId);
       }
     });
-    _onComposerChanged(controller.text);
   }
 
   void _onMicTap() async {
@@ -1234,6 +1231,27 @@ class _GroupConversationScreenState extends State<GroupConversationScreen>
                 )
               : const SizedBox.shrink(),
         ),
+        // WhatsApp-style mention suggestions: an INLINE bar anchored directly
+        // above the composer (driven by the typing state, never a modal).
+        AnimatedSwitcher(
+          duration: const Duration(milliseconds: 160),
+          transitionBuilder: (child, anim) => SizeTransition(
+            sizeFactor: anim,
+            axisAlignment: -1,
+            child: FadeTransition(opacity: anim, child: child),
+          ),
+          child: _showMentionSuggestions
+              ? _MentionSuggestionsBar(
+                  key: const ValueKey('mention-bar'),
+                  query: _mentionQuery,
+                  members: _mentionMembers,
+                  showAll: _isGroupOwner,
+                  selfId: _state?.currentUser?.id,
+                  onPick: _insertMention,
+                  onClose: _closeMentionSuggestions,
+                )
+              : const SizedBox.shrink(),
+        ),
         _composer(),
       ],
     );
@@ -1313,6 +1331,7 @@ class _GroupConversationScreenState extends State<GroupConversationScreen>
             child: MatrixTextField(
               hint: 'Mensagem no grupo',
               controller: _input,
+              focusNode: _inputFocus,
               onChanged: _onComposerChanged,
               maxLines: 5,
               minLines: 1,
@@ -1923,88 +1942,115 @@ class _MentionPick {
   final bool all;
 }
 
-/// Member picker opened when the user types "@" in the group composer.
+/// WhatsApp-style INLINE mention suggestion bar. Rendered directly above the
+/// composer inside the chat Column (NOT a modal): it sits under the keyboard,
+/// filters as the user types, and disappears when the mention intention ends.
 /// Lists the group's members (nickname WITHOUT the @ prefix, per MATRIX) and
-/// `@todos` for the owner. Respects keyboard insets; never covers the field.
-class _MentionSheet extends StatelessWidget {
-  const _MentionSheet({
-    required this.members,
+/// `@todos` for the owner.
+class _MentionSuggestionsBar extends StatelessWidget {
+  const _MentionSuggestionsBar({
+    super.key,
     required this.query,
+    required this.members,
     required this.showAll,
-    required this.selfNickname,
+    required this.selfId,
+    required this.onPick,
+    required this.onClose,
   });
 
-  final List<GroupMemberInfoModel> members;
   final String query;
+  final List<GroupMemberInfoModel> members;
   final bool showAll;
-  final String selfNickname;
+  final String? selfId;
+  final void Function(_MentionPick pick) onPick;
+  final VoidCallback onClose;
 
   @override
   Widget build(BuildContext context) {
-    final keyboard = MediaQuery.of(context).viewInsets.bottom;
     final filtered = members
         .where((m) =>
-            query.isEmpty ||
-            m.nickname.toLowerCase().contains(query.toLowerCase()))
+            m.id != selfId &&
+            (query.isEmpty ||
+                m.nickname.toLowerCase().contains(query.toLowerCase())))
         .toList();
-    return SafeArea(
-      top: false,
-      child: Padding(
-        padding: EdgeInsets.only(bottom: keyboard),
-        child: Container(
-          constraints: BoxConstraints(maxHeight: 260),
-          margin: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: AppColors.bluishBlack,
-            borderRadius: BorderRadius.circular(AppDimensions.radiusLg),
-            border: Border.all(color: AppColors.deepBlue),
-          ),
-          child: Material(
-            color: Colors.transparent,
-            child: ListView(
-              shrinkWrap: true,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
-                  child: Text('MENCIONAR',
+    final hasResults = showAll || filtered.isNotEmpty;
+    return Container(
+      constraints: const BoxConstraints(maxHeight: 220),
+      margin: const EdgeInsets.fromLTRB(AppDimensions.spaceMd, 0,
+          AppDimensions.spaceMd, AppDimensions.spaceXs),
+      decoration: BoxDecoration(
+        color: AppColors.cardSurface,
+        borderRadius: BorderRadius.circular(AppDimensions.radiusLg),
+        border: Border.all(color: AppColors.deepBlue),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 8, 0),
+              child: Row(
+                children: [
+                  Text('MENCIONAR',
                       style: AppTextStyles.hud.copyWith(
                           fontSize: 10, color: AppColors.holographicBlue)),
-                ),
-                if (showAll)
-                  ListTile(
-                    leading: Icon(Icons.groups_rounded,
-                        color: AppColors.holographicBlue),
-                    title: Text('@todos',
-                        style: AppTextStyles.body
-                            .copyWith(color: AppColors.techWhite)),
-                    subtitle: Text('mencionar todos os participantes',
-                        style: AppTextStyles.caption.copyWith(
-                            fontSize: 10, color: AppColors.holographicBlue)),
-                    onTap: () => Navigator.of(context).pop(const _MentionPick(
-                        userId: '', nickname: '', all: true)),
+                  const Spacer(),
+                  IconButton(
+                    visualDensity: VisualDensity.compact,
+                    icon: Icon(Icons.close_rounded,
+                        size: 16, color: AppColors.holographicBlue),
+                    onPressed: onClose,
                   ),
-                for (final m in filtered)
-                  ListTile(
-                    leading: UserAvatar(
-                        name: m.nickname,
-                        seed: m.nickname,
-                        imageUrl: m.avatarUrl,
-                        size: 32),
-                    title: Text(displayNickname(m.nickname),
-                        style: AppTextStyles.body
-                            .copyWith(color: AppColors.techWhite)),
-                    onTap: () => Navigator.of(context)
-                        .pop(_MentionPick(userId: m.id, nickname: m.nickname)),
-                  ),
-                if (filtered.isEmpty && !showAll)
-                  Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Text('Nenhum membro encontrado',
-                        style: AppTextStyles.bodyMuted),
-                  ),
-              ],
+                ],
+              ),
             ),
-          ),
+            Flexible(
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (showAll)
+                      ListTile(
+                        dense: true,
+                        leading: Icon(Icons.groups_rounded,
+                            color: AppColors.holographicBlue),
+                        title: Text('@todos',
+                            style: AppTextStyles.body
+                                .copyWith(color: AppColors.techWhite)),
+                        subtitle: Text('mencionar todos os participantes',
+                            style: AppTextStyles.caption.copyWith(
+                                fontSize: 10,
+                                color: AppColors.holographicBlue)),
+                        onTap: () => onPick(const _MentionPick(
+                            userId: '', nickname: '', all: true)),
+                      ),
+                    for (final m in filtered)
+                      ListTile(
+                        dense: true,
+                        leading: UserAvatar(
+                            name: m.nickname,
+                            seed: m.nickname,
+                            imageUrl: m.avatarUrl,
+                            size: 32),
+                        title: Text(displayNickname(m.nickname),
+                            style: AppTextStyles.body
+                                .copyWith(color: AppColors.techWhite)),
+                        onTap: () => onPick(
+                            _MentionPick(userId: m.id, nickname: m.nickname)),
+                      ),
+                    if (!hasResults)
+                      Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Text('Nenhum membro encontrado',
+                            style: AppTextStyles.bodyMuted),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );

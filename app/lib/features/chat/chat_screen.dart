@@ -113,9 +113,26 @@ class _ChatScreenState extends State<ChatScreen> {
     final current = state.currentUser;
     if (current == null) return;
     try {
-      final page = await state.loadFriends(current.id, pageSize: 30);
+      // Load ALL accepted friendships: the server caps pageSize at 50 and
+      // returns `total`; keep paging until every friend is collected so no
+      // valid friendship is ever hidden behind the first batch.
+      const pageSize = 50;
+      var page = 1;
+      final collected = <MatrixUser>[];
+      var total = -1;
+      while (page == 1 || collected.length < total) {
+        final result =
+            await state.loadFriends(current.id, page: page, pageSize: pageSize);
+        if (!mounted) return;
+        total = result.total;
+        collected.addAll(result.friends);
+        // No more results → avoid an infinite loop.
+        if (result.friends.isEmpty) break;
+        page++;
+        if (page > 100) break; // hard safety cap
+      }
       if (!mounted) return;
-      setState(() => _friends = page.friends);
+      setState(() => _friends = collected);
     } catch (_) {
       // Friends list best-effort; conversations still render.
     }

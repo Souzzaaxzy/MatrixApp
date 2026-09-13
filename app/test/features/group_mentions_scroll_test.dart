@@ -5,6 +5,7 @@ import 'package:matrix_app/features/chat/chat_navigation.dart';
 import 'package:matrix_app/features/chat/chat_screen.dart';
 import 'package:matrix_app/features/chat/group_conversation_screen.dart';
 import 'package:matrix_app/models/conversation.dart';
+import 'package:matrix_app/models/matrix_user.dart';
 
 import '../helpers/fake_repositories.dart';
 import '../helpers/test_app.dart';
@@ -171,6 +172,39 @@ void main() {
       expect(find.text('@todos'), findsNothing);
     });
 
+    testWidgets(
+        'menção é INLINE acima do composer (sem modal/nova rota) e filtra',
+        (tester) async {
+      final state = await seededGroup();
+      await pumpMatrixApp(tester, groupScreen(), state: state);
+      await tester.pumpAndSettle();
+
+      // Typing "@" shows the inline bar — NOT a new modal route.
+      await tester.enterText(find.byType(TextField).last, '@');
+      await tester.pumpAndSettle();
+      expect(find.text('MENCIONAR'), findsOneWidget);
+      // No bottom-sheet route was pushed — the bar is part of the chat
+      // Column, so no BottomSheet widget exists.
+      expect(find.byType(BottomSheet), findsNothing);
+
+      // Filtering: "@jo" keeps only joao (nickname without the @ prefix).
+      await tester.enterText(find.byType(TextField).last, '@jo');
+      await tester.pumpAndSettle();
+      expect(find.text('joao'), findsOneWidget);
+
+      // Selecting inserts the mention and hides the bar.
+      await tester.tap(find.text('joao'));
+      await tester.pumpAndSettle();
+      final field = tester.widget<TextField>(find.byType(TextField).last);
+      expect(field.controller!.text, contains('@joao '));
+      expect(find.text('MENCIONAR'), findsNothing);
+
+      // Deleting the "@" never leaves a stray bar.
+      await tester.enterText(find.byType(TextField).last, 'oi');
+      await tester.pumpAndSettle();
+      expect(find.text('MENCIONAR'), findsNothing);
+    });
+
     testWidgets('mensagem com menção renderiza com RichText (destaque)',
         (tester) async {
       final repos = FakeRepositories();
@@ -289,6 +323,33 @@ void main() {
       await tester.longPress(find.text('deles'));
       await tester.pumpAndSettle();
       expect(find.text('Visto/Enviado'), findsNothing);
+    });
+  });
+
+  group('Amigos — todas as amizades aparecem', () {
+    testWidgets('mais de 50 amigos são carregados (paginação até o total)',
+        (tester) async {
+      final repos = FakeRepositories();
+      final store = repos.store;
+      // Seed friendships: current user u0 is friends with 55 users.
+      for (var i = 0; i < 55; i++) {
+        final id = 'f$i';
+        store.users[id] =
+            MatrixUser(id: id, nickname: 'amigo_$i', avatarSeed: 'amigo_$i');
+        store.friendships.add('f$i|u0');
+      }
+      final state = AppState(repositories: repos);
+      await state.restoreSession();
+      await state.loadFeed();
+      await state.loadConversations();
+      await pumpMatrixApp(tester, const ChatScreen(), state: state);
+      await tester.pumpAndSettle();
+
+      // The horizontal friends row must render ALL friends — the LAST one is
+      // reachable by scrolling right (right-to-left).
+      await tester.drag(find.byType(ListView).first, const Offset(-6000, 0));
+      await tester.pumpAndSettle();
+      expect(find.text('amigo_54'), findsOneWidget);
     });
   });
 }
