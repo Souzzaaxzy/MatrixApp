@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import '../../data/api_config.dart';
 import '../../data/dtos/dtos.dart';
 import '../../data/repositories/repositories.dart';
+import '../../data/repositories/sticker_repository.dart';
 import '../../data/search_history_store.dart';
 import '../../data/services.dart';
 import '../../models/akame_message.dart';
@@ -17,6 +18,7 @@ import '../../models/friend_request.dart';
 import '../../models/matrix_notification.dart';
 import '../../models/matrix_user.dart';
 import '../../models/post.dart';
+import '../../models/sticker.dart';
 import '../utils/mock_data_service.dart';
 
 /// Central app state for Phase 2.
@@ -83,6 +85,22 @@ class AppState extends ChangeNotifier {
   /// sprite for each comes bundled, keyed by the server's assetUrl).
   List<CosmeticItem> _frameCatalog = const [];
   bool _loadingFrameCatalog = false;
+
+  // ── Stickers (figurinhas) ─────────────────────────────────
+  /// The full server sticker catalog: packages + stickers + user state.
+  List<StickerPackage> _stickerPackages = const [];
+  bool _loadingStickerPackages = false;
+  bool _stickerCatalogLoaded = false;
+
+  /// The session user's favorites (deduped refs resolved from the server).
+  List<Sticker> _stickerFavorites = const [];
+  bool _loadingStickerFavorites = false;
+  bool _stickerFavoritesLoaded = false;
+
+  /// The session user's recents, newest first, deduped (server-bounded).
+  List<Sticker> _stickerRecents = const [];
+  bool _loadingStickerRecents = false;
+  bool _stickerRecentsLoaded = false;
 
   /// Posts fetched individually (detail screen) that may not be present in
   /// the feed/profile caches. Lets likes/comments work uniformly by id.
@@ -271,6 +289,26 @@ class AppState extends ChangeNotifier {
   List<CosmeticItem> get frameCatalog => List.unmodifiable(_frameCatalog);
   bool get isLoadingFrameCatalog => _loadingFrameCatalog;
 
+  /// The full sticker catalog (every active package with its stickers and the
+  /// session user's install/favorite state). Empty until [loadStickers]
+  /// completes.
+  List<StickerPackage> get stickerPackages => List.unmodifiable(_stickerPackages);
+  bool get isLoadingStickerPackages => _loadingStickerPackages;
+  bool get isStickerCatalogLoaded => _stickerCatalogLoaded;
+
+  /// Sticker packages the user has INSTALLED (the "Meus pacotes" set).
+  List<StickerPackage> get installedStickerPackages =>
+      List.unmodifiable(_stickerPackages.where((p) => p.installed));
+
+  /// The session user's sticker favorites.
+  List<Sticker> get stickerFavorites => List.unmodifiable(_stickerFavorites);
+  bool get isLoadingStickerFavorites => _loadingStickerFavorites;
+
+  /// The session user's sticker recents (newest first).
+  List<Sticker> get stickerRecents =>
+      _stickerRecentsLoaded ? List.unmodifiable(_stickerRecents) : const [];
+  bool get isLoadingStickerRecents => _loadingStickerRecents;
+
   List<AkameMessage> get akameMessages => List.unmodifiable(_akameMessages);
   MatrixUser? get currentUser => _currentUser;
   bool get isLoadingFeed => _loadingFeed;
@@ -288,6 +326,8 @@ class AppState extends ChangeNotifier {
   CustomizationRepository get _customizationRepo =>
       _repos?.customization ?? Services.instance.customization;
   ChatRepository get _chat => _repos?.chat ?? Services.instance.chat;
+  StickerRepository get _stickersRepo =>
+      _repos?.stickers ?? Services.instance.stickers;
 
   /// Restores the session from a stored refresh token. Called at startup.
   /// Returns true when the user is authenticated afterwards.
@@ -393,6 +433,18 @@ class AppState extends ChangeNotifier {
     _frameCatalog = const [];
     _akameMessages = MockDataService.initialAkameMessages();
     _clearConversations();
+    _clearStickerState();
+  }
+
+  /// Clears the (per-user) sticker caches on logout/account deletion so one
+  /// account never borrows another's installs/favorites/recents.
+  void _clearStickerState() {
+    _stickerPackages = const [];
+    _stickerCatalogLoaded = false;
+    _stickerFavorites = const [];
+    _stickerFavoritesLoaded = false;
+    _stickerRecents = const [];
+    _stickerRecentsLoaded = false;
   }
 
   /// Loads the first page of the feed (replaces existing posts).
@@ -1059,6 +1111,167 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  // ── Stickers (figurinhas) ──────────────────────────────────
+
+  /// Loads the full sticker catalog (packages + stickers + user state) into
+  /// state. Idempotent-guarded per session: a second call refreshes unless
+  /// a load is already in flight.
+  Future<void> loadStickers() async {
+    if (_loadingStickerPackages) return;
+    _loadingStickerPackages = true;
+    notifyListeners();
+    try {
+      final packages = await _stickersRepo.catalog();
+      _stickerPackages = packages;
+      _stickerCatalogLoaded = true;
+    } catch (_) {
+      // The picker shows a friendly empty/error state; a retry re-calls this.
+    } finally {
+      _loadingStickerPackages = false;
+      notifyListeners();
+    }
+  }
+
+  /// Loads the session user's sticker favorites.
+  Future<void> loadStickerFavorites() async {
+    if (_loadingStickerFavorites) return;
+    _loadingStickerFavorites = true;
+    notifyListeners();
+    try {
+      _stickerFavorites = await _stickersRepo.favorites();
+      _stickerFavoritesLoaded = true;
+    } catch (_) {
+      // Keep last known favorites on failure.
+    } finally {
+      _loadingStickerFavorites = false;
+      notifyListeners();
+    }
+  }
+
+  /// Loads the session user's sticker recents.
+  Future<void> loadStickerRecents() async {
+    if (_loadingStickerRecents) return;
+    _loadingStickerRecents = true;
+    notifyListeners();
+    try {
+      _stickerRecents = await _stickersRepo.recents();
+      _stickerRecentsLoaded = true;
+    } catch (_) {
+      // Keep last known recents on failure.
+    } finally {
+      _loadingStickerRecents = false;
+      notifyListeners();
+    }
+  }
+
+  /// Favorites a sticker locally + on the server, then refreshes every
+  /// surface that renders its state (catalog + favorites list).
+  Future<void> favoriteSticker(String stickerId) async {
+    try {
+      await _stickersRepo.favorite(stickerId);
+    } catch (_) {
+      // Best-effort: the next full reload reconciles with the server.
+    }
+    _applyStickerFavorite(stickerId, true);
+  }
+
+  /// Removes a favorite locally + on the server.
+  Future<void> unfavoriteSticker(String stickerId) async {
+    try {
+      await _stickersRepo.unfavorite(stickerId);
+    } catch (_) {
+      // Best-effort.
+    }
+    _applyStickerFavorite(stickerId, false);
+  }
+
+  /// Updates every sticker cache (package grids + favorites list) to reflect
+  /// the new favorite state of [stickerId] — single point of truth.
+  void _applyStickerFavorite(String stickerId, bool favorited) {
+    _stickerPackages = _stickerPackages.map((p) {
+      if (p.stickers.every((s) => s.id != stickerId)) return p;
+      return p.copyWith(
+        installed: p.installed,
+      ).replaceSticker(
+        stickerId,
+        (s) => s.copyWith(favorited: favorited),
+      );
+    }).toList();
+    _stickerRecents = _stickerRecents
+        .map((s) => s.id == stickerId ? s.copyWith(favorited: favorited) : s)
+        .toList();
+    if (favorited) {
+      final existing = _stickerFavorites;
+      if (existing.every((s) => s.id != stickerId)) {
+        // Find the sticker in the catalog to preserve full metadata.
+        final source = _stickerInCatalog(stickerId);
+        _stickerFavorites = source == null
+            ? existing
+            : [source.copyWith(favorited: true), ...existing];
+      }
+    } else {
+      _stickerFavorites =
+          _stickerFavorites.where((s) => s.id != stickerId).toList();
+    }
+    if (!_stickerFavoritesLoaded) _stickerFavoritesLoaded = true;
+    notifyListeners();
+  }
+
+  Sticker? _stickerInCatalog(String stickerId) {
+    for (final p in _stickerPackages) {
+      for (final s in p.stickers) {
+        if (s.id == stickerId) return s;
+      }
+    }
+    for (final s in _stickerFavorites) {
+      if (s.id == stickerId) return s;
+    }
+    return null;
+  }
+
+  /// Installs a sticker package locally + on the server and refreshes the
+  /// catalog state so the picker navigates into it immediately.
+  Future<void> installStickerPackage(String packageId) async {
+    try {
+      await _stickersRepo.install(packageId);
+    } catch (_) {
+      // Best-effort: server remains the source of truth on next reload.
+    }
+    _stickerPackages = _stickerPackages
+        .map((p) => p.id == packageId ? p.copyWith(installed: true) : p)
+        .toList();
+    notifyListeners();
+  }
+
+  /// Removes a sticker package locally + on the server. Favorites/history
+  /// keep rendering — only the picker package tab disappears.
+  Future<void> uninstallStickerPackage(String packageId) async {
+    try {
+      await _stickersRepo.uninstall(packageId);
+    } catch (_) {
+      // Best-effort.
+    }
+    _stickerPackages = _stickerPackages
+        .map((p) => p.id == packageId ? p.copyWith(installed: false) : p)
+        .toList();
+    notifyListeners();
+  }
+
+  /// Moves a sticker to the FRONT of the session user's recents (deduped).
+  /// Persistence is server-side (registered automatically on send); this
+  /// just keeps the local picker in sync without waiting for a reload.
+  void _bumpStickerRecent(String stickerId) {
+    final source = _stickerInCatalog(stickerId);
+    if (source == null) return;
+    _stickerRecents = [
+      source.copyWith(favorited: source.favorited),
+      ..._stickerRecents.where((s) => s.id != stickerId),
+    ];
+    _stickerRecentsLoaded = true;
+    // best-effort server sync (idempotent):
+    _stickersRepo.markRecent(stickerId).catchError((_) {});
+  }
+
   /// Opens (or creates) the single conversation with [otherUserId] and
   /// returns it. The server enforces the friends-only rule.
   Future<Conversation> getOrCreateConversation(String otherUserId) {
@@ -1288,6 +1501,42 @@ class AppState extends ChangeNotifier {
     _applyChatMessage(message, otherUser: otherUser ?? _peerOf(conversationId));
     // Same synchronous wake-up as [sendChatMessage]: the audio preview
     // must appear on the list without waiting for a refetch.
+    notifyListeners();
+    return message;
+  }
+
+  /// Sends a STICKER message to a private conversation and updates the cached
+  /// preview + the sender's recent sticker list (same flow as text/voice).
+  Future<ChatMessage> sendStickerMessage(
+    String conversationId, {
+    required String stickerId,
+    ChatUser? otherUser,
+    String? replyToMessageId,
+  }) async {
+    final message = await _chat.sendSticker(
+      conversationId,
+      stickerId,
+      replyToMessageId: replyToMessageId,
+    );
+    _applyChatMessage(message, otherUser: otherUser ?? _peerOf(conversationId));
+    _bumpStickerRecent(stickerId);
+    notifyListeners();
+    return message;
+  }
+
+  /// Sends a STICKER message to a GROUP (same flow as [sendStickerMessage]).
+  Future<ChatMessage> sendGroupStickerMessage(
+    String groupId, {
+    required String stickerId,
+    String? replyToMessageId,
+  }) async {
+    final message = await _chat.sendGroupSticker(
+      groupId,
+      stickerId,
+      replyToMessageId: replyToMessageId,
+    );
+    _applyChatMessage(message);
+    _bumpStickerRecent(stickerId);
     notifyListeners();
     return message;
   }

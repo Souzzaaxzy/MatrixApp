@@ -12,6 +12,7 @@ import '../../models/matrix_user.dart';
 import '../../models/post.dart';
 import '../api_client.dart';
 import '../dtos/dtos.dart';
+import 'sticker_repository.dart';
 
 /// Authentication repository — register, login, current user, logout,
 /// and account recovery. Username-only (no email/phone).
@@ -841,6 +842,44 @@ class ChatRepository {
     return ChatMessageDto.fromJson(raw).toModel();
   }
 
+  /// Sends a STICKER message to [conversationId]. The [stickerId] references
+  /// the server catalog (validated server-side); the persisted message
+  /// carries only the references and fans out via the SAME realtime channel.
+  Future<ChatMessage> sendSticker(
+    String conversationId,
+    String stickerId, {
+    String? replyToMessageId,
+  }) async {
+    final json = await _api.post<Map<String, dynamic>>(
+      '/api/conversations/$conversationId/sticker',
+      data: {
+        'stickerId': stickerId,
+        if (replyToMessageId != null && replyToMessageId.isNotEmpty)
+          'replyToMessageId': replyToMessageId,
+      },
+    );
+    return ChatMessageDto.fromJson(json['message'] as Map<String, dynamic>)
+        .toModel();
+  }
+
+  /// Sends a STICKER message to a GROUP (see [sendSticker]).
+  Future<ChatMessage> sendGroupSticker(
+    String groupId,
+    String stickerId, {
+    String? replyToMessageId,
+  }) async {
+    final json = await _api.post<Map<String, dynamic>>(
+      '/api/groups/$groupId/sticker',
+      data: {
+        'stickerId': stickerId,
+        if (replyToMessageId != null && replyToMessageId.isNotEmpty)
+          'replyToMessageId': replyToMessageId,
+      },
+    );
+    return ChatMessageDto.fromJson(json['message'] as Map<String, dynamic>)
+        .toModel();
+  }
+
   /// Marks all messages FROM THE OTHER SIDE as read (clears the unread badge).
   Future<void> markRead(String conversationId) async {
     await _api.post('/api/conversations/$conversationId/read');
@@ -1011,6 +1050,7 @@ class Repositories {
     required this.uploads,
     required this.customization,
     required this.chat,
+    required this.stickers,
   });
 
   final AuthRepository auth;
@@ -1023,4 +1063,5 @@ class Repositories {
   final UploadRepository uploads;
   final CustomizationRepository customization;
   final ChatRepository chat;
+  final StickerRepository stickers;
 }

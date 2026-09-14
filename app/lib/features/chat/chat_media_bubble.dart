@@ -32,6 +32,9 @@ class ChatMediaBubble extends StatelessWidget {
   }
 
   Widget _content(BuildContext context) {
+    if (message.isSticker && message.stickerUrl != null) {
+      return _StickerBubble(url: ApiConfig.resolveUrl(message.stickerUrl!));
+    }
     if (message.isImage && message.imageUrl != null) {
       return ClipRRect(
         borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
@@ -133,6 +136,59 @@ class _ResponsiveChatImageState extends State<_ResponsiveChatImage> {
       stream.removeListener(listener!);
     });
     stream.addListener(listener);
+  }
+}
+
+/// A sticker message — rendered DIRECTLY as the image, no text bubble.
+/// Sized like modern messaging apps: large but bounded to the chat width.
+class _StickerBubble extends StatelessWidget {
+  const _StickerBubble({required this.url});
+
+  final String url;
+
+  @override
+  Widget build(BuildContext context) {
+    final mediaWidth = MediaQuery.sizeOf(context).width;
+    final maxW =
+        (mediaWidth * 0.5).clamp(140.0, 240.0).toDouble();
+    return ConstrainedBox(
+      constraints: BoxConstraints(
+        maxWidth: maxW,
+        maxHeight: maxW * 1.1,
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
+        child: CachedNetworkImage(
+          imageUrl: url,
+          fit: BoxFit.contain,
+          placeholder: (_, __) => Container(
+            width: maxW,
+            height: maxW,
+            color: AppColors.nightBlue,
+            child: const Center(
+              child: SizedBox(
+                width: 22,
+                height: 22,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.5,
+                  color: Color(0xFF008CFF),
+                ),
+              ),
+            ),
+          ),
+          errorWidget: (_, __, ___) => Container(
+            width: maxW,
+            height: maxW * 0.8,
+            color: AppColors.nightBlue,
+            child: const Icon(
+              Icons.broken_image_outlined,
+              color: Color(0xFF008CFF),
+              size: 34,
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 

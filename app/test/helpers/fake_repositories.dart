@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:matrix_app/data/api_config.dart';
 import 'package:matrix_app/data/dtos/dtos.dart';
 import 'package:matrix_app/data/repositories/repositories.dart';
+import 'package:matrix_app/data/repositories/sticker_repository.dart';
 import 'package:matrix_app/models/comment.dart';
 import 'package:matrix_app/models/conversation.dart';
 import 'package:matrix_app/models/cosmetic_item.dart';
@@ -10,6 +11,7 @@ import 'package:matrix_app/models/friend_request.dart';
 import 'package:matrix_app/models/matrix_notification.dart';
 import 'package:matrix_app/models/matrix_user.dart';
 import 'package:matrix_app/models/post.dart';
+import 'package:matrix_app/models/sticker.dart';
 
 /// In-memory fake repositories for widget/unit tests.
 ///
@@ -30,6 +32,7 @@ class FakeRepositories extends Repositories {
     required super.uploads,
     required super.customization,
     required super.chat,
+    required super.stickers,
   }) : _store = store;
 
   factory FakeRepositories({
@@ -40,6 +43,9 @@ class FakeRepositories extends Repositories {
     List<MatrixNotification> seedNotifications = const [],
     Map<String, CosmeticItem> seedEquippedCosmetics = const {},
     List<CosmeticItem> seedCatalog = const [],
+    List<StickerPackage> seedStickerPackages = const [],
+    List<Sticker> seedStickerFavorites = const [],
+    List<Sticker> seedStickerRecents = const [],
   }) {
     final store = FakeStore();
     seedComments.forEach((postId, comments) {
@@ -52,6 +58,9 @@ class FakeRepositories extends Repositories {
     store.notifications.addAll(seedNotifications);
     store.equippedCosmetics.addAll(seedEquippedCosmetics);
     store.catalog.addAll(seedCatalog);
+    store.stickerPackages.addAll(seedStickerPackages);
+    store.stickerFavorites.addAll(seedStickerFavorites);
+    store.stickerRecents.addAll(seedStickerRecents);
     return FakeRepositories._(
       store: store,
       auth: _FakeAuthRepository(store),
@@ -64,6 +73,7 @@ class FakeRepositories extends Repositories {
       uploads: const _FakeUploadRepository(),
       customization: _FakeCustomizationRepository(store),
       chat: _FakeChatRepository(store),
+      stickers: _FakeStickerRepository(store),
     );
   }
 
@@ -90,6 +100,15 @@ class FakeStore {
 
   /// Groups (fake): id -> group header/list state.
   final Map<String, GroupConversation> groups = {};
+
+  /// Sticker catalog (fake): the full server package list.
+  final List<StickerPackage> stickerPackages = [];
+
+  /// Sticker favorites (fake).
+  final List<Sticker> stickerFavorites = [];
+
+  /// Sticker recents (fake, newest first).
+  final List<Sticker> stickerRecents = [];
 
   /// Group messages by group id (fake persistence).
   late final Map<String, List<ChatMessage>> groupMessagesById = {};
@@ -1269,6 +1288,72 @@ class _FakeChatRepository implements ChatRepository {
   }
 
   @override
+  Future<ChatMessage> sendSticker(
+    String conversationId,
+    String stickerId, {
+    String? replyToMessageId,
+  }) async {
+    final me = _store.currentUserId;
+    final sticker = _store.stickerPackages
+        .expand((p) => p.stickers)
+        .where((s) => s.id == stickerId)
+        .firstOrNull;
+    final message = ChatMessage(
+      id: 'st${DateTime.now().microsecondsSinceEpoch}',
+      conversationId: conversationId,
+      senderId: me!,
+      content: '🧩 Figurinha',
+      createdAt: DateTime.now(),
+      mine: true,
+      type: 'sticker',
+      stickerUrl: sticker?.fileUrl ?? 'sticker://$stickerId.png',
+      stickerId: stickerId,
+      stickerPackageId: sticker?.packageId ?? '',
+      replyTo: replyToMessageId == null
+          ? null
+          : ReplyInfo(
+              id: replyToMessageId,
+              senderId: me,
+              senderNickname: _store.currentUser.nickname,
+              content: 'original',
+              exists: true,
+            ),
+    );
+    _store.chatMessagesByPair
+        .putIfAbsent(conversationId, () => [])
+        .add(message);
+    return message;
+  }
+
+  @override
+  Future<ChatMessage> sendGroupSticker(
+    String groupId,
+    String stickerId, {
+    String? replyToMessageId,
+  }) async {
+    final me = _store.currentUserId;
+    final sticker = _store.stickerPackages
+        .expand((p) => p.stickers)
+        .where((s) => s.id == stickerId)
+        .firstOrNull;
+    final message = ChatMessage(
+      id: 'gst${DateTime.now().microsecondsSinceEpoch}',
+      groupId: groupId,
+      conversationId: groupId,
+      senderId: me!,
+      content: '🧩 Figurinha',
+      createdAt: DateTime.now(),
+      mine: true,
+      type: 'sticker',
+      stickerUrl: sticker?.fileUrl ?? 'sticker://$stickerId.png',
+      stickerId: stickerId,
+      stickerPackageId: sticker?.packageId ?? '',
+    );
+    _store.groupMessagesById.putIfAbsent(groupId, () => []).add(message);
+    return message;
+  }
+
+  @override
   Future<void> markGroupRead(String groupId) async {}
   @override
   void setGroupTyping(String groupId, bool typing) {}
@@ -1458,5 +1543,69 @@ class _FakeChatRepository implements ChatRepository {
         g.copyWith(group: g.group.copyWith(memberCount: memberIds.length));
     _store.groups[groupId] = updated;
     return updated;
+  }
+}
+
+class _FakeStickerRepository implements StickerRepository {
+  _FakeStickerRepository(this._store);
+
+  final FakeStore _store;
+
+  @override
+  Future<List<StickerPackage>> catalog() async => List.of(_store.stickerPackages);
+
+  @override
+  Future<StickerPackage> package(String packageId) async {
+    return _store.stickerPackages.firstWhere(
+      (p) => p.id == packageId,
+      orElse: () => throw const ApiException(
+          statusCode: 404, message: 'Pacote de figurinhas não encontrado.'),
+    );
+  }
+
+  @override
+  Future<void> install(String packageId) async {
+    await Future<void>.delayed(Duration.zero);
+  }
+
+  @override
+  Future<void> uninstall(String packageId) async {
+    await Future<void>.delayed(Duration.zero);
+  }
+
+  @override
+  Future<List<Sticker>> favorites() async => List.of(_store.stickerFavorites);
+
+  @override
+  Future<void> favorite(String stickerId) async {
+    if (_store.stickerFavorites.every((s) => s.id != stickerId)) {
+      final source = _store.stickerPackages
+          .expand((p) => p.stickers)
+          .where((s) => s.id == stickerId)
+          .firstOrNull;
+      if (source != null) {
+        _store.stickerFavorites.insert(0, source.copyWith(favorited: true));
+      }
+    }
+  }
+
+  @override
+  Future<void> unfavorite(String stickerId) async {
+    _store.stickerFavorites.removeWhere((s) => s.id == stickerId);
+  }
+
+  @override
+  Future<List<Sticker>> recents() async => List.of(_store.stickerRecents);
+
+  @override
+  Future<void> markRecent(String stickerId) async {
+    final source = _store.stickerPackages
+        .expand((p) => p.stickers)
+        .where((s) => s.id == stickerId)
+        .firstOrNull;
+    if (source == null) return;
+    _store.stickerRecents
+      ..removeWhere((s) => s.id == stickerId)
+      ..insert(0, source);
   }
 }

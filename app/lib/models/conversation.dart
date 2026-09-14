@@ -137,6 +137,9 @@ class ChatMessage {
     this.durationMs,
     this.imageUrl,
     this.videoUrl,
+    this.stickerUrl,
+    this.stickerId,
+    this.stickerPackageId,
     this.mentions = const [],
     this.mentionAll = false,
     this.mentioned = false,
@@ -179,9 +182,21 @@ class ChatMessage {
   /// Absolute URL of the persisted video (media messages only).
   final String? videoUrl;
 
+  /// Absolute URL of the persisted sticker art (sticker messages only).
+  final String? stickerUrl;
+
+  /// The sticker's stable id (sticker messages only) — lets the receiver
+  /// favorite / resend it even after the package was removed locally.
+  final String? stickerId;
+
+  /// The package this sticker belongs to (sticker messages only).
+  final String? stickerPackageId;
+
   bool get isImage => type == 'image';
   bool get isVideo => type == 'video';
   bool get isMedia => isImage || isVideo;
+  bool get isSticker => type == 'sticker';
+  bool get isVoice => type == 'voice';
 
   /// Structured mentions embedded in this (group) message — every mentioned
   /// user id + live nickname. Empty for non-mention messages and DMs.
@@ -193,8 +208,6 @@ class ChatMessage {
   /// True when the SESSION user is directly mentioned (individual @user or
   /// @todos). Powers the visual highlight + "@" indicator.
   final bool mentioned;
-
-  bool get isVoice => type == 'voice';
 
   /// Whether the session user (@[selfId]) is the target of the mention (for
   /// highlight rendering): @todos always "mentions" everyone; otherwise the
@@ -210,6 +223,9 @@ class ChatMessage {
     int? durationMs,
     String? imageUrl,
     String? videoUrl,
+    String? stickerUrl,
+    String? stickerId,
+    String? stickerPackageId,
     ChatUser? sender,
     List<ChatMention>? mentions,
     bool? mentionAll,
@@ -231,6 +247,9 @@ class ChatMessage {
         durationMs: durationMs ?? this.durationMs,
         imageUrl: imageUrl ?? this.imageUrl,
         videoUrl: videoUrl ?? this.videoUrl,
+        stickerUrl: stickerUrl ?? this.stickerUrl,
+        stickerId: stickerId ?? this.stickerId,
+        stickerPackageId: stickerPackageId ?? this.stickerPackageId,
         mentions: mentions ?? this.mentions,
         mentionAll: mentionAll ?? this.mentionAll,
         mentioned: mentioned ?? this.mentioned,

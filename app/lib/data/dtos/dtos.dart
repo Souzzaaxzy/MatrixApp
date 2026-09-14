@@ -5,6 +5,7 @@ import '../../models/friend_request.dart';
 import '../../models/matrix_notification.dart';
 import '../../models/matrix_user.dart';
 import '../../models/post.dart';
+import '../../models/sticker.dart';
 
 /// Mappers that convert backend JSON responses into the app's domain models.
 ///
@@ -558,6 +559,9 @@ class ChatMessageDto {
   final int? durationMs;
   final String? imageUrl;
   final String? videoUrl;
+  final String? stickerUrl;
+  final String? stickerId;
+  final String? stickerPackageId;
   final List<ChatMention> mentions;
   final bool mentionAll;
   final bool mentioned;
@@ -578,6 +582,9 @@ class ChatMessageDto {
     this.durationMs,
     this.imageUrl,
     this.videoUrl,
+    this.stickerUrl,
+    this.stickerId,
+    this.stickerPackageId,
     this.mentions = const [],
     this.mentionAll = false,
     this.mentioned = false,
@@ -598,12 +605,16 @@ class ChatMessageDto {
           'voice' => 'voice',
           'image' => 'image',
           'video' => 'video',
+          'sticker' => 'sticker',
           _ => 'text',
         },
         audioUrl: audioUrl,
         durationMs: durationMs,
         imageUrl: imageUrl,
         videoUrl: videoUrl,
+        stickerUrl: stickerUrl,
+        stickerId: stickerId,
+        stickerPackageId: stickerPackageId,
         mentions: mentions,
         mentionAll: mentionAll,
         mentioned: mentioned,
@@ -634,6 +645,9 @@ class ChatMessageDto {
       durationMs: (json['durationMs'] as num?)?.toInt(),
       imageUrl: json['imageUrl'] as String?,
       videoUrl: json['videoUrl'] as String?,
+      stickerUrl: json['stickerUrl'] as String?,
+      stickerId: json['stickerId'] as String?,
+      stickerPackageId: json['stickerPackageId'] as String?,
       mentions: mentionsRaw is List
           ? mentionsRaw
               .whereType<Map<String, dynamic>>()
@@ -923,5 +937,104 @@ class MessagePageDto {
             .map((d) => d.toModel())
             .toList(),
         hasMore: (json['hasMore'] as bool?) ?? false,
+      );
+}
+
+/// A single sticker from the server catalog.
+class StickerDto {
+  final String id;
+  final String packageId;
+  final int order;
+  final String fileUrl;
+  final String? thumbUrl;
+  final int? width;
+  final int? height;
+  final bool favorited;
+
+  const StickerDto({
+    required this.id,
+    required this.packageId,
+    required this.order,
+    required this.fileUrl,
+    this.thumbUrl,
+    this.width,
+    this.height,
+    this.favorited = false,
+  });
+
+  Sticker toModel() => Sticker(
+        id: id,
+        packageId: packageId,
+        order: order,
+        fileUrl: fileUrl,
+        thumbUrl: thumbUrl,
+        width: width,
+        height: height,
+        favorited: favorited,
+      );
+
+  factory StickerDto.fromJson(Map<String, dynamic> json) => StickerDto(
+        id: json['id'] as String,
+        packageId: json['packageId'] as String,
+        order: (json['order'] as num?)?.toInt() ?? 0,
+        fileUrl: json['fileUrl'] as String,
+        thumbUrl: json['thumbUrl'] as String?,
+        width: (json['width'] as num?)?.toInt(),
+        height: (json['height'] as num?)?.toInt(),
+        favorited: (json['favorited'] as bool?) ?? false,
+      );
+}
+
+/// A sticker package (catalog entry) with its stickers + user install state.
+class StickerPackageDto {
+  final String id;
+  final String name;
+  final String slug;
+  final String description;
+  final String author;
+  final String iconUrl;
+  final bool installed;
+  final int stickerCount;
+  final List<Sticker> stickers;
+
+  const StickerPackageDto({
+    required this.id,
+    required this.name,
+    required this.slug,
+    required this.description,
+    required this.author,
+    required this.iconUrl,
+    required this.installed,
+    required this.stickerCount,
+    required this.stickers,
+  });
+
+  StickerPackage toModel() => StickerPackage(
+        id: id,
+        name: name,
+        slug: slug,
+        description: description,
+        author: author,
+        iconUrl: iconUrl,
+        installed: installed,
+        stickerCount: stickerCount,
+        stickers: stickers,
+      );
+
+  factory StickerPackageDto.fromJson(Map<String, dynamic> json) =>
+      StickerPackageDto(
+        id: json['id'] as String,
+        name: json['name'] as String? ?? '',
+        slug: json['slug'] as String? ?? '',
+        description: json['description'] as String? ?? '',
+        author: json['author'] as String? ?? '',
+        iconUrl: json['iconUrl'] as String? ?? '',
+        installed: (json['installed'] as bool?) ?? false,
+        stickerCount: (json['stickerCount'] as num?)?.toInt() ?? 0,
+        stickers: (json['stickers'] as List? ?? const [])
+            .whereType<Map<String, dynamic>>()
+            .map(StickerDto.fromJson)
+            .map((d) => d.toModel())
+            .toList(),
       );
 }

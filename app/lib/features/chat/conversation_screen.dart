@@ -19,10 +19,12 @@ import '../../core/widgets/user_avatar.dart';
 import '../../data/api_config.dart';
 import '../../data/services.dart';
 import '../../models/conversation.dart';
+import '../../models/sticker.dart';
 import 'chat_attach_button.dart';
 import 'chat_media_bubble.dart';
 import 'chat_navigation.dart';
 import 'reply_swipe.dart';
+import 'sticker_picker.dart';
 import 'voice_player_bubble.dart';
 import 'voice_recorder.dart';
 
@@ -100,6 +102,9 @@ class _ConversationScreenState extends State<ConversationScreen>
   // ── Reply-to-message selection ─────────────────────────────
   ChatMessage? _replyTarget;
   int? _replyTargetIndex;
+
+  // ── Sticker picker ────────────────────────────────────────
+  bool _stickerPickerOpen = false;
 
   /// True after dispose — guards async callbacks (typing debounce) against
   /// touching a destroyed state.
@@ -314,6 +319,37 @@ class _ConversationScreenState extends State<ConversationScreen>
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Não foi possível enviar a mídia.')),
+      );
+    }
+  }
+
+  /// Sends a STICKER message to the current private conversation,
+  /// preserving the active reply reference.
+  Future<void> _sendSticker(Sticker sticker) async {
+    final conversationId = _conversationId;
+    final state = AppStateScope.maybeOf(context);
+    if (conversationId.isEmpty || state == null) return;
+    final reply = _replyTarget;
+    try {
+      final message = await state.sendStickerMessage(
+        conversationId,
+        stickerId: sticker.id,
+        otherUser: _conversation?.otherUser ?? widget.args.otherUser,
+        replyToMessageId: reply?.id,
+      );
+      if (!mounted) return;
+      setState(() => _replyTarget = null);
+      _appendMessage(message);
+      // Fecha o seletor após um envio bem-sucedido.
+      setState(() => _stickerPickerOpen = false);
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(e.message)));
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Não foi possível enviar a figurinha.')),
       );
     }
   }
@@ -887,7 +923,17 @@ class _ConversationScreenState extends State<ConversationScreen>
               dragCancelZone: _dragDx <= -40 && !_dragLocked,
               dragLocked: _dragLocked,
               voiceSending: _voiceSending,
+              stickersEnabled: conversation != null,
+              stickerOpen: _stickerPickerOpen,
+              onToggleStickers: () => setState(
+                  () => _stickerPickerOpen = !_stickerPickerOpen),
             ),
+            // Painel de figurinhas integrado à base da conversa.
+            if (_stickerPickerOpen && conversation != null && _state != null)
+              StickerPicker(
+                state: _state!,
+                onPick: (sticker) => _sendSticker(sticker),
+              ),
           ],
         ),
       ),
@@ -1525,7 +1571,7 @@ class _MessageBubble extends StatelessWidget {
             ),
           if (message.isVoice)
             VoicePlayerBubble(message: message, mine: mine)
-          else if (message.isMedia)
+          else if (message.isMedia || message.isSticker)
             ChatMediaBubble(message: message)
           else
             Text(
@@ -1611,6 +1657,9 @@ class _Composer extends StatefulWidget {
     required this.dragCancelZone,
     required this.dragLocked,
     required this.voiceSending,
+    this.stickersEnabled = false,
+    this.stickerOpen = false,
+    this.onToggleStickers,
   });
 
   final TextEditingController controller;
@@ -1636,6 +1685,11 @@ class _Composer extends StatefulWidget {
   final bool dragCancelZone;
   final bool dragLocked;
   final bool voiceSending;
+
+  /// Sticker picker support.
+  final bool stickersEnabled;
+  final bool stickerOpen;
+  final VoidCallback? onToggleStickers;
 
   @override
   State<_Composer> createState() => _ComposerState();
@@ -1707,6 +1761,14 @@ class _ComposerState extends State<_Composer> {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
+              // Botão de figurinhas (esquerda do campo de texto).
+              if (widget.stickersEnabled) ...[
+                _StickerButton(
+                  active: widget.stickerOpen,
+                  onTap: widget.onToggleStickers,
+                ),
+                const SizedBox(width: AppDimensions.spaceXs),
+              ],
               Expanded(
                 child: barShown
                     ? _RecordingBar(
@@ -1765,6 +1827,46 @@ class _ComposerState extends State<_Composer> {
               ],
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _StickerButton extends StatelessWidget {
+  const _StickerButton({required this.active, required this.onTap});
+
+  final bool active;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = onTap != null;
+    final color = active ? AppColors.electricBlue : AppColors.holographicBlue;
+    return GestureDetector(
+      onTap: enabled ? onTap : null,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        width: 46,
+        height: 46,
+        decoration: BoxDecoration(
+          color: active
+              ? AppColors.electricBlue.withValues(alpha: 0.18)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
+          border: Border.all(
+            color: active ? AppColors.electricBlue : AppColors.deepBlue,
+            width: AppDimensions.borderWidthThin,
+          ),
+          boxShadow: active
+              ? [BoxShadow(color: AppColors.glowSmall, blurRadius: 8)]
+              : const [],
+        ),
+        alignment: Alignment.center,
+        child: Icon(
+          active ? Icons.emoji_emotions_rounded : Icons.emoji_emotions_outlined,
+          color: color,
+          size: 24,
         ),
       ),
     );

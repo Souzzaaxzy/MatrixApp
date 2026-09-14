@@ -17,11 +17,13 @@ import '../../core/widgets/user_avatar.dart';
 import '../../data/api_config.dart';
 import '../../data/dtos/dtos.dart';
 import '../../models/conversation.dart';
+import '../../models/sticker.dart';
 import '../../app/routes.dart';
 import 'chat_attach_button.dart';
 import 'chat_media_bubble.dart';
 import 'chat_navigation.dart';
 import 'reply_swipe.dart';
+import 'sticker_picker.dart';
 import 'voice_player_bubble.dart';
 import 'voice_recorder.dart';
 
@@ -88,6 +90,9 @@ class _GroupConversationScreenState extends State<GroupConversationScreen>
   /// Whether the composer currently has ANY text (non-empty + non-whitespace).
   /// Drives the mic/send swap: empty → 🎙, text → ➤ (never both).
   bool _hasComposerText = false;
+
+  /// Sticker picker state.
+  bool _stickerPickerOpen = false;
 
   // ── Mentions (@user + @todos) — WhatsApp-style inline suggestions ──
   List<GroupMemberInfoModel> _mentionMembers = const [];
@@ -545,6 +550,39 @@ class _GroupConversationScreenState extends State<GroupConversationScreen>
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Não foi possível enviar a mídia.')),
+      );
+    }
+  }
+
+  /// Sends a STICKER message to the current group, preserving the active
+  /// reply reference. Closes the picker on success.
+  Future<void> _sendGroupSticker(Sticker sticker) async {
+    final state = _state;
+    if (state == null) return;
+    final reply = _replyTarget;
+    try {
+      final message = await state.sendGroupStickerMessage(
+        _groupId,
+        stickerId: sticker.id,
+        replyToMessageId: reply?.id,
+      );
+      if (!mounted) return;
+      setState(() {
+        _replyTarget = null;
+        _stickerPickerOpen = false;
+        _showMentionSuggestions = false;
+        _mentionQuery = '';
+      });
+      _appendMessage(message);
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message)),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Não foi possível enviar a figurinha.')),
       );
     }
   }
@@ -1382,6 +1420,12 @@ class _GroupConversationScreenState extends State<GroupConversationScreen>
               : const SizedBox.shrink(),
         ),
         _composer(),
+        // Painel de figurinhas integrado à base do grupo.
+        if (_stickerPickerOpen && _state != null)
+          StickerPicker(
+            state: _state!,
+            onPick: (sticker) => _sendGroupSticker(sticker),
+          ),
       ],
     );
   }
@@ -1456,6 +1500,12 @@ class _GroupConversationScreenState extends State<GroupConversationScreen>
           horizontal: AppDimensions.spaceSm, vertical: AppDimensions.spaceXs),
       child: Row(
         children: [
+          // Botão de figurinhas (esquerda do campo de texto).
+          _GroupStickerButton(
+            active: _stickerPickerOpen,
+            onTap: () => setState(() => _stickerPickerOpen = !_stickerPickerOpen),
+          ),
+          const SizedBox(width: 4),
           Expanded(
             child: MatrixTextField(
               hint: 'Mensagem no grupo',
@@ -1493,6 +1543,43 @@ class _GroupConversationScreenState extends State<GroupConversationScreen>
             ),
           ],
         ],
+      ),
+    );
+  }
+}
+
+class _GroupStickerButton extends StatelessWidget {
+  const _GroupStickerButton({required this.active, required this.onTap});
+
+  final bool active;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = active ? AppColors.electricBlue : AppColors.holographicBlue;
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        width: 44,
+        height: 44,
+        decoration: BoxDecoration(
+          color: active
+              ? AppColors.electricBlue.withValues(alpha: 0.18)
+              : AppColors.electricBlue.withValues(alpha: 0.05),
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(
+            color: active ? AppColors.electricBlue : AppColors.deepBlue,
+          ),
+        ),
+        alignment: Alignment.center,
+        child: Icon(
+          active
+              ? Icons.emoji_emotions_rounded
+              : Icons.emoji_emotions_outlined,
+          color: color,
+          size: 21,
+        ),
       ),
     );
   }
@@ -1820,7 +1907,7 @@ class _MessageContent extends StatelessWidget {
           mine: message.senderId ==
               AppStateScope.maybeOf(context)?.currentUser?.id);
     }
-    if (message.isMedia) {
+    if (message.isMedia || message.isSticker) {
       return ChatMediaBubble(message: message);
     }
     final selfId = AppStateScope.maybeOf(context)?.currentUser?.id;
