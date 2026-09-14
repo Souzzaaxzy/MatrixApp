@@ -19,11 +19,22 @@
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher"
         android:usesCleartextTraffic="true">
+        <!--
+          launchMode="singleTop": a share that arrives while MATRIX is already
+          open is delivered to the EXISTING instance via onNewIntent — no
+          second window/task is created.
+
+          NOTE: there is deliberately no android:taskAffinity here. Setting it
+          to "" (which this project used to do to mitigate StrandHogg) gives
+          the launcher activity NO affinity, so it can never join the app's
+          default task — every launch happens into a brand-new empty task.
+          Combined with the share flow this produced the "MatrixApp →
+          MatrixApp → …" cascade of instances.
+        -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTop"
-            android:taskAffinity=""
             android:theme="@style/LaunchTheme"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
             android:hardwareAccelerated="true"
@@ -41,25 +52,44 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
             <!--
-              Receber figurinhas por compartilhamento nativo do Android.
-              ACTION_SEND (1 arquivo) e ACTION_SEND_MULTIPLE (vários) de
-              imagens PNG/WebP/JPEG — os formatos aceitos pelo sistema de
-              stickers do MATRIX. O conteúdo real (bytes) é validado no app
-              antes de importar; o filtro apenas torna o MATRIX um destino.
+              Receber figuritas por compartilhamento nativo do Android.
+
+              O WhatsApp NÃO compartilha um pacote de figurinhas como várias
+              imagens: ele envia UM arquivo `.wastickers` (um ZIP com os
+              .webp/.png + título/autor), normalmente com MIME
+              application/vnd.wastickers, application/octet-stream,
+              application/zip ou application/*. Por isso os filtros abaixo
+              cobrem `image/*` (figurinha única) E `application/*` /
+              `*/*` (pacote). O conteúdo real (bytes) é SEMPRE validado no
+              app antes de importar — o filtro apenas torna o MATRIX um
+              destino possível.
             -->
             <intent-filter>
                 <action android:name="android.intent.action.SEND"/>
                 <category android:name="android.intent.category.DEFAULT"/>
-                <data android:mimeType="image/png"/>
-                <data android:mimeType="image/webp"/>
-                <data android:mimeType="image/jpeg"/>
+                <data android:mimeType="image/*"/>
+                <data android:mimeType="application/*"/>
+                <data android:mimeType="*/*"/>
             </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.SEND_MULTIPLE"/>
                 <category android:name="android.intent.category.DEFAULT"/>
-                <data android:mimeType="image/png"/>
-                <data android:mimeType="image/webp"/>
-                <data android:mimeType="image/jpeg"/>
+                <data android:mimeType="image/*"/>
+                <data android:mimeType="application/*"/>
+                <data android:mimeType="*/*"/>
+            </intent-filter>
+            <!--
+              "Abrir com" um arquivo .wastickers salvo no gerenciador de
+              arquivos (mesmo fluxo de importação, sem ACTION_SEND). O filtro
+              é restrito aos MIME de pacote para NÃO reivindicar arquivos
+              genéricos (um `application/octet-stream` genérico seria oferecido
+              para qualquer binário).
+            -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <data android:mimeType="application/vnd.wastickers"/>
+                <data android:mimeType="application/x-wastickers"/>
             </intent-filter>
         </activity>
         <!-- Don't delete the meta-data below.

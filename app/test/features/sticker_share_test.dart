@@ -1,10 +1,11 @@
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:matrix_app/core/services/app_state.dart';
 import 'package:matrix_app/core/utils/sticker_import_validator.dart';
+import 'package:matrix_app/data/share_sticker_service.dart';
 import 'package:matrix_app/features/chat/chat_navigation.dart';
 import 'package:matrix_app/features/chat/conversation_screen.dart';
 import 'package:matrix_app/features/chat/sticker_picker.dart';
@@ -158,6 +159,111 @@ void main() {
       await tester.tap(field);
       await tester.pumpAndSettle();
       expect(find.byType(StickerPicker), findsNothing);
+    });
+  });
+
+  group('ShareStickerService — lote do compartir nativo', () {
+    const channel = MethodChannel('matrix.share/stickers');
+
+    tearDown(() async {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, null);
+    });
+
+    test('interpreta lote de pacote com título/autor/capa', () async {
+      final dir = await Directory.systemTemp.createTemp('share_pack');
+      final webp = File('${dir.path}/1.webp')..writeAsBytesSync(fixturePng());
+      final batch = SharedStickerBatch.fromMap({
+        'kind': 'pack',
+        'title': 'Meu pacote',
+        'author': 'Autor X',
+        'coverPath': '${dir.path}/tray.png',
+        'origin': 'com.whatsapp',
+        'rejected': 2,
+        'batchId': 'b1',
+        'stickers': [
+          {'path': webp.path, 'name': '1.webp', 'mime': 'image/webp', 'size': 10},
+        ],
+      });
+      expect(batch.kind, SharedBatchKind.pack);
+      expect(batch.title, 'Meu pacote');
+      expect(batch.author, 'Autor X');
+      expect(batch.rejected, 2);
+      expect(batch.stickers, hasLength(1));
+      dir.deleteSync(recursive: true);
+    });
+
+    test('descarta arquivos inexistentes do lote', () {
+      final batch = SharedStickerBatch.fromMap({
+        'kind': 'images',
+        'stickers': [
+          {'path': '/no/existe.png', 'name': 'a.png', 'mime': 'image/png'},
+        ],
+      });
+      expect(batch.stickers, isEmpty);
+    });
+
+    test('initialBatch entrega o lote uma única vez (dedupe por batchId)',
+        () async {
+      final dir = await Directory.systemTemp.createTemp('share_initial');
+      final file = File('${dir.path}/a.png')..writeAsBytesSync(fixturePng());
+      var calls = 0;
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(channel, (call) async {
+        if (call.method == 'initialSharedBatch') {
+          calls++;
+          return {
+            'kind': 'images',
+            'batchId': 'unique-1',
+            'stickers': [
+              {
+                'path': file.path,
+                'name': 'a.png',
+                'mime': 'image/png',
+                'size': 10,
+              },
+            ],
+          };
+        }
+        return null;
+      });
+
+      final service = ShareStickerService.instance;
+      final first = await service.initialBatch();
+      expect(first, isNotNull);
+      expect(first!.stickers, hasLength(1));
+      // El nativo entrega el mismo lote otra vez (recreación): no se repite.
+      final second = await service.initialBatch();
+      expect(second, isNull);
+      service.clearCurrent();
+      expect(calls, 2);
+      dir.deleteSync(recursive: true);
+    });
+
+    test('push de error nunca se descarta', () async {
+      final service = ShareStickerService.instance;
+      final completer = <SharedStickerBatch>[];
+      final sub = service.onBatches.listen(completer.add);
+      service.listen();
+      await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .handlePlatformMessage(
+        channel.name,
+        const StandardMethodCodec().encodeMethodCall(
+          MethodCall('onSharedBatch', {
+            'kind': 'error',
+            'error': 'O conteúdo compartilhado não é compatível com o MATRIX.',
+            'batchId': 'err-1',
+            'stickers': <dynamic>[],
+          }),
+        ),
+        (_) {},
+      );
+      await Future<void>.delayed(Duration.zero);
+      expect(completer, hasLength(1));
+      expect(completer.first.kind, SharedBatchKind.error);
+      expect(completer.first.error, contains('não é compatível'));
+      await sub.cancel();
+      service.clearCurrent();
     });
   });
 }

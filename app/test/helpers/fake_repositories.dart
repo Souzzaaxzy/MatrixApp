@@ -546,7 +546,7 @@ class _FakeUploadRepository implements UploadRepository {
   const _FakeUploadRepository();
 
   @override
-  Future<String> upload(File file) async =>
+  Future<String> upload(File file, {String? contentType, String? filename}) async =>
       'https://fake.matrix.app/u/test.png';
 
   @override

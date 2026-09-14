@@ -25,7 +25,14 @@ class MatrixApp extends StatefulWidget {
 
 class _MatrixAppState extends State<MatrixApp> {
   final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
-  StreamSubscription<List<SharedStickerFile>>? _shareSub;
+  final _RouteWatcher _routeWatcher = _RouteWatcher();
+  StreamSubscription<SharedStickerBatch>? _shareSub;
+
+  /// Compartir recibido que todavía no pudo abrirse (app sin sesión o aún en
+  /// el splash). Se reintenta en cuanto la navegación/ sesión lo permiten —
+  /// así el contenido NUNCA se pierde.
+  String? _pendingShareTitle;
+  String? _pendingShareError;
 
   @override
   void dispose() {
@@ -50,38 +57,69 @@ class _MatrixAppState extends State<MatrixApp> {
       Services.instance.push.onChatGroupBanned = _onChatGroupBanned;
       Services.instance.push.onChatGroupDeleted = _onChatGroupDeleted;
       Services.instance.push.onCommentDeleted = _onCommentDeleted;
-      // Compartir de Android: archivos de figuritas recibidos mientras el
-      // app está abierto → abre la pantalla de importación.
+      // Compartir de Android: contenido recibido mientras el app está
+      // abierto → abre la pantalla de importación.
       ShareStickerService.instance.listen();
-      _shareSub = ShareStickerService.instance.onFiles.listen((_) {
-        _openStickerImport(title: '');
-      });
+      _shareSub = ShareStickerService.instance.onBatches.listen(_onSharedBatch);
       // Lote que haya abierto el app (proceso frío) — lo consulta el splash
       // después del restore para asegurar que el usuario está autenticado.
       _checkInitialShare();
     }
   }
 
+  /// Trata un lote compartido: error → feedback claro al usuario; contenido
+  /// válido → abre la importación de stickers.
+  void _onSharedBatch(SharedStickerBatch batch) {
+    if (batch.kind == SharedBatchKind.error) {
+      _pendingShareError =
+          batch.error ?? 'O conteúdo compartilhado não é compatível com o MATRIX.';
+      ShareStickerService.instance.clearCurrent();
+      _flushPendingShare();
+      return;
+    }
+    _pendingShareTitle = batch.title;
+    _flushPendingShare();
+  }
+
   /// Si el app fue abierto por un share (proceso frío) y ya hay sesión,
-  /// abre la importación. El splash llama a [initialFiles] en el arranque.
+  /// abre la importación. El splash llama a [initialBatch] en el arranque.
   void _checkInitialShare() {
     WidgetsBinding.instance.addPostFrameCallback((_) async {
-      final files = await ShareStickerService.instance.currentFiles();
-      if (files != null && files.isNotEmpty) {
-        final state = _state;
-        if (state != null && state.isAuthenticated) {
-          _openStickerImport(title: '');
-        }
-      }
+      final batch = await ShareStickerService.instance.currentBatch();
+      if (batch == null) return;
+      _onSharedBatch(batch);
     });
   }
 
-  /// Navega hasta la pantalla de importación de figuritas.
-  void _openStickerImport({required String title}) {
+  /// Abre lo pendiente cuando la pantalla actual y la sesión lo permiten.
+  /// Se vuelve a llamar en cada cambio de ruta y al autenticarse.
+  void _flushPendingShare() {
+    final state = _state;
+    if (state == null) return;
+
+    final error = _pendingShareError;
+    if (error != null) {
+      final context = _navigatorKey.currentContext;
+      if (context != null) {
+        _pendingShareError = null;
+        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+          SnackBar(content: Text(error)),
+        );
+      }
+      return;
+    }
+
+    final title = _pendingShareTitle;
+    if (title == null) return;
+    if (!state.isAuthenticated) return; // el splash redirige a login primero
+    // Mientras el splash siga arriba, esperar: su pushReplacementNamed
+    // reemplazaría la ruta de importación y se perdería el contenido.
+    if (_routeWatcher.current != AppRoutes.home && _routeWatcher.current != AppRoutes.stickerImport) {
+      return;
+    }
     final navigator = _navigatorKey.currentState;
     if (navigator == null) return;
-    final state = _state;
-    if (state == null || !state.isAuthenticated) return;
+    _pendingShareTitle = null;
     navigator.pushNamed(AppRoutes.stickerImport, arguments: title);
   }
 
@@ -308,6 +346,7 @@ class _MatrixAppState extends State<MatrixApp> {
             controller.mode,
             platformDark ? Brightness.dark : Brightness.light,
           ));
+          final appState = AppStateScope.of(context);
           return MaterialApp(
             title: 'MATRIX',
             debugShowCheckedModeBanner: false,
@@ -315,12 +354,50 @@ class _MatrixAppState extends State<MatrixApp> {
             darkTheme: AppTheme.dark,
             themeMode: controller.materialMode,
             navigatorKey: _navigatorKey,
+            navigatorObservers: [_routeWatcher],
             initialRoute: AppRoutes.splash,
             onGenerateRoute: buildAppRoute,
             onGenerateInitialRoutes: appInitialRoutes,
+            builder: (context, child) {
+              // La sesión puede restaurarse/autenticarse DESPUÉS de recibir
+              // el share: reintenta abrir la importación cuando cambie.
+              return ListenableBuilder(
+                listenable: appState,
+                builder: (context, _) {
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    _flushPendingShare();
+                  });
+                  return child ?? const SizedBox.shrink();
+                },
+              );
+            },
           );
         },
       ),
     );
+  }
+}
+
+/// Observa el nombre de la ruta superior para saber cuándo es seguro abrir la
+/// importación de stickers sin que el splash/una redirección la reemplace.
+class _RouteWatcher extends NavigatorObserver {
+  String? current;
+
+  @override
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    super.didPush(route, previousRoute);
+    current = route.settings.name;
+  }
+
+  @override
+  void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    super.didPop(route, previousRoute);
+    current = previousRoute?.settings.name;
+  }
+
+  @override
+  void didReplace({Route<dynamic>? newRoute, Route<dynamic>? oldRoute}) {
+    super.didReplace(newRoute: newRoute, oldRoute: oldRoute);
+    current = newRoute?.settings.name;
   }
 }

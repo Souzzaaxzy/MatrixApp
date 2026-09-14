@@ -1285,7 +1285,20 @@ class AppState extends ChangeNotifier {
     final uploads = _repos?.uploads ?? Services.instance.uploads;
     final items = <Map<String, dynamic>>[];
     for (final s in stickers) {
-      final url = await uploads.upload(s.file);
+      // Declara el MIME/extension REALES validados por magic bytes
+      // (png/webp/jpeg): el servidor rechaza uploads cuyo Content-Type o
+      // extensión no esté permitido (un temp sin extensión llegaría como
+      // application/octet-stream).
+      final (contentType, ext) = switch (s.kind) {
+        StickerImageKind.png => ('image/png', 'png'),
+        StickerImageKind.webp => ('image/webp', 'webp'),
+        StickerImageKind.jpeg => ('image/jpeg', 'jpg'),
+      };
+      final url = await uploads.upload(
+        s.file,
+        contentType: contentType,
+        filename: 'sticker.$ext',
+      );
       items.add({
         'url': url,
         'hash': s.sha256,

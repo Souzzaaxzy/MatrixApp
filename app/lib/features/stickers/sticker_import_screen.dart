@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -13,12 +14,15 @@ import '../../data/api_config.dart';
 import '../../data/share_sticker_service.dart';
 
 /// Pantalla de importación de figuritas recibidas por el compartir nativo de
-/// Android (ACTION_SEND / ACTION_SEND_MULTIPLE).
+/// Android (ACTION_SEND / ACTION_SEND_MULTIPLE / ACTION_VIEW).
 ///
 /// Muestra las previsualizaciones validadas, permite nombrar el paquete y
 /// exige confirmación antes de añadir a la colección. Los archivos inválidos
 /// o incompatibles se aíslan y se rechazan con un mensaje amigable — nada se
 /// importa sin pulsar "AÑADIR".
+///
+/// Un paquete `.wastickers` (ZIP) llega ya extraído por el nativo con su
+/// título/autor/capa; las imágenes sueltas funcionan igual sin metadatos.
 class StickerImportScreen extends StatefulWidget {
   const StickerImportScreen({super.key, required this.title});
 
@@ -30,7 +34,7 @@ class StickerImportScreen extends StatefulWidget {
 }
 
 class _StickerImportScreenState extends State<StickerImportScreen> {
-  late final Future<List<ValidatedStickerFile>?> _validation;
+  late final Future<_ImportData?> _validation;
 
   final TextEditingController _nameCtrl = TextEditingController();
   final Map<String, String> _invalidReasons = {};
@@ -49,31 +53,49 @@ class _StickerImportScreenState extends State<StickerImportScreen> {
     super.dispose();
   }
 
-  Future<List<ValidatedStickerFile>?> _validateAll() async {
-    final files = await ShareStickerService.instance.currentFiles();
-    if (files == null || files.isEmpty) return null;
+  Future<_ImportData?> _validateAll() async {
+    final batch = await ShareStickerService.instance.currentBatch();
+    if (batch == null) return null;
+    if (batch.kind == SharedBatchKind.error) {
+      return _ImportData(
+        kind: SharedBatchKind.error,
+        stickers: const [],
+        error: batch.error,
+      );
+    }
     final results = <ValidatedStickerFile>[];
-    for (final f in files) {
+    for (final f in batch.stickers) {
       final v = await StickerImportValidator.validate(
         File(f.path),
         invalidReasons: _invalidReasons,
       );
       if (v != null) results.add(v);
     }
-    return results;
+    return _ImportData(
+      kind: batch.kind,
+      stickers: results,
+      coverPath: batch.coverPath,
+      author: batch.author,
+      rejectedByNative: batch.rejected,
+    );
   }
 
   Future<void> _import() async {
     final validated = await _validation;
-    if (validated == null || validated.isEmpty || _importing) return;
+    if (validated == null ||
+        validated.kind == SharedBatchKind.error ||
+        validated.stickers.isEmpty ||
+        _importing) {
+      return;
+    }
     setState(() => _importing = true);
 
     try {
-      final counts = await _doImport(validated);
+      final counts = await _doImport(validated.stickers);
       if (!mounted) return;
       final messenger = ScaffoldMessenger.of(context);
       final navigator = Navigator.of(context);
-      ShareStickerService.instance.clearCurrent();
+      _cleanupTemporaries();
       messenger.showSnackBar(
         SnackBar(
           content: Text(
@@ -108,6 +130,18 @@ class _StickerImportScreenState extends State<StickerImportScreen> {
     return state.importSharedStickers(name: name, stickers: files);
   }
 
+  /// Consume el lote y elimina los temporales del compartir (éxito o
+  /// cancelación) — nunca se dejan copias del contenido externo.
+  void _cleanupTemporaries() {
+    ShareStickerService.instance.clearCurrent();
+    unawaited(ShareStickerService.instance.cleanupTemporaries());
+  }
+
+  void _cancel() {
+    _cleanupTemporaries();
+    Navigator.of(context).maybePop();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -116,37 +150,48 @@ class _StickerImportScreenState extends State<StickerImportScreen> {
         backgroundColor: AppColors.bluishBlack,
         leading: IconButton(
           icon: Icon(Icons.close_rounded, color: AppColors.holographicBlue),
-          onPressed: () {
-            ShareStickerService.instance.clearCurrent();
-            Navigator.of(context).maybePop();
-          },
+          onPressed: _cancel,
           tooltip: 'Cancelar',
         ),
         title: const HudLabel(text: 'IMPORTAR STICKERS'),
         centerTitle: true,
       ),
       body: SafeArea(
-        child: FutureBuilder<List<ValidatedStickerFile>?>(
+        child: FutureBuilder<_ImportData?>(
           future: _validation,
           builder: (context, snapshot) {
             if (snapshot.connectionState != ConnectionState.done) {
               return const Center(
-              child: HudLabel(text: 'VALIDANDO ARCHIVOS...', dot: true),
-            );
+                child: HudLabel(text: 'VALIDANDO ARCHIVOS...', dot: true),
+              );
             }
-            final validated = snapshot.data ?? const <ValidatedStickerFile>[];
-            if (validated.isEmpty) {
+            final data = snapshot.data;
+            if (data == null) {
+              return _NoValidStickers(
+                invalidCount: _invalidReasons.length,
+                message: 'No se recibió ningún archivo de figura.',
+              );
+            }
+            if (data.kind == SharedBatchKind.error) {
+              return _NoValidStickers(
+                invalidCount: 0,
+                message: data.error ??
+                    'O conteúdo compartilhado não é compatível com o MATRIX.',
+              );
+            }
+            if (data.stickers.isEmpty) {
               return _NoValidStickers(invalidCount: _invalidReasons.length);
             }
-            return _buildImportBody(validated);
+            return _buildImportBody(data);
           },
         ),
       ),
     );
   }
 
-  Widget _buildImportBody(List<ValidatedStickerFile> validated) {
-    final invalidCount = _invalidReasons.length;
+  Widget _buildImportBody(_ImportData data) {
+    final invalidCount = _invalidReasons.length + data.rejectedByNative;
+    final cover = _resolveCover(data);
     return Column(
       children: [
         Expanded(
@@ -155,10 +200,10 @@ class _StickerImportScreenState extends State<StickerImportScreen> {
             children: [
               Row(
                 children: [
-              HudLabel(
-                    text: validated.length == 1
+                  HudLabel(
+                    text: data.stickers.length == 1
                         ? '1 FIGURITA ENCONTRADA'
-                        : '${validated.length} FIGURITAS ENCONTRADAS',
+                        : '${data.stickers.length} FIGURITAS ENCONTRADAS',
                     color: AppColors.electricBlue,
                   ),
                   const Spacer(),
@@ -169,7 +214,43 @@ class _StickerImportScreenState extends State<StickerImportScreen> {
                     ),
                 ],
               ),
+              if (data.kind == SharedBatchKind.pack && data.author.isNotEmpty) ...[
+                const SizedBox(height: AppDimensions.spaceSm),
+                HudLabel(text: 'POR ${data.author.toUpperCase()}'),
+              ],
               const SizedBox(height: AppDimensions.spaceLg),
+              if (cover != null) ...[
+                Row(
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
+                      child: ColoredBox(
+                        color: AppColors.nightBlue,
+                        child: SizedBox(
+                          width: 72,
+                          height: 72,
+                          child: Image.file(
+                            File(cover),
+                            fit: BoxFit.contain,
+                            errorBuilder: (_, __, ___) => const Icon(
+                              Icons.broken_image_outlined,
+                              color: AppColors.error,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: AppDimensions.spaceMd),
+                    Expanded(
+                      child: Text(
+                        'Capa del paquete',
+                        style: AppTextStyles.bodyMuted,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: AppDimensions.spaceLg),
+              ],
               GridView.builder(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
@@ -179,9 +260,9 @@ class _StickerImportScreenState extends State<StickerImportScreen> {
                   crossAxisSpacing: AppDimensions.spaceSm,
                   childAspectRatio: 1,
                 ),
-                itemCount: validated.length,
+                itemCount: data.stickers.length,
                 itemBuilder: (context, index) {
-                  final v = validated[index];
+                  final v = data.stickers[index];
                   return ClipRRect(
                     borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
                     child: ColoredBox(
@@ -190,32 +271,32 @@ class _StickerImportScreenState extends State<StickerImportScreen> {
                         v.file,
                         fit: BoxFit.contain,
                         errorBuilder: (_, __, ___) => const Icon(
-                        Icons.broken_image_outlined,
-                        color: AppColors.error,
-                      ),
+                          Icons.broken_image_outlined,
+                          color: AppColors.error,
+                        ),
                       ),
                     ),
                   );
                 },
               ),
               if (invalidCount > 0) ...[
-                  const SizedBox(height: AppDimensions.spaceLg),
-                  Text(
-                    'Archivos que no son imágenes PNG, WebP o JPEG (o que '
-                    'están corruptos/más de 5 MB):',
-                    style: AppTextStyles.bodyMuted,
-                  ),
-                  const SizedBox(height: AppDimensions.spaceSm),
-                  ..._invalidReasons.entries.map(
-                    (e) => Padding(
-                      padding: const EdgeInsets.only(bottom: 4),
-                      child: Text(
-                        '• ${e.value}',
-                        style: AppTextStyles.bodyMuted,
-                      ),
+                const SizedBox(height: AppDimensions.spaceLg),
+                Text(
+                  'Archivos que no son imágenes PNG, WebP o JPEG (o que '
+                  'están corruptos/más de 5 MB):',
+                  style: AppTextStyles.bodyMuted,
+                ),
+                const SizedBox(height: AppDimensions.spaceSm),
+                ..._invalidReasons.entries.map(
+                  (e) => Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Text(
+                      '• ${e.value}',
+                      style: AppTextStyles.bodyMuted,
                     ),
                   ),
-                ],
+                ),
+              ],
             ],
           ),
         ),
@@ -286,12 +367,42 @@ class _StickerImportScreenState extends State<StickerImportScreen> {
       ],
     );
   }
+
+  /// La capa del paquete si el nativo la extrajo y sigue existiendo.
+  String? _resolveCover(_ImportData data) {
+    final cover = data.coverPath;
+    if (cover == null || cover.isEmpty) return null;
+    return File(cover).existsSync() ? cover : null;
+  }
+}
+
+/// Datos validados que alimentan la pantalla.
+class _ImportData {
+  const _ImportData({
+    required this.kind,
+    required this.stickers,
+    this.coverPath,
+    this.author = '',
+    this.rejectedByNative = 0,
+    this.error,
+  });
+
+  final SharedBatchKind kind;
+  final List<ValidatedStickerFile> stickers;
+  final String? coverPath;
+  final String author;
+  final int rejectedByNative;
+  final String? error;
 }
 
 class _NoValidStickers extends StatelessWidget {
-  const _NoValidStickers({required this.invalidCount});
+  const _NoValidStickers({
+    required this.invalidCount,
+    this.message,
+  });
 
   final int invalidCount;
+  final String? message;
 
   @override
   Widget build(BuildContext context) {
@@ -314,10 +425,11 @@ class _NoValidStickers extends StatelessWidget {
             ),
             const SizedBox(height: AppDimensions.spaceSm),
             Text(
-              invalidCount > 0
-                  ? 'Los archivos recibidos no son imágenes PNG, WebP o JPEG '
-                      'válidas (o exceden 5 MB).'
-                  : 'No se recibió ningún archivo de figura.',
+              message ??
+                  (invalidCount > 0
+                      ? 'Los archivos recibidos no son imágenes PNG, WebP o '
+                          'JPEG válidas (o exceden 5 MB).'
+                      : 'No se recibió ningún archivo de figura.'),
               textAlign: TextAlign.center,
               style: AppTextStyles.bodyMuted,
             ),
@@ -327,6 +439,7 @@ class _NoValidStickers extends StatelessWidget {
               variant: MatrixButtonVariant.outline,
               onPressed: () {
                 ShareStickerService.instance.clearCurrent();
+                unawaited(ShareStickerService.instance.cleanupTemporaries());
                 Navigator.of(context).maybePop();
               },
             ),

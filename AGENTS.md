@@ -63,20 +63,52 @@ Or just `docker compose up -d --build`.
   VÍDEO + badge de play enquanto não há capa.
 
 ## Stickers — compartilhar Android (importação)
-- O app recebe figuritas via `ACTION_SEND` / `ACTION_SEND_MULTIPLE` de imagens
-  (PNG/WebP/JPEG). O `MainActivity` (Kotlin) copia os `content://` para o
-  cache e entrega ao Flutter pelo MethodChannel `matrix.share/stickers`
+- O app recebe figuritas via `ACTION_SEND` / `ACTION_SEND_MULTIPLE` / `VIEW`.
+  O `MainActivity` (Kotlin) copia/extrai o conteúdo para o cache e entrega ao
+  Flutter pelo MethodChannel `matrix.share/stickers`
   (`data/share_sticker_service.dart`). Não criar um segundo fluxo de entrada.
-- A validação real dos bytes acontece em
+
+### Formato REAL do WhatsApp (importante)
+- Compartilhar um PACOTE de figurinhas NÃO envia várias imagens: o WhatsApp
+  manda UM arquivo `.wastickers` — um **ZIP** com os `.webp`/`.png`, um
+  ícone de bandeja e um `contents.json` (título/autor). MIME típico:
+  `application/vnd.wastickers`, `application/octet-stream` ou `application/*`.
+  Por isso o `AndroidManifest.xml` registra os filtros com `image/*`,
+  `application/*` e `*/*` (e `VIEW` p/ os MIME `*wastickers`).
+- `WastickersParser.kt` (Kotlin PURO de JVM) abre o ZIP: valida path
+  traversal, limita a 60 figurinhas / 5 MB por arquivo / 30 MB total, lê
+  título/autor e separa capa. Testes JVM: `android/app/src/test/...` →
+  `./gradlew :app:testDebugUnitTest` (8 testes). Lógica pura para poder
+  testar sem emulador.
+- Figurinha única continua sendo `image/*` (copiada direto).
+
+### Instância única (o bug das janelas infinitas)
+- `launchMode="singleTop"` + **SEM** `android:taskAffinity`. Aquele
+  `taskAffinity=""` (mitigação StrandHogg) dava à activity SEM afinidade, logo
+  ela nunca entrava na task padrão do app — cada lançamento criava uma task
+  nova ("MatrixApp → MatrixApp → …"). Não reintroduzir.
+- Share com app aberto chega por `onNewIntent` (mesma instância); processo
+  frio por `onCreate` + consulta `initialSharedBatch` no arranque.
+- Dedupe: assinatura do intent + `consumeIntent` (limpa `EXTRA_STREAM`/
+  `ClipData`) no nativo; `batchId` no Dart (`ShareStickerService`) evita
+  reentrega em recriações. O `initialSharedBatch` responde DEPOIS do lote
+  ficar pronto (deferred result) quando o share chega antes do Flutter.
+
+### Validação / UI / limpeza
+- `EXTRA_STREAM` E `ClipData` são lidos; a validação dos bytes continua em
   `core/utils/sticker_import_validator.dart` (magic bytes + dimensões +
-  SHA-256). Arquivos inválidos são descartados com mensagem amigável.
-- A importação é SEMPRE confirmada pelo usuário na `StickerImportScreen`
-  (rota `AppRoutes.stickerImport`, em `features/stickers/`). Só depois os
-  arquivos são enviados pelo sistema de uploads existente e criados com
-  `POST /api/stickers/import` (o servidor deduplica por hash).
-- Navegação: app aberto → listener em `app/app.dart`; processo frio →
-  consulta `initialFiles()` no arranque. Após importar/cancelar,
-  `ShareStickerService.clearCurrent()` evita reprocessamento.
+  SHA-256). Arquivos inválidos → mensagem amigável (nunca silêncio).
+- A importação é SEMPRE confirmada na `StickerImportScreen`
+  (`AppRoutes.stickerImport`): mostra capa/nome/autor/quantidade quando o
+  pacote os traz e usa defaults quando não. O upload
+  (`AppState.importSharedStickers`) envia o MIME/extensão REAIS (validados)
+  porque o servidor só aceita PNG/JPG/WebP — sem isso um temp sem extensão
+  iria como `application/octet-stream` e seria recusado.
+- Temporários: o nativo limpa `<cacheDir>/shared_stickers` no início do
+  processo; o Dart (`ShareStickerService.cleanupTemporaries`) limpa no
+  import/cancelar. Nunca toca a coleção do usuário.
+- O resultado é criado com `POST /api/stickers/import` (dedupe por hash no
+  servidor) — servidor NÃO precisou mudar.
 
 ## Architecture — Server
 The backend lives in the separate repo `Souzzaaxzy/ServidorMtx`. Key points

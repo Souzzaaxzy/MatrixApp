@@ -1015,8 +1015,26 @@ class UploadRepository {
   final ApiClient _api;
 
   /// Uploads an image file and returns the public URL.
-  Future<String> upload(File file) async {
-    final multipart = await MultipartFile.fromFile(file.path);
+  ///
+  /// [contentType]/[filename] let the caller declare the REAL format (p. ej.
+  /// 'image/webp' + 'sticker.webp') — sticker imports may come from
+  /// extensionless temp files (`stickers-1234.img`), which Dio would send as
+  /// application/octet-stream and the server would reject (it only accepts
+  /// PNG/JPG/WebP by extension + magic bytes).
+  Future<String> upload(
+    File file, {
+    String? contentType,
+    String? filename,
+  }) async {
+    final multipart = await MultipartFile.fromFile(
+      file.path,
+      filename: filename ??
+          (file.uri.pathSegments.isNotEmpty
+              ? file.uri.pathSegments.last
+              : null),
+      contentType:
+          contentType != null ? DioMediaType.parse(contentType) : null,
+    );
     final json = await _api.upload<Map<String, dynamic>>(
       '/api/uploads',
       file: multipart,
