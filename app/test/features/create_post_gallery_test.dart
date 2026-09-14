@@ -22,17 +22,17 @@ void main() {
         (tester) async {
       await pumpMatrixApp(tester, const CreatePostScreen());
 
-      // One unified media button (📷 Foto/Vídeo) — no photo vs video split.
+      // One unified media button (Galeria) — photo OR video in a single step.
 
-      expect(find.textContaining('FOTO/VÍDEO'), findsOneWidget);
+      expect(find.textContaining('GALERIA'), findsOneWidget);
 
       // Open the gallery (fake picks a file) → preview replaces the button.
 
-      await tester.tap(find.textContaining('FOTO/VÍDEO'));
+      await tester.tap(find.textContaining('GALERIA'));
       await tester.pumpAndSettle();
 
       expect(fake.pickCount, 1);
-      expect(find.textContaining('FOTO/VÍDEO'), findsNothing);
+      expect(find.textContaining('GALERIA'), findsNothing);
       expect(find.text('Remover imagem'), findsOneWidget);
 
       // Removing it restores the unified button (so media can be replaced).
@@ -41,7 +41,7 @@ void main() {
       await tester.tap(find.text('Remover imagem'));
       await tester.pump();
 
-      expect(find.textContaining('FOTO/VÍDEO'), findsOneWidget);
+      expect(find.textContaining('GALERIA'), findsOneWidget);
     });
 
     testWidgets('gallery opens and picking is stable (no crash on cancel)',
@@ -49,12 +49,12 @@ void main() {
       fake.pickedImagePath = null; // simulate user cancelling the picker
       await pumpMatrixApp(tester, const CreatePostScreen());
 
-      await tester.tap(find.textContaining('FOTO/VÍDEO'));
+      await tester.tap(find.textContaining('GALERIA'));
       await tester.pumpAndSettle();
 
       // Cancel keeps the screen intact and the unified button available.
       expect(find.text('Remover imagem'), findsNothing);
-      expect(find.textContaining('FOTO/VÍDEO'), findsOneWidget);
+      expect(find.textContaining('GALERIA'), findsOneWidget);
     });
   });
 }

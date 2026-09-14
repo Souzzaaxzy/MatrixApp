@@ -13,6 +13,7 @@ import '../../core/widgets/app_state_scope.dart';
 import '../../core/widgets/hud_label.dart';
 import '../../core/widgets/matrix_button.dart';
 import '../../core/widgets/matrix_text_field.dart';
+import '../../core/widgets/mention_composer_controller.dart';
 import '../../core/widgets/user_avatar.dart';
 import '../../data/api_config.dart';
 import '../../data/dtos/dtos.dart';
@@ -51,7 +52,17 @@ class _GroupConversationScreenState extends State<GroupConversationScreen>
   int _groupMemberCount = 0;
   StreamSubscription<GroupUpdatedEvent>? _groupSub;
 
-  final TextEditingController _input = TextEditingController();
+  /// Tracks the draft mentions of the CURRENT composer text. Each draft is
+  /// anchored to the exact "@Nickname"/"@todos" token range and survives
+  /// edits ONLY while that token stays byte-identical; any edit touching it
+  /// destroys the mention forever (no restore on reverting the text).
+  final MentionDraftTracker _mentionTracker = MentionDraftTracker();
+
+  /// Composer whose VISIBLE text bolds the still-valid mention tokens while
+  /// keeping the underlying value plain text (the mention/ranges system is
+  /// untouched — only the visual layer changes).
+  late final MentionComposerController _input = MentionComposerController(
+      getMentions: () => _mentionTracker.drafts);
   final FocusNode _inputFocus = FocusNode();
   final ScrollController _scroll = ScrollController();
   final List<ChatMessage> _messages = [];
@@ -104,12 +115,6 @@ class _GroupConversationScreenState extends State<GroupConversationScreen>
   /// Whether the inline suggestion bar is currently visible above the
   /// composer. Driven by the composer text + keyboard focus; never a modal.
   bool _showMentionSuggestions = false;
-
-  /// Tracks the draft mentions of the CURRENT composer text. Each draft is
-  /// anchored to the exact "@Nickname"/"@todos" token range and survives
-  /// edits ONLY while that token stays byte-identical; any edit touching it
-  /// destroys the mention forever (no restore on reverting the text).
-  final MentionDraftTracker _mentionTracker = MentionDraftTracker();
 
   /// Last composer value seen by [_onComposerChanged] (diff baseline).
   String _lastComposerText = '';
@@ -659,6 +664,7 @@ class _GroupConversationScreenState extends State<GroupConversationScreen>
       if (current.substring(d.start, d.end) != d.expectedToken()) continue;
       _mentionTracker.insert(d);
     }
+    _input.refresh();
   }
 
   ChatMention _shiftMention(ChatMention m, int delta) => ChatMention(
@@ -1027,6 +1033,8 @@ class _GroupConversationScreenState extends State<GroupConversationScreen>
     final prev = _lastComposerText;
     _lastComposerText = value;
     _mentionTracker.applyEdit(prev, value);
+    // The composer's visible text bolds the surviving mention tokens.
+    _input.refresh();
     _updateMentionState(value);
   }
 
@@ -1167,6 +1175,9 @@ class _GroupConversationScreenState extends State<GroupConversationScreen>
             all: false,
           ));
       }
+      // Rebuild the composer's visual text: the freshly inserted mention must
+      // appear in bold right away.
+      _input.refresh();
     });
   }
 

@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:matrix_app/core/services/app_state.dart';
@@ -373,6 +374,63 @@ void main() {
       // Friendship removed on the server and the button returns to SOLICITAR.
       expect(seeded.repos.store.friendships.contains('u0|u2'), isFalse);
       expect(find.text('SOLICITAR'), findsOneWidget);
+    });
+  });
+
+  group('video tiles in the profile grid', () {
+    Future<AppState> seededVideoPost({
+      String? thumbnailUrl,
+      String? videoUrl = 'https://fake.matrix.app/v/legacy.mp4',
+    }) async {
+      final repos = FakeRepositories();
+      repos.store.posts = [
+        Post(
+          id: 'v1',
+          authorId: 'u0',
+          authorNickname: 'leonardo',
+          text: 'meu vídeo',
+          createdAt: DateTime(2024, 1, 1),
+          videoUrl: videoUrl,
+          thumbnailUrl: thumbnailUrl,
+          likes: 1,
+          liked: false,
+          comments: const [],
+        ),
+      ];
+      final state = AppState(repositories: repos);
+      await state.restoreSession();
+      await state.loadFeed();
+      return state;
+    }
+
+    testWidgets(
+        'old video without cover: shows the video placeholder (never a blank frame)',
+        (tester) async {
+      final state = await seededVideoPost();
+      await pumpMatrixApp(
+          tester, const ProfileScreen(), state: state);
+      await tester.pump(const Duration(milliseconds: 400));
+
+      // The tile is clearly identified as a video even without a cover.
+      expect(find.text('VÍDEO'), findsOneWidget);
+      expect(find.byIcon(Icons.videocam_rounded), findsOneWidget);
+      // The play affordance stays coherent with the rest of the app.
+      expect(find.byIcon(Icons.play_circle_outline_rounded), findsOneWidget);
+    });
+
+    testWidgets('new video with cover: uses the persisted thumbnail',
+        (tester) async {
+      final state = await seededVideoPost(
+        videoUrl: 'https://fake.matrix.app/v/new.mp4',
+        thumbnailUrl: '/static/capa_v1.jpg',
+      );
+      await pumpMatrixApp(
+          tester, const ProfileScreen(), state: state);
+      await tester.pump(const Duration(milliseconds: 400));
+
+      // The server cover is preferred and the play affordance remains.
+      expect(find.byType(CachedNetworkImage), findsOneWidget);
+      expect(find.byIcon(Icons.play_circle_outline_rounded), findsOneWidget);
     });
   });
 }

@@ -496,6 +496,72 @@ void main() {
       expect(sent.mentions, isEmpty);
       expect(sent.mentionAll, isFalse);
     });
+
+    testWidgets('menção selecionada aparece em NEGRITO no composer',
+        (tester) async {
+      final state = await seededGroup(withCarla: true);
+      await pumpMatrixApp(tester, groupScreen(), state: state);
+      await tester.pumpAndSettle();
+
+      // Select joao.
+
+      await tester.enterText(find.byType(TextField).last, '@');
+      await tester.pumpAndSettle();
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('joao').first);
+      await tester.pumpAndSettle();
+
+      // The composer text is still plain — ONLY the visual spans bold the
+      // mention token,and everything around it stays normal.
+
+      final field = tester.widget<TextField>(find.byType(TextField).last);
+      final controller = field.controller!;
+      expect(controller.text, contains('@joao '));
+
+      final span = controller.buildTextSpan(
+        context: tester.element(find.byType(TextField).last),
+        style: const TextStyle(fontSize: 15),
+        withComposing: false,
+      );
+      final bold = <String>[];
+      final plain = <String>[];
+      span.visitChildren((child) {
+        if (child is TextSpan) {
+          if (child.style?.fontWeight == FontWeight.w800) {
+            bold.add(child.text ?? '');
+          } else {
+            plain.add(child.text ?? '');
+          }
+        }
+        return true;
+      });
+      // ONLY "@joao" is bolded — normal text before/after keeps its style.
+
+      expect(bold, ['@joao']);
+      expect(plain.any((t) => t.contains('@joao')), isFalse);
+
+      // Even after typing more text AFTER the mention (incremental caret
+      // append — the token range itself is untouched), it stays bold.
+      await tester.enterText(find.byType(TextField).last, '@joao tudo bem?');
+      await tester.pumpAndSettle();
+      final rebuilt = tester
+          .widget<TextField>(find.byType(TextField).last)
+          .controller!
+          .buildTextSpan(
+            context: tester.element(find.byType(TextField).last),
+            style: const TextStyle(fontSize: 15),
+            withComposing: false,
+          );
+      final bold2 = <String>[];
+      rebuilt.visitChildren((child) {
+        if (child is TextSpan && child.style?.fontWeight == FontWeight.w800) {
+          bold2.add(child.text ?? '');
+        }
+        return true;
+      });
+      // ONLY the mention token is bold — surrounding normal text never is.
+      expect(bold2, ['@joao']);
+    });
   });
 
   testWidgets('lista de chats mostra o indicador "@" quando mencionado',

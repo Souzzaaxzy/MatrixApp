@@ -42,6 +42,26 @@ Or just `docker compose up -d --build`.
 - `models/` — Post, MatrixUser, Comment, AkameMessage.
 - State: `AppState` (ChangeNotifier) via `AppStateScope` (InheritedNotifier).
 
+## Conversa em grupo — menção em negrito no composer
+- O composer de grupo usa `MentionComposerController`
+  (`core/widgets/mention_composer_controller.dart`) — um
+  `TextEditingController` cujo `buildTextSpan` renderiza EM NEGRITO apenas os
+  tokens de menção ainda válidos (`@Nickname`/`@todos`), enquanto o valor
+  subjacente continua TEXTO PLANO (parsing/ranges/envio/servidor intactos). O
+  texto ao redor da menção nunca fica em negrito.
+- Hook: `getMentions` aponta para `_mentionTracker.drafts`; chamar
+  `_input.refresh()` SEMPRE que o tracker mudar sem mudança de texto
+  (`applyEdit`, `_insertMention`, `_restoreMentions`).
+
+## Vídeos antigos — capa gerada sob demanda
+- Vídeos NOVOS já geram capa no create_post (`video_thumbnail`) e persistem
+  `thumbnailUrl` (server). Vídeos ANTIGOS (sem `thumbnailUrl`) recebem a capa
+  via `core/services/video_cover_service.dart`: extrai 1 frame da URL com o
+  MESMO plugin `video_thumbnail`, UMA vez por URL (cache em memória + disco em
+  `getTemporaryDirectory()`), extrações SERIALIZADAS (uma por vez), falha vira
+  "sem capa" na sessão. O tile do perfil (`_VideoThumb`) mostra placeholder
+  VÍDEO + badge de play enquanto não há capa.
+
 ## Stickers — compartilhar Android (importação)
 - O app recebe figuritas via `ACTION_SEND` / `ACTION_SEND_MULTIPLE` de imagens
   (PNG/WebP/JPEG). O `MainActivity` (Kotlin) copia os `content://` para o

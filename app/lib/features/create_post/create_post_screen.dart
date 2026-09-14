@@ -42,7 +42,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
   }
 
   /// Unified media picker: ONE button opens the gallery and the user picks a
-  /// photo OR a video directly (no prior Foto/Vídeo step). The type is
+  /// photo OR a video directly (no prior step). The type is
   /// detected from the file; for videos a cover/thumbnail is generated.
   Future<void> _pickMedia() async {
     final result = await pickGalleryMedia();
@@ -274,7 +274,7 @@ class _CreatePostScreenState extends State<CreatePostScreen> {
                   ),
                 ] else
                   MatrixButton(
-                    label: '📷 Foto/Vídeo',
+                    label: 'Galeria',
                     icon: Icons.photo_library_outlined,
                     variant: MatrixButtonVariant.outline,
                     expanded: true,

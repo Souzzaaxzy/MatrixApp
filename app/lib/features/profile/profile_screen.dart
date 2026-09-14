@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/gestures.dart' show LongPressGestureRecognizer;
 import 'package:flutter/material.dart';
@@ -6,6 +8,7 @@ import '../../app/routes.dart';
 import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_dimensions.dart';
 import '../../app/theme/app_text_styles.dart';
+import '../../core/services/video_cover_service.dart';
 import '../../core/utils/profile_navigation.dart';
 import '../../core/widgets/nickname_renderer.dart';
 import '../../core/widgets/app_state_scope.dart';
@@ -650,17 +653,63 @@ class _ProfilePostTile extends StatelessWidget {
   }
 }
 
-/// Square grid tile for VIDEO posts in the profile grid: shows the video
-/// COVER when available (crisp, no empty space), otherwise a dark fallback —
-/// always with a play badge so the media reads as a video.
-class _VideoThumb extends StatelessWidget {
+/// Square grid tile for VIDEO posts in the profile grid.
+///
+/// * With a persisted [Post.thumbnailUrl] → the server cover (crisp, no
+///   empty space), same as the feed.
+/// * Old videos without a cover → the [VideoCoverService] lazily builds one
+///   from the same `video_thumbnail` pipeline the create-post flow uses
+///   (once per URL, cached) while the tile shows a clear video placeholder.
+/// * Always a play badge so the media reads as a video.
+class _VideoThumb extends StatefulWidget {
   const _VideoThumb(this.post);
 
   final Post post;
 
   @override
-  Widget build(BuildContext context) {
+  State<_VideoThumb> createState() => _VideoThumbState();
+}
+
+class _VideoThumbState extends State<_VideoThumb> {
+  Uint8List? _lazyCover;
+  String? _lazyVideoUrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _maybeLoadLazyCover();
+  }
+
+  @override
+  void didUpdateWidget(covariant _VideoThumb oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.post.videoUrl != widget.post.videoUrl ||
+        oldWidget.post.thumbnailUrl != widget.post.thumbnailUrl) {
+      _lazyCover = null;
+      _maybeLoadLazyCover();
+    }
+  }
+
+  /// Only OLD videos (no persisted cover) get a lazily built cover — new
+  /// videos use [Post.thumbnailUrl] directly and never hit this path.
+  void _maybeLoadLazyCover() {
+    final post = widget.post;
     final cover = post.thumbnailUrl;
+    if (cover != null && cover.isNotEmpty) return;
+    final video = post.videoUrl;
+    if (video == null || video.isEmpty) return;
+    final resolved = ApiConfig.resolveUrl(video);
+    if (resolved == _lazyVideoUrl && _lazyCover != null) return;
+    _lazyVideoUrl = resolved;
+    VideoCoverService.instance.coverFor(resolved).then((bytes) {
+      if (!mounted) return;
+      setState(() => _lazyCover = bytes);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cover = widget.post.thumbnailUrl;
     return Stack(
       fit: StackFit.expand,
       children: [
@@ -668,11 +717,20 @@ class _VideoThumb extends StatelessWidget {
           CachedNetworkImage(
             imageUrl: ApiConfig.resolveUrl(cover),
             fit: BoxFit.cover,
-            placeholder: (_, __) => _darkBackdrop(),
-            errorWidget: (_, __, ___) => _darkBackdrop(),
+            placeholder: (_, __) => _videoPlaceholder(),
+            errorWidget: (_, __, ___) => _videoPlaceholder(),
+          )
+        else if (_lazyCover != null)
+          // Lazily generated cover for old videos. Image.memory — the bytes
+          // are already downloaded by the service; gapless so the tile never
+          // flashes while they resolve.
+          Image.memory(
+            _lazyCover!,
+            fit: BoxFit.cover,
+            gaplessPlayback: true,
           )
         else
-          _darkBackdrop(),
+          _videoPlaceholder(),
         Center(
           child: Icon(Icons.play_circle_outline_rounded,
               color: AppColors.holographicBlue, size: 34),
@@ -681,5 +739,24 @@ class _VideoThumb extends StatelessWidget {
     );
   }
 
-  Widget _darkBackdrop() => Container(color: AppColors.nightBlue);
+  /// Clear video identification (works in both themes): an icon + label so a
+  /// video without a cover never looks like an empty/black frame. Auto-adapts
+  /// through AppColors' active palette.
+  Widget _videoPlaceholder() {
+    return Container(
+      color: AppColors.nightBlue,
+      alignment: Alignment.center,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.videocam_rounded,
+              color: AppColors.holographicBlue, size: 26),
+          const SizedBox(height: 6),
+          Text('VÍDEO',
+              style: AppTextStyles.hud
+                  .copyWith(color: AppColors.holographicBlue)),
+        ],
+      ),
+    );
+  }
 }
