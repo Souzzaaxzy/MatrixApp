@@ -105,7 +105,7 @@ class VideoCoverService {
   Future<Uint8List?> _readCache(String videoUrl) async {
     try {
       final file = await _cacheFile(videoUrl);
-      if (file.existsSync()) return file.readAsBytes();
+      if (file.existsSync()) return await file.readAsBytes();
     } catch (_) {}
     return null;
   }
