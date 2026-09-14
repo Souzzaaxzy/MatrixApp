@@ -110,6 +110,9 @@ class FakeStore {
   /// Sticker recents (fake, newest first).
   final List<Sticker> stickerRecents = [];
 
+  /// Hashes SHA-256 de figuritas ya importadas (dedupe simulada del server).
+  final Set<String> importedStickerHashes = {};
+
   /// Group messages by group id (fake persistence).
   late final Map<String, List<ChatMessage>> groupMessagesById = {};
 
@@ -1608,4 +1611,53 @@ class _FakeStickerRepository implements StickerRepository {
       ..removeWhere((s) => s.id == stickerId)
       ..insert(0, source);
   }
+
+  @override
+  Future<({int created, int skipped})> importPackage(
+    String name,
+    List<Map<String, dynamic>> stickers,
+  ) async {
+    if (stickers.isEmpty) return (created: 0, skipped: 0);
+    var created = 0;
+    var skipped = 0;
+    final newStickers = <Sticker>[];
+    for (final item in stickers) {
+      final hash = item['hash'] as String? ?? '';
+      if (hash.isNotEmpty && _importedHashes.contains(hash)) {
+        skipped++;
+        continue;
+      }
+      if (hash.isNotEmpty) _importedHashes.add(hash);
+      newStickers.add(Sticker(
+        id: 'shared_$created',
+        packageId: '',
+        order: created,
+        fileUrl: item['url'] as String,
+        width: (item['width'] as num?)?.toInt(),
+        height: (item['height'] as num?)?.toInt(),
+      ));
+      created++;
+    }
+    if (newStickers.isNotEmpty) {
+      final pkg = StickerPackage(
+        id: 'shared_pkg',
+        name: name.isNotEmpty ? name : 'Meus stickers',
+        slug: 'compartilhados-fake',
+        description: 'Importado do compartilhamento.',
+        author: 'MATRIX',
+        iconUrl: newStickers.first.fileUrl,
+        installed: true,
+        stickerCount: newStickers.length,
+        stickers: newStickers,
+      );
+      _store.stickerPackages.insert(0, pkg);
+      _store.stickerFavorites.clear();
+    }
+    return (created: created, skipped: skipped);
+  }
+}
+
+/// Hashes já importados (simula a dedupe do servidor para testes).
+extension _FakeStickerRepoHashes on _FakeStickerRepository {
+  Set<String> get _importedHashes => _store.importedStickerHashes;
 }

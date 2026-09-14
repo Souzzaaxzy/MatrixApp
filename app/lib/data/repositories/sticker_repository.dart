@@ -76,4 +76,23 @@ class StickerRepository {
   Future<void> markRecent(String stickerId) async {
     await _api.post('/api/stickers/$stickerId/recent');
   }
+
+  /// Importa un lote de figuritas procedentes del compartir de Android.
+  ///
+  /// Los archivos ya fueron subidos por el sistema de uploads existente; aquí
+  /// se crea un paquete del usuario (con dedupe por hash en el servidor) y se
+  /// devuelven las cantidades creadas/omitidas.
+  Future<({int created, int skipped})> importPackage(
+    String name,
+    List<Map<String, dynamic>> stickers,
+  ) async {
+    final json = await _api.post<Map<String, dynamic>>(
+      '/api/stickers/import',
+      data: {'name': name, 'stickers': stickers},
+    );
+    return (
+      created: (json['created'] as num?)?.toInt() ?? 0,
+      skipped: (json['skipped'] as num?)?.toInt() ?? 0,
+    );
+  }
 }

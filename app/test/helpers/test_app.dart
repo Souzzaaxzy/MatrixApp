@@ -20,6 +20,7 @@ import 'package:matrix_app/features/post/post_detail_screen.dart';
 import 'package:matrix_app/features/profile/edit_profile_screen.dart';
 import 'package:matrix_app/features/profile/profile_screen.dart';
 import 'package:matrix_app/features/splash/splash_screen.dart';
+import 'package:matrix_app/features/stickers/sticker_import_screen.dart';
 
 import 'fake_repositories.dart';
 
@@ -84,6 +85,10 @@ Future<void> pumpMatrixApp(
             if (args is GroupMembersRouteArgs) return GroupMembersScreen(args: args);
             return const ChatScreen();
           },
+          AppRoutes.stickerImport: (context) => StickerImportScreen(
+                title: (ModalRoute.of(context)!.settings.arguments as String?) ??
+                    '',
+              ),
         },
       ),
     ),

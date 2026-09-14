@@ -42,6 +42,22 @@ Or just `docker compose up -d --build`.
 - `models/` — Post, MatrixUser, Comment, AkameMessage.
 - State: `AppState` (ChangeNotifier) via `AppStateScope` (InheritedNotifier).
 
+## Stickers — compartilhar Android (importação)
+- O app recebe figuritas via `ACTION_SEND` / `ACTION_SEND_MULTIPLE` de imagens
+  (PNG/WebP/JPEG). O `MainActivity` (Kotlin) copia os `content://` para o
+  cache e entrega ao Flutter pelo MethodChannel `matrix.share/stickers`
+  (`data/share_sticker_service.dart`). Não criar um segundo fluxo de entrada.
+- A validação real dos bytes acontece em
+  `core/utils/sticker_import_validator.dart` (magic bytes + dimensões +
+  SHA-256). Arquivos inválidos são descartados com mensagem amigável.
+- A importação é SEMPRE confirmada pelo usuário na `StickerImportScreen`
+  (rota `AppRoutes.stickerImport`, em `features/stickers/`). Só depois os
+  arquivos são enviados pelo sistema de uploads existente e criados com
+  `POST /api/stickers/import` (o servidor deduplica por hash).
+- Navegação: app aberto → listener em `app/app.dart`; processo frio →
+  consulta `initialFiles()` no arranque. Após importar/cancelar,
+  `ShareStickerService.clearCurrent()` evita reprocessamento.
+
 ## Architecture — Server
 The backend lives in the separate repo `Souzzaaxzy/ServidorMtx`. Key points
 for reference when working on the app's data layer:

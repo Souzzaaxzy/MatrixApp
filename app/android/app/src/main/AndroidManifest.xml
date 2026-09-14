@@ -40,6 +40,27 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+            <!--
+              Receber figurinhas por compartilhamento nativo do Android.
+              ACTION_SEND (1 arquivo) e ACTION_SEND_MULTIPLE (vários) de
+              imagens PNG/WebP/JPEG — os formatos aceitos pelo sistema de
+              stickers do MATRIX. O conteúdo real (bytes) é validado no app
+              antes de importar; o filtro apenas torna o MATRIX um destino.
+            -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <data android:mimeType="image/png"/>
+                <data android:mimeType="image/webp"/>
+                <data android:mimeType="image/jpeg"/>
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND_MULTIPLE"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <data android:mimeType="image/png"/>
+                <data android:mimeType="image/webp"/>
+                <data android:mimeType="image/jpeg"/>
+            </intent-filter>
         </activity>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->

@@ -18,6 +18,7 @@ import '../features/profile/edit_profile_screen.dart';
 import '../features/profile/profile_screen.dart';
 import '../features/splash/splash_screen.dart';
 import '../features/chat/chat_navigation.dart';
+import '../features/stickers/sticker_import_screen.dart';
 
 /// Named routes for the MATRIX app.
 class AppRoutes {
@@ -65,6 +66,10 @@ class AppRoutes {
 
   /// Group creation — pushed from the Chat tab's "+" FAB..
   static const String createGroup = '/home/chat/create-group';
+
+  /// Importación de figuritas recibidas por el compartir de Android.
+  /// Argumento (String): título sugerido para el paquete (puede ser vacío).
+  static const String stickerImport = '/home/chat/sticker-import';
 }
 
 /// Single route generator for the entire app. Every route resolves to a
@@ -122,6 +127,8 @@ Widget _buildPage(RouteSettings settings) {
       GroupMembersScreen(args: _groupMembersArgs(settings.arguments)),
     AppRoutes.conversation =>
       ConversationScreen(args: _conversationArgs(settings.arguments)),
+    AppRoutes.stickerImport =>
+      StickerImportScreen(title: (settings.arguments as String?) ?? ''),
     _ => HomeScreen(), // defensive fallback — never a 404 page
   };
 }

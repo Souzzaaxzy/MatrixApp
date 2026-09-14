@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../core/services/app_state.dart';
@@ -5,6 +7,7 @@ import '../core/services/theme_controller.dart';
 import '../core/widgets/app_state_scope.dart';
 import '../data/dtos/dtos.dart';
 import '../data/services.dart';
+import '../data/share_sticker_service.dart';
 import '../features/chat/chat_navigation.dart';
 import '../models/conversation.dart';
 import 'routes.dart';
@@ -22,6 +25,13 @@ class MatrixApp extends StatefulWidget {
 
 class _MatrixAppState extends State<MatrixApp> {
   final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
+  StreamSubscription<List<SharedStickerFile>>? _shareSub;
+
+  @override
+  void dispose() {
+    _shareSub?.cancel();
+    super.dispose();
+  }
 
   @override
   void initState() {
@@ -40,7 +50,39 @@ class _MatrixAppState extends State<MatrixApp> {
       Services.instance.push.onChatGroupBanned = _onChatGroupBanned;
       Services.instance.push.onChatGroupDeleted = _onChatGroupDeleted;
       Services.instance.push.onCommentDeleted = _onCommentDeleted;
+      // Compartir de Android: archivos de figuritas recibidos mientras el
+      // app está abierto → abre la pantalla de importación.
+      ShareStickerService.instance.listen();
+      _shareSub = ShareStickerService.instance.onFiles.listen((_) {
+        _openStickerImport(title: '');
+      });
+      // Lote que haya abierto el app (proceso frío) — lo consulta el splash
+      // después del restore para asegurar que el usuario está autenticado.
+      _checkInitialShare();
     }
+  }
+
+  /// Si el app fue abierto por un share (proceso frío) y ya hay sesión,
+  /// abre la importación. El splash llama a [initialFiles] en el arranque.
+  void _checkInitialShare() {
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final files = await ShareStickerService.instance.currentFiles();
+      if (files != null && files.isNotEmpty) {
+        final state = _state;
+        if (state != null && state.isAuthenticated) {
+          _openStickerImport(title: '');
+        }
+      }
+    });
+  }
+
+  /// Navega hasta la pantalla de importación de figuritas.
+  void _openStickerImport({required String title}) {
+    final navigator = _navigatorKey.currentState;
+    if (navigator == null) return;
+    final state = _state;
+    if (state == null || !state.isAuthenticated) return;
+    navigator.pushNamed(AppRoutes.stickerImport, arguments: title);
   }
 
   /// A peer deleted a message FOR EVERYONE (realtime). AppState forwards it

@@ -20,6 +20,7 @@ import '../../models/matrix_user.dart';
 import '../../models/post.dart';
 import '../../models/sticker.dart';
 import '../utils/mock_data_service.dart';
+import '../utils/sticker_import_validator.dart';
 
 /// Central app state for Phase 2.
 ///
@@ -1270,6 +1271,32 @@ class AppState extends ChangeNotifier {
     _stickerRecentsLoaded = true;
     // best-effort server sync (idempotent):
     _stickersRepo.markRecent(stickerId).catchError((_) {});
+  }
+
+  /// Importa figuritas recibidas por el compartir nativo de Android.
+  ///
+  /// Cada archivo validado se sube por el sistema de uploads EXISTENTE y se
+  /// crea un paquete del usuario vía la API de stickers (misma persistencia).
+  /// Devuelve cuántas se crearon y cuántas se omitieron (dedupe por hash).
+  Future<({int created, int skipped})> importSharedStickers({
+    required String name,
+    required List<ValidatedStickerFile> stickers,
+  }) async {
+    final uploads = _repos?.uploads ?? Services.instance.uploads;
+    final items = <Map<String, dynamic>>[];
+    for (final s in stickers) {
+      final url = await uploads.upload(s.file);
+      items.add({
+        'url': url,
+        'hash': s.sha256,
+        'width': s.width,
+        'height': s.height,
+      });
+    }
+    final result = await _stickersRepo.importPackage(name, items);
+    // Refresca catálogo/instalados para que el paquete nuevo aparezca.
+    await loadStickers();
+    return result;
   }
 
   /// Opens (or creates) the single conversation with [otherUserId] and

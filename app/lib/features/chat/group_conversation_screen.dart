@@ -133,6 +133,11 @@ class _GroupConversationScreenState extends State<GroupConversationScreen>
       if (!_inputFocus.hasFocus && _showMentionSuggestions) {
         _closeMentionSuggestions();
       }
+      // Tocar no campo de mensagem com o painel de figurinhas aberto fecha
+      // o painel e devolve o foco+teclado ao campo (composer moderno).
+      if (_inputFocus.hasFocus && _stickerPickerOpen) {
+        setState(() => _stickerPickerOpen = false);
+      }
     });
   }
 
@@ -1500,18 +1505,25 @@ class _GroupConversationScreenState extends State<GroupConversationScreen>
           horizontal: AppDimensions.spaceSm, vertical: AppDimensions.spaceXs),
       child: Row(
         children: [
-          // Botão de figurinhas (esquerda do campo de texto).
-          _GroupStickerButton(
-            active: _stickerPickerOpen,
-            onTap: () => setState(() => _stickerPickerOpen = !_stickerPickerOpen),
-          ),
-          const SizedBox(width: 4),
           Expanded(
             child: MatrixTextField(
               hint: 'Mensagem no grupo',
               controller: _input,
               focusNode: _inputFocus,
               onChanged: _onComposerChanged,
+              // Botão de figurinhas DENTRO da caixa de mensagem (prefix),
+              // como no DM — mantém o campo como campo normal e o clipe.
+              prefix: _GroupStickerButton(
+                active: _stickerPickerOpen,
+                onTap: () => setState(() {
+                  _stickerPickerOpen = !_stickerPickerOpen;
+                  // Ao ABRIR o painel o teclado cede espaço a ele; ao
+                  // fechar a decisão de foco é do usuário (tocar no campo).
+                  if (_stickerPickerOpen && _inputFocus.hasFocus) {
+                    _inputFocus.unfocus();
+                  }
+                }),
+              ),
               maxLines: 5,
               minLines: 1,
               textInputAction: TextInputAction.send,
@@ -1557,28 +1569,18 @@ class _GroupStickerButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = active ? AppColors.electricBlue : AppColors.holographicBlue;
+    // Ícone nativo de sticker (não-emoji) ancorado como prefix do campo de
+    // mensagem: fundo transparente, sem borda — estado ativo só troca a cor.
     return GestureDetector(
       onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        width: 44,
-        height: 44,
-        decoration: BoxDecoration(
-          color: active
-              ? AppColors.electricBlue.withValues(alpha: 0.18)
-              : AppColors.electricBlue.withValues(alpha: 0.05),
-          borderRadius: BorderRadius.circular(22),
-          border: Border.all(
-            color: active ? AppColors.electricBlue : AppColors.deepBlue,
-          ),
-        ),
-        alignment: Alignment.center,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
         child: Icon(
           active
-              ? Icons.emoji_emotions_rounded
-              : Icons.emoji_emotions_outlined,
+              ? Icons.sticky_note_2_rounded
+              : Icons.sticky_note_2_outlined,
           color: color,
-          size: 21,
+          size: 24,
         ),
       ),
     );

@@ -54,6 +54,7 @@ class _ConversationScreenState extends State<ConversationScreen>
   static const _pagesize = 30;
 
   final TextEditingController _input = TextEditingController();
+  final FocusNode _inputFocus = FocusNode();
   final ScrollController _scroll = ScrollController();
 
   Conversation? _conversation;
@@ -115,6 +116,9 @@ class _ConversationScreenState extends State<ConversationScreen>
     super.initState();
     _conversation = null;
     _scroll.addListener(_scrollListener);
+    // Tocar no campo de mensagem com o painel de figurinhas aberto fecha o
+    // painel e devolve o foco+teclado ao campo (composer moderno).
+    _inputFocus.addListener(_onInputFocusChanged);
     // Notify the native-push layer that THIS conversation is on screen so it
     // suppresses notifications for it (Part 4.5 — rule driven by real state).
     // Guarded: Services may not be initialized in isolated widget tests.
@@ -130,6 +134,14 @@ class _ConversationScreenState extends State<ConversationScreen>
   /// first frames until the scope resolves).
   AppState? get _state => _resolvedState;
   AppState? _resolvedState;
+
+  /// Fecha o painel de figurinhas assim que o campo de mensagem recebe foco
+  /// (usuário tocou na caixa de texto) — o teclado volta e o painel some.
+  void _onInputFocusChanged() {
+    if (_inputFocus.hasFocus && _stickerPickerOpen) {
+      setState(() => _stickerPickerOpen = false);
+    }
+  }
 
   @override
   void didChangeDependencies() {
@@ -227,6 +239,7 @@ class _ConversationScreenState extends State<ConversationScreen>
     // would resume AFTER super.dispose()and crash on notifyListeners—never..
     WidgetsBinding.instance.removeObserver(this);
     _recorder.dispose();
+    _inputFocus.dispose();
     _input.dispose();
     _scroll.dispose();
     super.dispose();
@@ -909,6 +922,7 @@ class _ConversationScreenState extends State<ConversationScreen>
             ),
             _Composer(
               controller: _input,
+              focusNode: _inputFocus,
               sending: _sending,
               enabled: conversation != null,
               onChanged: _onInputChanged,
@@ -925,8 +939,14 @@ class _ConversationScreenState extends State<ConversationScreen>
               voiceSending: _voiceSending,
               stickersEnabled: conversation != null,
               stickerOpen: _stickerPickerOpen,
-              onToggleStickers: () => setState(
-                  () => _stickerPickerOpen = !_stickerPickerOpen),
+              onToggleStickers: () => setState(() {
+                  _stickerPickerOpen = !_stickerPickerOpen;
+                  // Ao ABRIR o painel o teclado cede espaço a ele; ao
+                  // fechar a decisão de foco é do usuário (tocar no campo).
+                  if (_stickerPickerOpen && _inputFocus.hasFocus) {
+                    _inputFocus.unfocus();
+                  }
+                }),
             ),
             // Painel de figurinhas integrado à base da conversa.
             if (_stickerPickerOpen && conversation != null && _state != null)
@@ -1643,6 +1663,7 @@ class _MessageBubble extends StatelessWidget {
 class _Composer extends StatefulWidget {
   const _Composer({
     required this.controller,
+    required this.focusNode,
     required this.sending,
     required this.enabled,
     required this.onChanged,
@@ -1663,6 +1684,7 @@ class _Composer extends StatefulWidget {
   });
 
   final TextEditingController controller;
+  final FocusNode focusNode;
   final bool sending;
   final bool enabled;
   final ValueChanged<String> onChanged;
@@ -1761,14 +1783,6 @@ class _ComposerState extends State<_Composer> {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              // Botão de figurinhas (esquerda do campo de texto).
-              if (widget.stickersEnabled) ...[
-                _StickerButton(
-                  active: widget.stickerOpen,
-                  onTap: widget.onToggleStickers,
-                ),
-                const SizedBox(width: AppDimensions.spaceXs),
-              ],
               Expanded(
                 child: barShown
                     ? _RecordingBar(
@@ -1782,7 +1796,14 @@ class _ComposerState extends State<_Composer> {
                     : MatrixTextField(
                         hint: 'Escreva sua mensagem...',
                         controller: widget.controller,
+                        focusNode: widget.focusNode,
                         enabled: widget.enabled,
+                        prefix: widget.stickersEnabled
+                            ? _StickerButton(
+                                active: widget.stickerOpen,
+                                onTap: widget.onToggleStickers,
+                              )
+                            : null,
                         minLines: 1,
                         maxLines: 4,
                         textCapitalization: TextCapitalization.sentences,
@@ -1843,28 +1864,15 @@ class _StickerButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final enabled = onTap != null;
     final color = active ? AppColors.electricBlue : AppColors.holographicBlue;
+    // Ícone nativo de sticker (não-emoji) ancorado como prefix do campo de
+    // mensagem: fundo transparente, sem borda — o estado ativo só troca a
+    // cor, como os demais ícones do composer.
     return GestureDetector(
       onTap: enabled ? onTap : null,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        width: 46,
-        height: 46,
-        decoration: BoxDecoration(
-          color: active
-              ? AppColors.electricBlue.withValues(alpha: 0.18)
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
-          border: Border.all(
-            color: active ? AppColors.electricBlue : AppColors.deepBlue,
-            width: AppDimensions.borderWidthThin,
-          ),
-          boxShadow: active
-              ? [BoxShadow(color: AppColors.glowSmall, blurRadius: 8)]
-              : const [],
-        ),
-        alignment: Alignment.center,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
         child: Icon(
-          active ? Icons.emoji_emotions_rounded : Icons.emoji_emotions_outlined,
+          active ? Icons.sticky_note_2_rounded : Icons.sticky_note_2_outlined,
           color: color,
           size: 24,
         ),
