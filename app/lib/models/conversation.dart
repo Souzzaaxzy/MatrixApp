@@ -240,13 +240,61 @@ class ChatMessage {
 /// A structured mention inside a group message — always the real user id
 /// (never the display nickname: nicknames are mutable). When [all] is true
 /// this denotes `@todos` (no real single user).
+///
+/// [start]/[end] mark the exact "@Nickname" / "@todos" token range within the
+/// message content. They are the ONLY thing that links the visual text to the
+/// user reference — a mention never exists by text coincidence. Old messages
+/// persisted before ranges existed keep them null (rendering falls back to a
+/// best-effort scan).
 class ChatMention {
-  const ChatMention(
-      {required this.userId, required this.nickname, this.all = false});
+  const ChatMention({
+    required this.userId,
+    required this.nickname,
+    this.all = false,
+    this.start,
+    this.end,
+  });
 
   final String userId;
   final String nickname;
   final bool all;
+
+  /// Token start offset inside the content (inclusive, UTF-16 code units).
+  final int? start;
+
+  /// Token end offset inside the content (exclusive).
+  final int? end;
+
+  /// Whether this mention still points at the given content range: the text
+  /// at [start..end) must be EXACTLY "@Nickname" / "@todos" with proper word
+  /// boundaries. Any mutation of the token text breaks the reference.
+  bool matchesContent(String text) {
+    final s = start;
+    final e = end;
+    if (s == null || e == null || s < 0 || e > text.length || e <= s) {
+      return false;
+    }
+    // The '@' must sit at a word boundary (start of text or after whitespace)
+    // and the char right after the token must not glue it to the next word.
+    if (s > 0 && !_isSpace(text.codeUnitAt(s - 1))) return false;
+    if (e < text.length && _isWordChar(text.codeUnitAt(e))) return false;
+    final token = text.substring(s, e);
+    final expected = all ? '@todos' : '@$nickname';
+    return token == expected;
+  }
+
+  ChatMention withRange(int s, int e) =>
+      ChatMention(userId: userId, nickname: nickname, all: all, start: s, end: e);
+
+  static bool _isSpace(int unit) {
+    final c = String.fromCharCode(unit);
+    return RegExp(r'\s').hasMatch(c);
+  }
+
+  static bool _isWordChar(int unit) {
+    final c = String.fromCharCode(unit);
+    return RegExp(r'[\w\u00C0-\uFFFF]').hasMatch(c);
+  }
 }
 
 /// A group as returned by the server's group-list endpoint. Carries the full

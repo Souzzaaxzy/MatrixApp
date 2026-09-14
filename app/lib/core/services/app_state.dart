@@ -1301,16 +1301,20 @@ class AppState extends ChangeNotifier {
 
   /// Sends a GROUP message and, on success, optimistically records it in the
   /// cached group's last-message slot (the server's response is authoritative).
-  /// [mentionUserIds] / [mentionAll] power @user / @todos.
+  /// [mentions] are RANGE-ANCHORED mention references (the only mentions the
+  /// server accepts — never derived from raw text). Legacy [mentionUserIds] /
+  /// [mentionAll] remain as a fallback pipe.
   Future<ChatMessage> sendGroupChatMessage(
     String groupId,
     String content, {
     String? replyToMessageId,
+    List<ChatMention> mentions = const [],
     List<String> mentionUserIds = const [],
     bool mentionAll = false,
   }) async {
     final message = await _chat.sendGroupMessage(groupId, content,
         replyToMessageId: replyToMessageId,
+        mentions: mentions,
         mentionUserIds: mentionUserIds,
         mentionAll: mentionAll);
     _applyChatMessage(message);

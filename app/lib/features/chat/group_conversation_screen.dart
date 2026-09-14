@@ -7,6 +7,7 @@ import '../../app/theme/app_dimensions.dart';
 import '../../app/theme/app_text_styles.dart';
 import '../../core/services/app_state.dart';
 import '../../core/utils/chat_format.dart';
+import '../../core/utils/mention_draft.dart';
 import '../../core/utils/profile_navigation.dart';
 import '../../core/widgets/app_state_scope.dart';
 import '../../core/widgets/hud_label.dart';
@@ -99,8 +100,14 @@ class _GroupConversationScreenState extends State<GroupConversationScreen>
   /// composer. Driven by the composer text + keyboard focus; never a modal.
   bool _showMentionSuggestions = false;
 
-  /// Real user ids selected for the CURRENT draft (sent with the message).
-  final Set<String> _draftMentionIds = <String>{};
+  /// Tracks the draft mentions of the CURRENT composer text. Each draft is
+  /// anchored to the exact "@Nickname"/"@todos" token range and survives
+  /// edits ONLY while that token stays byte-identical; any edit touching it
+  /// destroys the mention forever (no restore on reverting the text).
+  final MentionDraftTracker _mentionTracker = MentionDraftTracker();
+
+  /// Last composer value seen by [_onComposerChanged] (diff baseline).
+  String _lastComposerText = '';
 
   bool get _isGroupOwner =>
       _groupOwnerId != null &&
@@ -543,24 +550,37 @@ class _GroupConversationScreenState extends State<GroupConversationScreen>
   }
 
   Future<void> _send() async {
-    final text = _input.text.trim();
+    final raw = _input.text;
+    final text = raw.trim();
     if (text.isEmpty || _sending) return;
     final reply = _replyTarget;
-    // Snapshot the draft mentions (real user ids) and clear them so the next
-    // draft starts fresh.
-    final mentionIds = _draftMentionIds.toList();
-    final mentionAll = text.contains('@todos');
+    // Snapshot the RANGE-ANCHORED draft mentions and clear them so the next
+    // draft starts fresh. A mention exists here ONLY when the user selected
+    // it in the suggestion menu AND its token is still byte-identical —
+    // manually typed "@Nickname"/"@todos" never become mentions.
+    //
+    // Ranges live in the COMPOSER (untrimmed) space; the server receives the
+    // trimmed content, so map them by the leading-trim offset and drop any
+    // mention whose token would fall outside the trimmed region.
+    final leading = raw.length - raw.trimLeft().length;
+    final allDrafts = List<MentionDraft>.of(_mentionTracker.drafts);
+    final sentMentions = <ChatMention>[
+      for (final m in _mentionTracker.validMentions())
+        if (m.start != null && m.end != null)
+          _shiftMention(m, -leading),
+    ]..removeWhere((m) => m.start != null && m.end != null &&
+        (m.start! < 0 || m.end! > text.length));
     setState(() {
       _sending = true;
-      _draftMentionIds.clear();
+      _mentionTracker.clear();
+      _lastComposerText = '';
     });
     try {
       final message = await _state!.sendGroupChatMessage(
         _groupId,
         text,
         replyToMessageId: reply?.id,
-        mentionUserIds: mentionIds,
-        mentionAll: mentionAll,
+        mentions: sentMentions,
       );
       if (!mounted) return;
       _input.clear();
@@ -574,18 +594,37 @@ class _GroupConversationScreenState extends State<GroupConversationScreen>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(e.message)),
       );
-      // Re-add the draft mentions on failure so the user can retry.
-      setState(() => _draftMentionIds.addAll(mentionIds));
+      _restoreMentions(raw, allDrafts);
     } catch (_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Não foi possível enviar a mensagem.')),
       );
-      setState(() => _draftMentionIds.addAll(mentionIds));
+      _restoreMentions(raw, allDrafts);
     } finally {
       if (mounted) setState(() => _sending = false);
     }
   }
+
+  /// Re-anchors the pre-send draft mentions (composer space) after a failed
+  /// send so the user can retry intact. Mentions whose token no longer
+  /// matches the live text are not restored (they were valid at send time —
+  /// the composer was not edited while awaiting the response).
+  void _restoreMentions(String current, List<MentionDraft> drafts) {
+    for (final d in drafts) {
+      if (d.start < 0 || d.end > current.length) continue;
+      if (current.substring(d.start, d.end) != d.expectedToken()) continue;
+      _mentionTracker.insert(d);
+    }
+  }
+
+  ChatMention _shiftMention(ChatMention m, int delta) => ChatMention(
+        userId: m.userId,
+        nickname: m.nickname,
+        all: m.all,
+        start: m.start! + delta,
+        end: m.end! + delta,
+      );
 
   Future<void> _sendVoice() async {
     if (_voiceSending) return;
@@ -928,7 +967,7 @@ class _GroupConversationScreenState extends State<GroupConversationScreen>
   void _onComposerChanged(String value) {
     final hasText = value.trim().isNotEmpty;
     if (hasText != _hasComposerText) {
-      _hasComposerText = hasText;
+      setState(() => _hasComposerText = hasText);
     }
     final typing = value.trim().isNotEmpty;
     if (typing != _typingLastSent) {
@@ -938,6 +977,13 @@ class _GroupConversationScreenState extends State<GroupConversationScreen>
         _state?.sendGroupTyping(_groupId, typing);
       });
     }
+    // Reconcile the range-anchored draft mentions against the textual edit.
+    // Any mutation of a selected token destroys that mention permanently —
+    // even reverting the text does not restore it (spec: mentions only exist
+    // through the selection flow).
+    final prev = _lastComposerText;
+    _lastComposerText = value;
+    _mentionTracker.applyEdit(prev, value);
     _updateMentionState(value);
   }
 
@@ -1029,17 +1075,54 @@ class _GroupConversationScreenState extends State<GroupConversationScreen>
     }
     final before = at == -1 ? text : text.substring(0, at);
     final after = at == -1 ? '' : text.substring(tokenEnd);
-    final inserted = '${pick.all ? '@todos' : '@${pick.nickname}'} ';
+    final token = pick.all ? '@todos' : '@${pick.nickname}';
+    final inserted = '$token ';
+    final newText = '$before$inserted$after';
+    // The anchored range covers ONLY the "@Nickname"/"@todos" token — the
+    // trailing space that separates it from the next word is NOT part of the
+    // mention (so the token stays valid after it, and typing more text after
+    // the space keeps the mention intact).
+    final tokenStart = before.length;
+    final tokenEndInNew = tokenStart + token.length;
     controller
-      ..text = '$before$inserted$after'
-      ..selection = TextSelection.collapsed(offset: controller.text.length);
+      ..text = newText
+      ..selection = TextSelection.collapsed(offset: newText.length);
+    // Keep the diff baseline in sync so applyEdit sees the right "before".
+    _lastComposerText = newText;
     setState(() {
       _showMentionSuggestions = false;
       _mentionQuery = '';
+      // Re-anchor drafts from the PRE-insert token space into the new text:
+      // any draft fully before the insertion keeps its offset; fully after
+      // shifts by the inserted length; the freshly picked token is anchored.
+      final len = inserted.length;
+      final shifted = <MentionDraft>[
+        for (final d in _mentionTracker.drafts)
+          if (d.end <= at)
+            d
+          else if (d.start >= tokenEnd) d.shiftedBy(len),
+      ];
       if (pick.all) {
-        _draftMentionIds.clear();
+        // @todos targets everyone — it replaces every individual draft.
+        _mentionTracker.replaceAll([
+          MentionDraft(
+            userId: '',
+            nickname: 'todos',
+            start: tokenStart,
+            end: tokenEndInNew,
+            all: true,
+          ),
+        ]);
       } else {
-        _draftMentionIds.add(pick.userId);
+        _mentionTracker
+          ..replaceAll(shifted)
+          ..insert(MentionDraft(
+            userId: pick.userId,
+            nickname: pick.nickname,
+            start: tokenStart,
+            end: tokenEndInNew,
+            all: false,
+          ));
       }
     });
   }
@@ -1741,48 +1824,124 @@ class _MessageContent extends StatelessWidget {
       return ChatMediaBubble(message: message);
     }
     final selfId = AppStateScope.maybeOf(context)?.currentUser?.id;
-    final spans = <TextSpan>[];
+    final content = message.content;
+    return Text.rich(TextSpan(children: _mentionSpans(content, message, selfId)),
+        style: AppTextStyles.body.copyWith(color: AppColors.techWhite));
+  }
+
+  /// Builds the spans for a text message. RANGE-ANCHORED mentions (messages
+  /// created after this feature) highlight EXACTLY the persisted token range
+  /// — a mention is never inferred from text coincidence ("@nickname" typed
+  /// manually is plain text). Legacy messages without ranges (persisted
+  /// before) fall back to a first-occurrence text scan so history keeps its
+  /// highlight.
+  List<TextSpan> _mentionSpans(String text, ChatMessage message, String? selfId) {
+    final ranges = <({int s, int e, bool all, String? userId})>[];
+    for (final m in message.mentions) {
+      final s = m.start;
+      final e = m.end;
+      if (s != null && e != null && s >= 0 && e <= text.length) {
+        // Anchor the range to the EXACT token — if the stored text no longer
+        // matches (shouldn't happen for server-persisted rows, but be safe),
+        // it renders as plain text.
+        final expected = m.all ? '@todos' : '@${m.nickname}';
+        if (text.substring(s, e) != expected) continue;
+        ranges.add((s: s, e: e, all: m.all, userId: m.userId));
+      }
+    }
+    ranges.sort((a, b) => a.s.compareTo(b.s));
+
+    // Fallback for legacy (pre-range) rows: first-occurrence text scan.
+    if (ranges.isEmpty && message.mentions.isNotEmpty) {
+      final seen = <String>{};
+      for (final m in message.mentions) {
+        if (m.userId.isEmpty && !m.all) continue;
+        final needle = m.all ? '@todos' : '@${m.nickname}';
+        if (seen.contains(needle.toLowerCase())) continue;
+        seen.add(needle.toLowerCase());
+        final idx = _firstMentionAtBoundary(text, needle);
+        if (idx == -1) continue;
+        ranges.add((
+          s: idx,
+          e: idx + needle.length,
+          all: m.all,
+          userId: m.userId,
+        ));
+      }
+      ranges.sort((a, b) => a.s.compareTo(b.s));
+    }
+
     final mentionAll = message.mentionAll;
-    final mentionById = <String, String>{
-      for (final m in message.mentions) m.userId: m.nickname,
-    };
-    final reg = RegExp(r'@(\w+)');
+    // `@todos` is serialized by the server through the mentionAll boolean
+    // (not inside mentions[]): highlight EVERY "@todos" token at a word
+    // boundary so the real all-mention stays visible.
+    if (mentionAll) {
+      var searchFrom = 0;
+      while (true) {
+        final idx = text.indexOf('@todos', searchFrom);
+        if (idx == -1) break;
+        final end = idx + 6;
+        final atBoundary =
+            idx == 0 || RegExp(r'\s').hasMatch(text[idx - 1]);
+        final notGlued = end >= text.length ||
+            !RegExp(r'[\w\u00C0-\uFFFF]').hasMatch(text[end]);
+        if (atBoundary && notGlued) {
+          ranges.add((s: idx, e: end, all: true, userId: null));
+        }
+        searchFrom = end;
+      }
+      ranges.sort((a, b) => a.s.compareTo(b.s));
+    }
+
+    final spans = <TextSpan>[];
     var last = 0;
-    for (final match in reg.allMatches(message.content)) {
-      if (match.start > last) {
+    for (final r in ranges) {
+      if (r.s < last || r.e > text.length) continue;
+      if (r.s > last) {
         spans.add(TextSpan(
-            text: message.content.substring(last, match.start),
+            text: text.substring(last, r.s),
             style: AppTextStyles.body.copyWith(color: AppColors.techWhite)));
       }
-      final token = match.group(0)!;
-      final nickname = match.group(1)!;
-      final isMention = mentionAll ||
-          mentionById.values
-              .any((n) => n.toLowerCase() == nickname.toLowerCase());
       final isSelf = mentionAll ||
-          (selfId != null &&
-              mentionById[selfId]?.toLowerCase() == nickname.toLowerCase());
+          r.all ||
+          (selfId != null && selfId == r.userId);
       spans.add(TextSpan(
-        text: token,
+        text: text.substring(r.s, r.e),
         style: AppTextStyles.body.copyWith(
           // The MENTIONED user sees @me highlighted (WhatsApp-style); other
-          // mentions stay subtle. @todos lights up for everyone.
+          // mentions (including @todos) stay subtle.
           color: isSelf ? AppColors.electricBlue : AppColors.holographicBlue,
-          fontWeight: isMention ? FontWeight.w800 : FontWeight.w600,
+          fontWeight: FontWeight.w800,
           backgroundColor: isSelf
               ? AppColors.electricBlue.withValues(alpha: 0.22)
               : Colors.transparent,
         ),
       ));
-      last = match.end;
+      last = r.e;
     }
-    if (last < message.content.length) {
+    if (last < text.length) {
       spans.add(TextSpan(
-          text: message.content.substring(last),
+          text: text.substring(last),
           style: AppTextStyles.body.copyWith(color: AppColors.techWhite)));
     }
-    return Text.rich(TextSpan(children: spans),
-        style: AppTextStyles.body.copyWith(color: AppColors.techWhite));
+    return spans;
+  }
+
+  /// First index of [needle] in [text] where the '@' sits at a word boundary
+  /// (start or after whitespace) and the char right after the token isn't a
+  /// word char (so "@LeoX" never matches "@Leo").
+  int _firstMentionAtBoundary(String text, String needle) {
+    var idx = text.indexOf(needle);
+    while (idx != -1) {
+      final atBoundary =
+          idx == 0 || RegExp(r'\s').hasMatch(text[idx - 1]);
+      final end = idx + needle.length;
+      final notGlued = end >= text.length ||
+          !RegExp(r'[\w\u00C0-\uFFFF]').hasMatch(text[end]);
+      if (atBoundary && notGlued) return idx;
+      idx = text.indexOf(needle, idx + 1);
+    }
+    return -1;
   }
 }
 

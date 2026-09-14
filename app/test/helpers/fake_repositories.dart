@@ -120,6 +120,13 @@ class FakeStore {
         bio: '',
         avatarSeed: 'joao',
       ),
+      // A third full user — needed for multi-mention / independence tests.
+      'u3': MatrixUser(
+        id: 'u3',
+        nickname: 'carla',
+        bio: '',
+        avatarSeed: 'carla',
+      ),
     };
     currentUserId = 'u0';
     posts = [
@@ -1114,6 +1121,7 @@ class _FakeChatRepository implements ChatRepository {
     String groupId,
     String content, {
     String? replyToMessageId,
+    List<ChatMention> mentions = const [],
     List<String> mentionUserIds = const [],
     bool mentionAll = false,
   }) async {
@@ -1122,16 +1130,27 @@ class _FakeChatRepository implements ChatRepository {
       throw const ApiException(statusCode: 403, message: 'Acesso negado.');
     }
     // @todos is owner-only (mirrors the server rule).
-    if (mentionAll && _store.groups[groupId]!.group.createdById != me) {
+    final hasAll = mentionAll || mentions.any((m) => m.all);
+    if (hasAll && _store.groups[groupId]!.group.createdById != me) {
       throw const ApiException(
           statusCode: 403,
           message: 'Somente o dono do grupo pode usar "@todos".');
     }
-    final mentions = <ChatMention>[
-      for (final id in mentionUserIds)
-        ChatMention(
-            userId: id, nickname: _store.users[id]?.nickname ?? 'desconhecido'),
+    // RANGE-ANCHORED mention rows win; legacy ids are a fallback. `@todos`
+    // mirrors the server serialization: exposed via `mentionAll`, never inside
+    // mentions[] (which only holds individual user references).
+    var finalMentions = [
+      for (final m in mentions)
+        if (!m.all) m,
     ];
+    if (finalMentions.isEmpty && mentionUserIds.isNotEmpty) {
+      finalMentions = [
+        for (final id in mentionUserIds)
+          ChatMention(
+              userId: id,
+              nickname: _store.users[id]?.nickname ?? 'desconhecido'),
+      ];
+    }
     final message = ChatMessage(
       id: 'gm${DateTime.now().microsecondsSinceEpoch}',
       groupId: groupId,
@@ -1149,9 +1168,9 @@ class _FakeChatRepository implements ChatRepository {
               content: "original",
               exists: true,
             ),
-      mentions: mentions,
-      mentionAll: mentionAll,
-      mentioned: mentionAll || mentions.any((m) => m.userId == me),
+      mentions: finalMentions,
+      mentionAll: hasAll,
+      mentioned: hasAll || finalMentions.any((m) => m.userId == me),
     );
     _store.groupMessagesById.putIfAbsent(groupId, () => []).add(message);
     return message;

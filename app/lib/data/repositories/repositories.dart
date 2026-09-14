@@ -567,14 +567,19 @@ class ChatRepository {
   /// embedded sender identity). [replyToMessageId] optional, validated
   /// to belong to the same group by the server.
   ///
-  /// [mentionUserIds] lists the real user ids mentioned (server validates
-  /// each is an ACTIVE member). [mentionAll] requests `@todos` — ONLY the
-  /// group owner is authorized (the server rejects forged payloads).
+  /// [mentions] are the RANGE-ANCHORED mention references (each carries the
+  /// exact token range in [content] + the real user id, or [ChatMention.all]
+  /// for `@todos`). The server validates every range against the content
+  /// (substring + word boundaries), that each user is an ACTIVE member, and
+  /// that only the owner may send `@todos`. Legacy [mentionUserIds] /
+  /// [mentionAll] remain supported as a fallback for clients that don't send
+  /// ranges (the server still validates them).
 
   Future<ChatMessage> sendGroupMessage(
     String groupId,
     String content, {
     String? replyToMessageId,
+    List<ChatMention> mentions = const [],
     List<String> mentionUserIds = const [],
     bool mentionAll = false,
   }) async {
@@ -584,8 +589,19 @@ class ChatRepository {
         'content': content,
         if (replyToMessageId != null && replyToMessageId.isNotEmpty)
           'replyToMessageId': replyToMessageId,
-        if (mentionUserIds.isNotEmpty) 'mentionUserIds': mentionUserIds,
-        if (mentionAll) 'mentionAll': true,
+        if (mentions.isNotEmpty)
+          'mentions': [
+            for (final m in mentions)
+              {
+                if (m.all) 'all': true else 'userId': m.userId,
+                'start': m.start,
+                'end': m.end,
+              },
+          ]
+        else if (mentionUserIds.isNotEmpty)
+          'mentionUserIds': mentionUserIds
+        else if (mentionAll)
+          'mentionAll': true,
       },
     );
     return ChatMessageDto.fromJson(json['message'] as Map<String, dynamic>)

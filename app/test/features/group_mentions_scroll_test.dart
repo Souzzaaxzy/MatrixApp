@@ -10,14 +10,32 @@ import 'package:matrix_app/models/matrix_user.dart';
 import '../helpers/fake_repositories.dart';
 import '../helpers/test_app.dart';
 
+/// The FakeStore used by the most recent [seededGroup] call (lets tests
+/// inspect what was actually sent — mentions/ranges — end-to-end).
+FakeStore? _lastStore;
+
+/// The last group message persisted by the fake repository for the group
+/// seeded by the most recent [seededGroup] call (compose→send round trip).
+/// Throws when no message was persisted (a failed send path).
+ChatMessage storeLastMessage() {
+  final store = _lastStore;
+  final messages = store?.groupMessagesById['g1'];
+  if (messages == null || messages.isEmpty) {
+    throw StateError('Nenhuma mensagem foi enviada pelo fake.');
+  }
+  return messages.last;
+}
+
 /// Seeds a group owned by u0 (leonardo) with u2 (joao) as a member and the
 /// given messages (even index = u0's own, odd = u2's).
 Future<AppState> seededGroup({
   List<String> messages = const [],
   String? sessionUserId,
+  bool withCarla = false,
 }) async {
   final repos = FakeRepositories();
   final store = repos.store;
+  _lastStore = store;
   if (sessionUserId != null) store.currentUserId = sessionUserId;
   const id = 'g1';
   store.groups[id] = GroupConversation(
@@ -35,7 +53,7 @@ Future<AppState> seededGroup({
     unreadCount: 0,
     updatedAt: DateTime(2024, 1, 1),
   );
-  store.groupMemberIds[id] = {'u0', 'u2'};
+  store.groupMemberIds[id] = {'u0', 'u2', if (withCarla) 'u3'};
   store.groupMessagesById[id] = [
     for (var i = 0; i < messages.length; i++)
       ChatMessage(
@@ -249,6 +267,234 @@ void main() {
 
       // The content is split by the mention renderer.
       expect(find.textContaining('Oi @joao'), findsOneWidget);
+    });
+
+    testWidgets('digitar @nickname MANUALMENTE e enviar NÃO cria mention',
+        (tester) async {
+      final state = await seededGroup();
+      await pumpMatrixApp(tester, groupScreen(), state: state);
+      await tester.pumpAndSettle();
+
+      // Type the nickname manually without opening/picking the suggestions.
+      await tester.enterText(find.byType(TextField).last, 'Oi @joao!');
+      await tester.pumpAndSettle();
+
+      // Wait for the suggestion bar to disappear (no trailing token).
+      await tester.pump(const Duration(milliseconds: 200));
+
+      // Send the message.
+      await tester.tap(find.byIcon(Icons.send_rounded));
+      await tester.pumpAndSettle();
+
+      final sent = storeLastMessage();
+      expect(sent.content, 'Oi @joao!');
+      // NO structured mention was created by mere text coincidence.
+      expect(sent.mentions, isEmpty);
+      expect(sent.mentionAll, isFalse);
+      expect(sent.mentioned, isFalse);
+    });
+
+    testWidgets('selecionar usuário no menu cria mention REAL ao enviar',
+        (tester) async {
+      final state = await seededGroup();
+      await pumpMatrixApp(tester, groupScreen(), state: state);
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byType(TextField).last, '@');
+      await tester.pumpAndSettle();
+      expect(find.text('MENCIONAR'), findsOneWidget);
+      await tester.pumpAndSettle();
+
+      // Pick joao in the suggestions.
+      await tester.tap(find.text('joao').first);
+      await tester.pumpAndSettle();
+
+      final field = tester.widget<TextField>(find.byType(TextField).last);
+      expect(field.controller!.text, contains('@joao '));
+
+      await tester.tap(find.byIcon(Icons.send_rounded));
+      await tester.pumpAndSettle();
+
+      final sent = storeLastMessage();
+      expect(sent.content, contains('@joao'));
+      expect(sent.mentions, hasLength(1));
+      final m = sent.mentions.first;
+      expect(m.userId, 'u2');
+      expect(m.nickname, 'joao');
+      // The token range is anchored EXACTLY to "@joao".
+      expect(m.start, isNotNull);
+      expect(m.end, isNotNull);
+      expect(sent.content.substring(m.start!, m.end!), '@joao');
+    });
+
+    testWidgets('apagar uma letra da mention selecionada a invalida',
+        (tester) async {
+      final state = await seededGroup();
+      await pumpMatrixApp(tester, groupScreen(), state: state);
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byType(TextField).last, '@');
+      await tester.pumpAndSettle();
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('joao').first);
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<TextField>(find.byType(TextField).last)
+            .controller!
+            .text
+            .contains('@joao '),
+        isTrue,
+      );
+
+      // Delete one letter — "@joa" now.
+      await tester.enterText(find.byType(TextField).last, '@joa ');
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byIcon(Icons.send_rounded));
+      await tester.pumpAndSettle();
+
+      final sent = storeLastMessage();
+      expect(sent.mentions, isEmpty);
+      expect(sent.mentionAll, isFalse);
+    });
+
+    testWidgets('alterar e VOLTAR ao nickname original NÃO restaura a mention',
+        (tester) async {
+      final state = await seededGroup();
+      await pumpMatrixApp(tester, groupScreen(), state: state);
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byType(TextField).last, '@');
+      await tester.pumpAndSettle();
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('joao').first);
+      await tester.pumpAndSettle();
+
+      // @joao → @joa → @joao (delete then re-add the same letter). Each edit
+      // fires onChanged so the tracker reconciles the range.
+      await tester.enterText(find.byType(TextField).last, '@joa ');
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).last, '@joao ');
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byIcon(Icons.send_rounded));
+      await tester.pumpAndSettle();
+
+      final sent = storeLastMessage();
+      // Reverting the text does NOT resurrect the destroyed mention — the
+      // user must select joao again.
+      expect(sent.mentions, isEmpty);
+    });
+
+    testWidgets('@todos SEM seleção é texto comum (não gera mentionAll)',
+        (tester) async {
+      final state = await seededGroup(); // u0 is the owner
+      await pumpMatrixApp(tester, groupScreen(), state: state);
+      await tester.pumpAndSettle();
+
+      // The owner just TYPES @todos — never picks it from the menu.
+      await tester.enterText(find.byType(TextField).last, '@todos alguém?');
+      await tester.pumpAndSettle();
+      await tester.tap(find.byIcon(Icons.send_rounded));
+      await tester.pumpAndSettle();
+
+      final sent = storeLastMessage();
+      expect(sent.mentions, isEmpty);
+      expect(sent.mentionAll, isFalse);
+      expect(sent.mentioned, isFalse);
+    });
+
+    testWidgets('@todos apenas SELEÇÃO no menu cria mention de todos',
+        (tester) async {
+      final state = await seededGroup(); // owner
+      await pumpMatrixApp(tester, groupScreen(), state: state);
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byType(TextField).last, '@');
+      await tester.pumpAndSettle();
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('@todos'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byIcon(Icons.send_rounded));
+      await tester.pumpAndSettle();
+
+      final sent = storeLastMessage();
+      // @todos is serialized through mentionAll (mirrors the server).
+      expect(sent.mentionAll, isTrue);
+      expect(sent.content, contains('@todos'));
+      expect(sent.mentioned, isTrue);
+    });
+
+    testWidgets('membro comum NÃO vê @todos no menu',
+        (tester) async {
+      final state = await seededGroup(sessionUserId: 'u2');
+      await pumpMatrixApp(tester, groupScreen(), state: state);
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField).last, '@');
+      await tester.pumpAndSettle();
+      await tester.pumpAndSettle();
+      expect(find.text('@todos'), findsNothing);
+    });
+
+    testWidgets('múltiplas mentions independentes: editar uma não quebra a outra',
+        (tester) async {
+      final state = await seededGroup(withCarla: true);
+      await pumpMatrixApp(tester, groupScreen(), state: state);
+      await tester.pumpAndSettle();
+
+      // Pick joao.
+      await tester.enterText(find.byType(TextField).last, '@');
+      await tester.pumpAndSettle();
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('joao').first);
+      await tester.pumpAndSettle();
+
+      // Pick carla right after.
+      await tester.enterText(find.byType(TextField).last, '@joao @');
+      await tester.pumpAndSettle();
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('carla').first);
+      await tester.pumpAndSettle();
+      expect(
+        tester
+            .widget<TextField>(find.byType(TextField).last)
+            .controller!
+            .text
+            .contains('@carla '),
+        isTrue,
+      );
+
+      // Edit ONLY the joao token (delete its last letter) — full-text edit that
+      // fires onChanged, simulating a real caret edit.
+      await tester.enterText(find.byType(TextField).last, '@joa @carla ');
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byIcon(Icons.send_rounded));
+      await tester.pumpAndSettle();
+
+      final sent = storeLastMessage();
+      // joao is gone (destroyed); carla SURVIVES with her own range.
+      expect(sent.mentions.where((m) => m.userId == 'u2'), isEmpty);
+      final carla = sent.mentions.firstWhere((m) => m.userId == 'u3');
+      expect(sent.content.substring(carla.start!, carla.end!), '@carla');
+    });
+
+    testWidgets('colar @nickname no composer NÃO cria mention', (tester) async {
+      final state = await seededGroup();
+      await pumpMatrixApp(tester, groupScreen(), state: state);
+      await tester.pumpAndSettle();
+
+      // Pasting text containing @joao (no selection flow).
+      await tester.enterText(find.byType(TextField).last, 'veja @joao agora');
+      await tester.pumpAndSettle();
+      await tester.tap(find.byIcon(Icons.send_rounded));
+      await tester.pumpAndSettle();
+
+      final sent = storeLastMessage();
+      expect(sent.mentions, isEmpty);
+      expect(sent.mentionAll, isFalse);
     });
   });
 

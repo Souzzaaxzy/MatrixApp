@@ -651,23 +651,31 @@ class ChatMentionDto {
   final String userId;
   final String nickname;
   final bool all;
+  final int? start;
+  final int? end;
 
   const ChatMentionDto({
     required this.userId,
     required this.nickname,
     this.all = false,
+    this.start,
+    this.end,
   });
 
   ChatMention toModel() => ChatMention(
         userId: userId,
         nickname: nickname,
         all: all,
+        start: start,
+        end: end,
       );
 
   factory ChatMentionDto.fromJson(Map<String, dynamic> json) => ChatMentionDto(
         userId: json['userId'] as String? ?? '',
         nickname: json['nickname'] as String? ?? '',
         all: (json['all'] as bool?) ?? false,
+        start: (json['start'] as num?)?.toInt(),
+        end: (json['end'] as num?)?.toInt(),
       );
 }
 
