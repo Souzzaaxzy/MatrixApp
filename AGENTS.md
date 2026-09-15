@@ -194,13 +194,15 @@ Or just `docker compose up -d --build`.
 - **Estado:** `AppState` expõe `storyGroups`/`myStories` + `loadStories`,
   `createStory` (type/text), `toggleStoryLike` (flip OTIMISTA + rollback),
   `replyToStory`, `markStoryViewed`, `deleteStory`.
-- **Card (`features/feed/stories_header.dart`):** o AVATAR fica no TOPO
-  (centralizado, nunca sobre a mídia) e a mídia do Story ocupa o corpo
-  central — claramente visível; nickname abaixo com ellipsis. Story NÃO
-  VISTO = **borda branca**; visto = borda neutra (some na hora, via
-  AppState). A faixa termina com **canto arredondado** e SEM `Divider` entre
-  Stories e feed (transição contínua). Story de TEXTO mostra o texto no
-  card.
+- **Card (`features/feed/stories_header.dart`):** ordem vertical
+  **FOTO → PREVIEW → NICKNAME**. O AVATAR fica **ACIMA** do quadrado (fora
+  do preview, nunca sobre a mídia nem ocupando área interna dele) e o
+  PREVIEW preenche **100% do quadrado** do Story (`_StoryCover` com
+  `BoxFit.cover`; capa do vídeo; texto no caso de Story de texto). O
+  nickname fica abaixo, com ellipsis. Story NÃO VISTO = **borda branca**;
+  visto = borda neutra (some na hora, via AppState). A faixa termina com
+  **canto arredondado** e SEM `Divider` entre Stories e feed (transição
+  contínua). Não colocar o avatar dentro do preview nem reduzir a mídia.
 - **Viewer (`features/feed/story_viewer.dart`):** fullscreen `BoxFit.contain`,
   navegação por toque/arrastar/✕/Back, UM vídeo por vez. Ouve o `AppState`
   (curtida/visto repintam na hora). Barra inferior com

@@ -78,9 +78,10 @@ class StoriesHeader extends StatelessWidget {
           )
         else
           SizedBox(
-            // Altura do card (quadrado) + espaço do nickname. Proporção
-            // consistente: o nickname não altera a altura do card.
-            height: _kCard + 30,
+            // Altura do card: avatar (acima) + quadrado do preview +
+            // nickname (abaixo). O nickname/avatar são estáveis, então a
+            // altura é determinística (sem depender do conteúdo).
+            height: _kCard * 1.30 + 32,
             child: ListView.separated(
               scrollDirection: Axis.horizontal,
               padding: const EdgeInsets.symmetric(
@@ -104,7 +105,12 @@ class StoriesHeader extends StatelessWidget {
   }
 }
 
-/// Um card quadrado de Story: avatar centralizado + nickname abaixo.
+/// Um card de Story: AVATAR acima, PREVIEW (quadrado, preenchido por
+/// inteiro) no meio e nickname abaixo.
+///
+/// O avatar NÃO fica sobre a mídia nem ocupa área interna do preview — ele é
+/// um elemento separado ACIMA do quadrado, então a mídia usa 100% da área do
+/// Story (foto/vídeo: capa; texto: o próprio texto).
 class _StoryCard extends StatelessWidget {
   const _StoryCard({
     required this.group,
@@ -121,14 +127,26 @@ class _StoryCard extends StatelessWidget {
     final unviewed = !group.allViewed;
     final label = group.authorNickname;
     final story = group.stories.first;
-    // Avatar no TOPO (nunca sobre a mídia) + nickname embaixo; a mídia do
-    // Story ocupa o corpo central do card, claramente visível.
+    // Avatar FORA do preview (acima), em tamanho consistente.
     final avatarSize = size * 0.30;
     return SizedBox(
       width: size,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          // 1) FOTO DE PERFIL — acima do preview, nunca sobre a mídia.
+          FramedAvatar(
+            frame: _frame(group),
+            size: avatarSize,
+            child: UserAvatar(
+              name: label,
+              seed: label,
+              imageUrl: group.authorAvatarUrl,
+              size: avatarSize * 0.86,
+            ),
+          ),
+          const SizedBox(height: AppDimensions.spaceXs),
+          // 2) PREVIEW — quadrado do Story, totalmente preenchido pela mídia.
           GestureDetector(
             onTap: onTap,
             child: Container(
@@ -153,32 +171,14 @@ class _StoryCard extends StatelessWidget {
               ),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(AppDimensions.radiusLg - 2),
-                child: Column(
-                  children: [
-                    // Avatar na região SUPERIOR, centralizado horizontalmente.
-                    Padding(
-                      padding: const EdgeInsets.only(top: 6),
-                      child: FramedAvatar(
-                        frame: _frame(group),
-                        size: avatarSize,
-                        child: UserAvatar(
-                          name: label,
-                          seed: label,
-                          imageUrl: group.authorAvatarUrl,
-                          size: avatarSize * 0.86,
-                        ),
-                      ),
-                    ),
-                    // Mídia do Story logo abaixo do avatar, ocupando o
-                    // restante do card (nunca coberta pelo avatar).
-                    Expanded(child: _StoryCover(story: story)),
-                  ],
-                ),
+                // A mídia ocupa TODO o quadrado (sem avatar interno nem
+                // margens indevidas).
+                child: _StoryCover(story: story),
               ),
             ),
           ),
           const SizedBox(height: AppDimensions.spaceXs),
-          // Nickname SEMPRE dentro dos limites do card: uma linha + ellipsis.
+          // 3) NICKNAME — abaixo do preview, dentro dos limites do card.
           SizedBox(
             width: size,
             child: NicknameRenderer(

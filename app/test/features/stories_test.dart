@@ -154,6 +154,34 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
+    testWidgets('o preview preenche todo o quadrado do Story',
+        (tester) async {
+      tester.view.physicalSize = const Size(1080, 2340);
+      tester.view.devicePixelRatio = 2.0;
+      addTearDown(tester.view.reset);
+
+      final state = await seededStories();
+      await pumpMatrixApp(
+        tester,
+        Scaffold(body: StoriesHeader(state: state)),
+        state: state,
+      );
+      await tester.pumpAndSettle();
+
+      // O quadrado do preview deve ser QUADRADO e preenchido pela mídia.
+      final cover = find.byType(Image).first;
+      final coverRect = tester.getRect(cover);
+      expect(coverRect.width, greaterThan(0));
+      expect((coverRect.width - coverRect.height).abs(), lessThan(1.0));
+
+      final preview = find
+          .ancestor(of: cover, matching: find.byType(ClipRRect))
+          .first;
+      final previewRect = tester.getRect(preview);
+      expect((previewRect.width - coverRect.width).abs(), lessThan(1.0));
+      expect((previewRect.height - coverRect.height).abs(), lessThan(1.0));
+    });
+
     testWidgets('sem Stories mostra o estado vazio em pt-BR', (tester) async {
       final state = AppState(repositories: FakeRepositories());
       await state.restoreSession();
@@ -293,7 +321,8 @@ void main() {
       expect(result.conversationId, isNotEmpty);
     });
 
-    testWidgets('card mostra avatar no TOPO e borda BRANCA quando não visto',
+    testWidgets(
+        'avatar ACIMA do preview; o preview ocupa todo o quadrado; nickname abaixo',
         (tester) async {
       tester.view.physicalSize = const Size(1080, 2340);
       tester.view.devicePixelRatio = 2.0;
@@ -306,12 +335,18 @@ void main() {
         state: state,
       );
       await tester.pumpAndSettle();
-      // O avatar fica ACIMA do nickname (região superior do card), nunca no
-      // meio da mídia.
+
       final avatar = find.byType(UserAvatar).first;
       final nick = find.byType(NicknameRenderer).first;
+      final cover = find.byType(Image).first;
+
+      // FOTO → PREVIEW → NICKNAME (verticalmente, nesta ordem).
       expect(
         tester.getCenter(avatar).dy,
+        lessThan(tester.getCenter(cover).dy),
+      );
+      expect(
+        tester.getCenter(cover).dy,
         lessThan(tester.getCenter(nick).dy),
       );
       expect(tester.takeException(), isNull);
