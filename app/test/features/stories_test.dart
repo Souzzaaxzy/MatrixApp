@@ -197,27 +197,31 @@ void main() {
         ),
         state: state,
       );
-      await tester.tap(find.text('abrir'));
-      // Pumps LIMITADOS: a mídia remota mantém um stream de imagem aberto,
-      // então pumpAndSettle nunca estabiliza em teste.
-      for (var i = 0; i < 6; i++) {
-        await tester.pump(const Duration(milliseconds: 120));
+      // Helper: avança o relógio em passos limitados. A mídia remota mantém
+      // um stream de imagem aberto (pumpAndSettle nunca estabilizaria) e a
+      // transição de rota leva ~300ms — generoso o bastante para o CI, que
+      // é mais lento que a máquina local.
+      Future<void> settle() async {
+        for (var i = 0; i < 20; i++) {
+          await tester.pump(const Duration(milliseconds: 100));
+        }
       }
+
+      await tester.tap(find.text('abrir'));
+      await settle();
       expect(find.byType(StoryViewer), findsOneWidget);
       // Toca à esquerda/à direita para navegar sem exceções de layout.
       await tester.tapAt(const Offset(900, 1200));
-      for (var i = 0; i < 4; i++) {
-        await tester.pump(const Duration(milliseconds: 120));
-      }
+      await settle();
       await tester.tapAt(const Offset(100, 1200));
-      for (var i = 0; i < 4; i++) {
-        await tester.pump(const Duration(milliseconds: 120));
-      }
+      await settle();
       expect(tester.takeException(), isNull);
-      // Fecha pelo botão (o Back do Android usa a mesma rota).
+      // Fecha pelo botão (o Back do Android usa a mesma rota). Bombeia ATÉ
+      // o viewer sair da árvore (o pop é agendado, então um número fixo de
+      // pumps é frágil em máquinas lentas como o CI).
       await tester.tap(find.byTooltip('Fechar'));
-      for (var i = 0; i < 4; i++) {
-        await tester.pump(const Duration(milliseconds: 120));
+      for (var i = 0; i < 25 && find.byType(StoryViewer).evaluate().isNotEmpty; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
       }
       expect(find.byType(StoryViewer), findsNothing);
     });
