@@ -14,6 +14,7 @@ import 'package:matrix_app/features/chat/group_conversation_screen.dart';
 import 'package:matrix_app/features/chat/group_members_screen.dart';
 import 'package:matrix_app/features/chat/group_profile_screen.dart';
 import 'package:matrix_app/features/create_post/create_post_screen.dart';
+import 'package:matrix_app/features/create_post/create_story_screen.dart';
 import 'package:matrix_app/features/customizations/customizations_screen.dart';
 import 'package:matrix_app/features/home/home_screen.dart';
 import 'package:matrix_app/features/post/post_detail_screen.dart';
@@ -48,6 +49,7 @@ Future<void> pumpMatrixApp(
           AppRoutes.register: (_) => const RegisterScreen(),
           AppRoutes.home: (_) => const HomeScreen(),
           AppRoutes.createPost: (_) => const CreatePostScreen(),
+          AppRoutes.createStory: (_) => const CreateStoryScreen(),
           AppRoutes.editProfile: (_) => const EditProfileScreen(),
           AppRoutes.customizations: (_) => const CustomizationsScreen(),
           AppRoutes.postDetail: (context) {

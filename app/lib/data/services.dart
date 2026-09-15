@@ -2,6 +2,7 @@ import 'api_client.dart';
 import 'push_service.dart';
 import 'repositories/repositories.dart';
 import 'repositories/sticker_repository.dart';
+import 'repositories/story_repository.dart';
 import 'token_store.dart';
 
 /// Lightweight service locator for the data layer.
@@ -36,6 +37,7 @@ class Services {
   CustomizationRepository get customization => repositories.customization;
   ChatRepository get chat => repositories.chat;
   StickerRepository get stickers => repositories.stickers;
+  StoryRepository get stories => repositories.stories;
 
   /// Initializes the data layer. Call once before runApp.
   static Future<Services> init() async {
@@ -52,6 +54,7 @@ class Services {
     final customization = CustomizationRepository(apiClient);
     final chat = ChatRepository(apiClient);
     final stickers = StickerRepository(apiClient);
+    final stories = StoryRepository(apiClient);
     final push = PushService(api: apiClient, tokenStore: tokenStore);
     final services = Services._(
       apiClient: apiClient,
@@ -67,6 +70,7 @@ class Services {
         customization: customization,
         chat: chat,
         stickers: stickers,
+        stories: stories,
       ),
       push: push,
     );

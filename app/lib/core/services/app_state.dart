@@ -7,6 +7,7 @@ import '../../data/api_config.dart';
 import '../../data/dtos/dtos.dart';
 import '../../data/repositories/repositories.dart';
 import '../../data/repositories/sticker_repository.dart';
+import '../../data/repositories/story_repository.dart';
 import '../../data/search_history_store.dart';
 import '../../data/services.dart';
 import '../../models/akame_message.dart';
@@ -19,6 +20,7 @@ import '../../models/matrix_notification.dart';
 import '../../models/matrix_user.dart';
 import '../../models/post.dart';
 import '../../models/sticker.dart';
+import '../../models/story.dart';
 import '../utils/mock_data_service.dart';
 import '../utils/sticker_import_validator.dart';
 
@@ -86,6 +88,12 @@ class AppState extends ChangeNotifier {
   /// sprite for each comes bundled, keyed by the server's assetUrl).
   List<CosmeticItem> _frameCatalog = const [];
   bool _loadingFrameCatalog = false;
+
+  // ── Stories (24h ephemeral media, feed header) ────────────
+  /// Active stories grouped by author, already ordered (unviewed first) by
+  /// the server. Empty until [loadStories] completes.
+  List<StoryGroup> _storyGroups = const [];
+  bool _loadingStories = false;
 
   // ── Stickers (figurinhas) ─────────────────────────────────
   /// The full server sticker catalog: packages + stickers + user state.
@@ -290,6 +298,22 @@ class AppState extends ChangeNotifier {
   List<CosmeticItem> get frameCatalog => List.unmodifiable(_frameCatalog);
   bool get isLoadingFrameCatalog => _loadingFrameCatalog;
 
+  /// Active stories grouped by author (server-ordered: unviewed first, then
+  /// most recent). Empty until [loadStories] completes.
+  List<StoryGroup> get storyGroups => List.unmodifiable(_storyGroups);
+  bool get isLoadingStories => _loadingStories;
+
+  /// The session user's OWN active stories (already newest-first), used to
+  /// label the "Seu Story" card and to allow deleting them.
+  List<Story> get myStories {
+    final id = _currentUser?.id;
+    if (id == null) return const [];
+    for (final g in _storyGroups) {
+      if (g.authorId == id) return List.unmodifiable(g.stories);
+    }
+    return const [];
+  }
+
   /// The full sticker catalog (every active package with its stickers and the
   /// session user's install/favorite state). Empty until [loadStickers]
   /// completes.
@@ -329,6 +353,8 @@ class AppState extends ChangeNotifier {
   ChatRepository get _chat => _repos?.chat ?? Services.instance.chat;
   StickerRepository get _stickersRepo =>
       _repos?.stickers ?? Services.instance.stickers;
+  StoryRepository get _storiesRepo =>
+      _repos?.stories ?? Services.instance.stories;
 
   /// Restores the session from a stored refresh token. Called at startup.
   /// Returns true when the user is authenticated afterwards.
@@ -440,6 +466,7 @@ class AppState extends ChangeNotifier {
   /// Clears the (per-user) sticker caches on logout/account deletion so one
   /// account never borrows another's installs/favorites/recents.
   void _clearStickerState() {
+    _storyGroups = const [];
     _stickerPackages = const [];
     _stickerCatalogLoaded = false;
     _stickerFavorites = const [];
@@ -478,6 +505,139 @@ class AppState extends ChangeNotifier {
       _loadingFeed = false;
       notifyListeners();
     }
+  }
+
+  // ── Stories (24h ephemeral media) ──────────────────────────
+
+  /// Loads the ACTIVE stories (not expired) into state. Server-side this
+  /// also purges expired rows, so nothing stale lingers. Failure is
+  /// non-fatal: the feed keeps working, only the strip stays as-is.
+  Future<void> loadStories() async {
+    if (_loadingStories) return;
+    _loadingStories = true;
+    notifyListeners();
+    try {
+      _storyGroups = await _storiesRepo.active();
+    } catch (_) {
+      // Keep the last known list — the feed must never break because of
+      // the stories strip.
+    } finally {
+      _loadingStories = false;
+      notifyListeners();
+    }
+  }
+
+  /// Publishes a story from media ALREADY uploaded through the existing
+  /// uploads pipeline (image or video). Refreshes the strip immediately so
+  /// the author sees their own story without restarting the app.
+  Future<Story> createStory({
+    required String mediaUrl,
+    required String mediaType,
+    String? thumbnailUrl,
+    String caption = '',
+  }) async {
+    final story = await _storiesRepo.create(
+      mediaUrl: mediaUrl,
+      mediaType: mediaType,
+      thumbnailUrl: thumbnailUrl,
+      caption: caption,
+    );
+    // Optimistic local insert (newest-first inside the author's group) so
+    // the strip updates instantly, then reconcile with the server.
+    final id = _currentUser?.id;
+    if (id != null) {
+      final groups = [..._storyGroups];
+      final idx = groups.indexWhere((g) => g.authorId == id);
+      if (idx >= 0) {
+        final g = groups[idx];
+        groups[idx] = StoryGroup(
+          authorId: g.authorId,
+          authorNickname: g.authorNickname,
+          authorAvatarUrl: g.authorAvatarUrl,
+          authorNicknameColor: g.authorNicknameColor,
+          authorFrameId: g.authorFrameId,
+          authorFrameAsset: g.authorFrameAsset,
+          stories: [story, ...g.stories],
+          allViewed: g.allViewed,
+        );
+        _storyGroups = groups;
+        notifyListeners();
+      }
+    }
+    await loadStories();
+    return story;
+  }
+
+  /// Marks a story as seen (idempotent server-side) and reflects it locally
+  /// so the ring updates without a full reload.
+  Future<void> markStoryViewed(String storyId) async {
+    try {
+      await _storiesRepo.markViewed(storyId);
+    } catch (_) {
+      // Best-effort: a failed "seen" marker must never block the viewer.
+    }
+    var changed = false;
+    final groups = _storyGroups.map((g) {
+      final updated = g.stories
+          .map((s) => s.id == storyId && !s.viewed
+              ? Story(
+                  id: s.id,
+                  authorId: s.authorId,
+                  authorNickname: s.authorNickname,
+                  authorAvatarUrl: s.authorAvatarUrl,
+                  authorNicknameColor: s.authorNicknameColor,
+                  authorFrameId: s.authorFrameId,
+                  authorFrameAsset: s.authorFrameAsset,
+                  mediaUrl: s.mediaUrl,
+                  mediaType: s.mediaType,
+                  thumbnailUrl: s.thumbnailUrl,
+                  caption: s.caption,
+                  createdAt: s.createdAt,
+                  expiresAt: s.expiresAt,
+                  viewed: true,
+                  mine: s.mine,
+                )
+              : s)
+          .toList();
+      if (updated.any((s) => s.id == storyId)) changed = true;
+      return StoryGroup(
+        authorId: g.authorId,
+        authorNickname: g.authorNickname,
+        authorAvatarUrl: g.authorAvatarUrl,
+        authorNicknameColor: g.authorNicknameColor,
+        authorFrameId: g.authorFrameId,
+        authorFrameAsset: g.authorFrameAsset,
+        stories: updated,
+        allViewed: updated.every((s) => s.viewed),
+      );
+    }).toList();
+    if (changed) {
+      _storyGroups = groups;
+      notifyListeners();
+    }
+  }
+
+  /// Deletes one of the session user's OWN stories. The server enforces
+  /// ownership (403 otherwise); on success the strip updates immediately.
+  Future<void> deleteStory(String storyId) async {
+    await _storiesRepo.delete(storyId);
+    final groups = <StoryGroup>[];
+    for (final g in _storyGroups) {
+      final remaining = g.stories.where((s) => s.id != storyId).toList();
+      if (remaining.isEmpty) continue;
+      groups.add(StoryGroup(
+        authorId: g.authorId,
+        authorNickname: g.authorNickname,
+        authorAvatarUrl: g.authorAvatarUrl,
+        authorNicknameColor: g.authorNicknameColor,
+        authorFrameId: g.authorFrameId,
+        authorFrameAsset: g.authorFrameAsset,
+        stories: remaining,
+        allViewed: remaining.every((s) => s.viewed),
+      ));
+    }
+    _storyGroups = groups;
+    notifyListeners();
   }
 
   /// Finds a post by id in the feed cache, any viewed-profile cache, or

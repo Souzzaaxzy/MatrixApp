@@ -184,6 +184,34 @@ Or just `docker compose up -d --build`.
 - O resultado é criado com `POST /api/stickers/import` (dedupe por hash no
   servidor) — servidor NÃO precisou mudar.
 
+## Stories (24h) — faixa no topo do feed
+- **Modelo/DTO/repo:** `models/story.dart` (`Story`, `StoryGroup`),
+  `data/dtos/dtos.dart` (`StoryDto`, `StoryGroupsDto`),
+  `data/repositories/story_repository.dart` — registrado em `Services`/
+  `Repositories` como `stories`.
+- **Estado:** `AppState` expõe `storyGroups`/`myStories` e os métodos
+  `loadStories`, `createStory`, `markStoryViewed`, `deleteStory`
+  (atualização otimista + reconciliação). `_clearStickerState` também limpa
+  os Stories no logout.
+- **UI:** `features/feed/stories_header.dart` — faixa HORIZONTAL de cards
+  QUADRADOS (avatar centralizado + nickname com `maxLines: 1` e ellipsis,
+  então NUNCA estoura o card). Card alvo de 92px → responsivo; reutiliza
+  `UserAvatar`/`FramedAvatar`/`NicknameRenderer` (mesmo sistema do feed).
+  `features/feed/story_viewer.dart` — viewer fullscreen (`BoxFit.contain`),
+  toque esquerda/direita para navegar, arrastar para baixo/✕/Back fecham,
+  lixeira (com confirmação) só no próprio Story. UM vídeo por vez (controller
+  descartado ao trocar).
+- **Feed:** o header entra como primeiro sliver ANTES dos posts e só quando
+  autenticado; `loadFeed`/`_refresh` também chamam `loadStories` (falha ali
+  nunca afeta os posts).
+- **Criação:** o FAB do perfil (`CreatePostFab`) abre um sheet
+  ("Nova publicação" / "Novo Story") — um único botão, sem duplicar. Story
+  usa `CreateStoryScreen` (`features/create_post/create_story_screen.dart`)
+  com o MESMO `pickGalleryMedia` e `/api/uploads` do create_post, com
+  preview obrigatório e capa de vídeo via `video_thumbnail`.
+- **Rotas:** `AppRoutes.createStory` (`/home/create-story`); registrada
+  também no `test_app.dart` (rotas fake dos testes).
+
 ## Architecture — Server
 The backend lives in the separate repo `Souzzaaxzy/ServidorMtx`. Key points
 for reference when working on the app's data layer:

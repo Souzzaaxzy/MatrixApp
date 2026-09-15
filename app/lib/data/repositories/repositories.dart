@@ -13,6 +13,7 @@ import '../../models/post.dart';
 import '../api_client.dart';
 import '../dtos/dtos.dart';
 import 'sticker_repository.dart';
+import 'story_repository.dart';
 
 /// Authentication repository — register, login, current user, logout,
 /// and account recovery. Username-only (no email/phone).
@@ -1069,6 +1070,7 @@ class Repositories {
     required this.customization,
     required this.chat,
     required this.stickers,
+    required this.stories,
   });
 
   final AuthRepository auth;
@@ -1082,4 +1084,5 @@ class Repositories {
   final CustomizationRepository customization;
   final ChatRepository chat;
   final StickerRepository stickers;
+  final StoryRepository stories;
 }

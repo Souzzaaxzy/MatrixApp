@@ -5,6 +5,7 @@ import '../features/auth/login/login_screen.dart';
 import '../features/auth/recover/recover_screen.dart';
 import '../features/auth/register/register_screen.dart';
 import '../features/create_post/create_post_screen.dart';
+import '../features/create_post/create_story_screen.dart';
 import '../features/customizations/customizations_screen.dart';
 import '../features/home/home_screen.dart';
 import '../features/post/post_detail_screen.dart';
@@ -30,6 +31,9 @@ class AppRoutes {
   static const String recover = '/recover';
   static const String home = '/home';
   static const String createPost = '/home/create-post';
+
+  /// Nova publicação OU novo Story — escolhido no mesmo botão "+" do perfil.
+  static const String createStory = '/home/create-story';
   static const String editProfile = '/home/edit-profile';
 
   /// Profile customizations (cosmetics) — session user only.
@@ -112,6 +116,7 @@ Widget _buildPage(RouteSettings settings) {
     AppRoutes.home =>
       HomeScreen(initialIndex: (settings.arguments as int?) ?? 0),
     AppRoutes.createPost => CreatePostScreen(),
+    AppRoutes.createStory => CreateStoryScreen(),
     AppRoutes.editProfile => EditProfileScreen(),
     AppRoutes.customizations => CustomizationsScreen(),
     AppRoutes.postDetail => _postDetail(settings.arguments as String?),

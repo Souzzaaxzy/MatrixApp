@@ -6,6 +6,7 @@ import '../../models/matrix_notification.dart';
 import '../../models/matrix_user.dart';
 import '../../models/post.dart';
 import '../../models/sticker.dart';
+import '../../models/story.dart';
 
 /// Mappers that convert backend JSON responses into the app's domain models.
 ///
@@ -1037,4 +1038,117 @@ class StickerPackageDto {
             .map((d) => d.toModel())
             .toList(),
       );
+}
+
+
+/// A single Story from the feed header.
+class StoryDto {
+  final String id;
+  final String mediaUrl;
+  final String mediaType;
+  final String? thumbnailUrl;
+  final String caption;
+  final DateTime createdAt;
+  final DateTime expiresAt;
+  final bool viewed;
+  final bool mine;
+  final String authorId;
+  final String authorNickname;
+  final String? authorAvatarUrl;
+  final String? authorNicknameColor;
+  final String? authorFrameId;
+  final String? authorFrameAsset;
+
+  const StoryDto({
+    required this.id,
+    required this.mediaUrl,
+    required this.mediaType,
+    this.thumbnailUrl,
+    required this.caption,
+    required this.createdAt,
+    required this.expiresAt,
+    required this.viewed,
+    required this.mine,
+    required this.authorId,
+    required this.authorNickname,
+    this.authorAvatarUrl,
+    this.authorNicknameColor,
+    this.authorFrameId,
+    this.authorFrameAsset,
+  });
+
+  Story toModel() => Story(
+        id: id,
+        authorId: authorId,
+        authorNickname: authorNickname,
+        authorAvatarUrl: authorAvatarUrl,
+        authorNicknameColor: authorNicknameColor,
+        authorFrameId: authorFrameId,
+        authorFrameAsset: authorFrameAsset,
+        mediaUrl: mediaUrl,
+        mediaType: mediaType,
+        thumbnailUrl: thumbnailUrl,
+        caption: caption,
+        createdAt: createdAt,
+        expiresAt: expiresAt,
+        viewed: viewed,
+        mine: mine,
+      );
+
+  factory StoryDto.fromJson(Map<String, dynamic> json) {
+    final author = (json['author'] as Map<String, dynamic>?) ?? const {};
+    return StoryDto(
+      id: json['id'] as String,
+      mediaUrl: json['mediaUrl'] as String,
+      mediaType: (json['mediaType'] as String?) ?? 'image',
+      thumbnailUrl: json['thumbnailUrl'] as String?,
+      caption: (json['caption'] as String?) ?? '',
+      createdAt: DateTime.tryParse((json['createdAt'] as String?) ?? '') ??
+          DateTime.now(),
+      expiresAt: DateTime.tryParse((json['expiresAt'] as String?) ?? '') ??
+          DateTime.now(),
+      viewed: (json['viewed'] as bool?) ?? false,
+      mine: (json['mine'] as bool?) ?? false,
+      authorId: (author['id'] as String?) ?? '',
+      authorNickname: (author['nickname'] as String?) ?? '',
+      authorAvatarUrl: author['avatarUrl'] as String?,
+      authorNicknameColor: author['nameColor'] as String?,
+      authorFrameId: author['frameId'] as String?,
+      authorFrameAsset: author['frameAsset'] as String?,
+    );
+  }
+}
+
+/// The active-stories payload, grouped by author.
+class StoryGroupsDto {
+  final List<StoryGroup> groups;
+
+  const StoryGroupsDto(this.groups);
+
+  /// Parses the  envelope from GET /api/stories.
+  factory StoryGroupsDto.fromJson(Map<String, dynamic> json) {
+    final raw = (json['groups'] as List? ?? const [])
+        .whereType<Map<String, dynamic>>();
+    final groups = <StoryGroup>[];
+    for (final g in raw) {
+      final rawStories = (g['stories'] as List? ?? const [])
+          .whereType<Map<String, dynamic>>()
+          .map(StoryDto.fromJson)
+          .map((d) => d.toModel())
+          .toList();
+      if (rawStories.isEmpty) continue;
+      final first = rawStories.first;
+      groups.add(StoryGroup(
+        authorId: first.authorId,
+        authorNickname: first.authorNickname,
+        authorAvatarUrl: first.authorAvatarUrl,
+        authorNicknameColor: first.authorNicknameColor,
+        authorFrameId: first.authorFrameId,
+        authorFrameAsset: first.authorFrameAsset,
+        stories: rawStories,
+        allViewed: (g['allViewed'] as bool?) ?? false,
+      ));
+    }
+    return StoryGroupsDto(groups);
+  }
 }

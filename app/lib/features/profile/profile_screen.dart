@@ -534,10 +534,28 @@ class _StatColumn extends StatelessWidget {
   }
 }
 
-/// The floating "+" button — only rendered on the own profile. Reuses the
-/// existing create-post flow (same target the old menu entry used).
+/// The floating "+" button — only rendered on the own profile. Opens a
+/// chooser for the TWO content types (Nova publicação / Novo Story) instead
+/// of duplicating the button: the post flow itself is unchanged, and Story
+/// reuses the same media picker/upload pipeline.
 class CreatePostFab extends StatelessWidget {
   const CreatePostFab({super.key});
+
+  Future<void> _openChooser(BuildContext context) async {
+    final choice = await showModalBottomSheet<_CreateChoice>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      barrierColor: Colors.black.withValues(alpha: 0.5),
+      builder: (_) => const _CreateChooserSheet(),
+    );
+    if (choice == null || !context.mounted) return;
+    switch (choice) {
+      case _CreateChoice.post:
+        Navigator.of(context).pushNamed(AppRoutes.createPost);
+      case _CreateChoice.story:
+        Navigator.of(context).pushNamed(AppRoutes.createStory);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -547,11 +565,96 @@ class CreatePostFab extends StatelessWidget {
       background: AppColors.primaryBlue,
       borderRadius: BorderRadius.circular(999),
       child: InkWell(
-        onTap: () => Navigator.of(context).pushNamed(AppRoutes.createPost),
+        onTap: () => _openChooser(context),
         borderRadius: BorderRadius.circular(999),
         child: Padding(
           padding: EdgeInsets.all(AppDimensions.spaceLg),
           child: Icon(Icons.add_rounded, size: 28, color: AppColors.techWhite),
+        ),
+      ),
+    );
+  }
+}
+
+/// Tipo de conteúdo escolhido no botão "+" do perfil.
+enum _CreateChoice { post, story }
+
+/// Sheet de escolha: Nova publicação ou Novo Story (pt-BR, ícones nativos).
+class _CreateChooserSheet extends StatelessWidget {
+  const _CreateChooserSheet();
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      top: false,
+      child: Container(
+        margin: const EdgeInsets.all(AppDimensions.spaceMd),
+        padding: const EdgeInsets.symmetric(vertical: AppDimensions.spaceXs),
+        decoration: BoxDecoration(
+          color: AppColors.bluishBlack,
+          borderRadius: BorderRadius.circular(AppDimensions.radiusXl),
+          border: Border.all(color: AppColors.deepBlue),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.4),
+              blurRadius: 20,
+            ),
+          ],
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _ChooserItem(
+                icon: Icons.article_rounded,
+                label: 'Nova publicação',
+                onTap: () => Navigator.of(context).pop(_CreateChoice.post),
+              ),
+              _ChooserItem(
+                icon: Icons.auto_awesome_rounded,
+                label: 'Novo Story',
+                onTap: () => Navigator.of(context).pop(_CreateChoice.story),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ChooserItem extends StatelessWidget {
+  const _ChooserItem({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppDimensions.spaceLg,
+          vertical: AppDimensions.spaceMd,
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: AppColors.electricBlue, size: 20),
+            const SizedBox(width: AppDimensions.spaceMd),
+            Expanded(
+              child: Text(
+                label,
+                style: AppTextStyles.body.copyWith(color: AppColors.techWhite),
+              ),
+            ),
+          ],
         ),
       ),
     );

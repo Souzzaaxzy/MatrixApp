@@ -32,10 +32,16 @@ void main() {
     await pumpMatrixApp(tester, const HomeScreen(), state: state);
 
     // The old bottom-bar entry is gone: the flow now starts from the
-    // floating "+" button on the own profile tab.
+    // floating "+" button on the own profile tab, which offers the TWO
+    // content types (Nova publicação / Novo Story) — the post flow itself
+    // is unchanged after the choice.
     await tester.tap(find.text('Perfil'));
     await tester.pump(const Duration(milliseconds: 400));
     await tester.tap(find.byIcon(Icons.add_rounded));
+    await tester.pumpAndSettle();
+    expect(find.text('Nova publicação'), findsOneWidget);
+    expect(find.text('Novo Story'), findsOneWidget);
+    await tester.tap(find.text('Nova publicação'));
     await tester.pumpAndSettle();
 
     await tester.enterText(find.byType(TextField), 'Post de teste');

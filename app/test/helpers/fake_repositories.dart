@@ -4,6 +4,7 @@ import 'package:matrix_app/data/api_config.dart';
 import 'package:matrix_app/data/dtos/dtos.dart';
 import 'package:matrix_app/data/repositories/repositories.dart';
 import 'package:matrix_app/data/repositories/sticker_repository.dart';
+import 'package:matrix_app/data/repositories/story_repository.dart';
 import 'package:matrix_app/models/comment.dart';
 import 'package:matrix_app/models/conversation.dart';
 import 'package:matrix_app/models/cosmetic_item.dart';
@@ -12,6 +13,7 @@ import 'package:matrix_app/models/matrix_notification.dart';
 import 'package:matrix_app/models/matrix_user.dart';
 import 'package:matrix_app/models/post.dart';
 import 'package:matrix_app/models/sticker.dart';
+import 'package:matrix_app/models/story.dart';
 
 /// In-memory fake repositories for widget/unit tests.
 ///
@@ -33,6 +35,7 @@ class FakeRepositories extends Repositories {
     required super.customization,
     required super.chat,
     required super.stickers,
+    required super.stories,
   }) : _store = store;
 
   factory FakeRepositories({
@@ -46,6 +49,7 @@ class FakeRepositories extends Repositories {
     List<StickerPackage> seedStickerPackages = const [],
     List<Sticker> seedStickerFavorites = const [],
     List<Sticker> seedStickerRecents = const [],
+    List<StoryGroup> seedStoryGroups = const [],
   }) {
     final store = FakeStore();
     seedComments.forEach((postId, comments) {
@@ -61,6 +65,7 @@ class FakeRepositories extends Repositories {
     store.stickerPackages.addAll(seedStickerPackages);
     store.stickerFavorites.addAll(seedStickerFavorites);
     store.stickerRecents.addAll(seedStickerRecents);
+    store.storyGroups.addAll(seedStoryGroups);
     return FakeRepositories._(
       store: store,
       auth: _FakeAuthRepository(store),
@@ -74,6 +79,7 @@ class FakeRepositories extends Repositories {
       customization: _FakeCustomizationRepository(store),
       chat: _FakeChatRepository(store),
       stickers: _FakeStickerRepository(store),
+      stories: _FakeStoryRepository(store),
     );
   }
 
@@ -115,6 +121,9 @@ class FakeStore {
 
   /// Sticker.ly pack codes already imported (fake dedupe of the source).
   final Set<String> stickerlyImported = {};
+
+  /// Active stories grouped by author (fake server state).
+  final List<StoryGroup> storyGroups = [];
 
   /// Cópias autônomas de favoritas preservadas quando o pacote é excluído
   /// (espelha o pacote-arquivo oculto do servidor).
@@ -1742,4 +1751,137 @@ class _FakeStickerRepository implements StickerRepository {
 /// Hashes já importados (simula a dedupe do servidor para testes).
 extension _FakeStickerRepoHashes on _FakeStickerRepository {
   Set<String> get _importedHashes => _store.importedStickerHashes;
+}
+
+
+/// In-memory stories: mirrors the server's grouping/ordering contract
+/// (unviewed authors first, newest first inside each group).
+class _FakeStoryRepository implements StoryRepository {
+  _FakeStoryRepository(this._store);
+
+  final FakeStore _store;
+
+  @override
+  Future<List<StoryGroup>> active() async {
+    final groups = _store.storyGroups.map((g) {
+      final stories = g.stories
+          .where((s) => s.expiresAt.isAfter(DateTime.now()))
+          .toList()
+        ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      return StoryGroup(
+        authorId: g.authorId,
+        authorNickname: g.authorNickname,
+        authorAvatarUrl: g.authorAvatarUrl,
+        authorNicknameColor: g.authorNicknameColor,
+        authorFrameId: g.authorFrameId,
+        authorFrameAsset: g.authorFrameAsset,
+        stories: stories,
+        allViewed: stories.isNotEmpty && stories.every((s) => s.viewed),
+      );
+    }).where((g) => g.stories.isNotEmpty).toList();
+    groups.sort((a, b) {
+      if (a.allViewed != b.allViewed) return a.allViewed ? 1 : -1;
+      final aT = a.stories.first.createdAt;
+      final bT = b.stories.first.createdAt;
+      return bT.compareTo(aT);
+    });
+    return groups;
+  }
+
+  @override
+  Future<Story> create({
+    required String mediaUrl,
+    required String mediaType,
+    String? thumbnailUrl,
+    String caption = '',
+  }) async {
+    final now = DateTime.now();
+    final story = Story(
+      id: 'story_${now.microsecondsSinceEpoch}',
+      authorId: _store.currentUserId ?? "",
+      authorNickname: 'matrixuser0',
+      authorAvatarUrl: null,
+      mediaUrl: mediaUrl,
+      mediaType: mediaType,
+      thumbnailUrl: thumbnailUrl,
+      caption: caption,
+      createdAt: now,
+      expiresAt: now.add(const Duration(hours: 24)),
+      mine: true,
+    );
+    // Append to the session user's group (created on demand).
+    final idx = _store.storyGroups.indexWhere(
+      (g) => g.authorId == (_store.currentUserId ?? ""),
+    );
+    if (idx >= 0) {
+      final g = _store.storyGroups[idx];
+      _store.storyGroups[idx] = StoryGroup(
+        authorId: g.authorId,
+        authorNickname: g.authorNickname,
+        authorAvatarUrl: g.authorAvatarUrl,
+        stories: [story, ...g.stories],
+        allViewed: false,
+      );
+    } else {
+      _store.storyGroups.add(StoryGroup(
+        authorId: _store.currentUserId ?? "",
+        authorNickname: 'matrixuser0',
+        authorAvatarUrl: null,
+        stories: [story],
+        allViewed: false,
+      ));
+    }
+    return story;
+  }
+
+  @override
+  Future<void> markViewed(String storyId) async {
+    for (var i = 0; i < _store.storyGroups.length; i++) {
+      final g = _store.storyGroups[i];
+      if (g.stories.every((s) => s.id != storyId)) continue;
+      _store.storyGroups[i] = StoryGroup(
+        authorId: g.authorId,
+        authorNickname: g.authorNickname,
+        authorAvatarUrl: g.authorAvatarUrl,
+        stories: g.stories
+            .map((s) => s.id == storyId
+                ? Story(
+                    id: s.id,
+                    authorId: s.authorId,
+                    authorNickname: s.authorNickname,
+                    authorAvatarUrl: s.authorAvatarUrl,
+                    mediaUrl: s.mediaUrl,
+                    mediaType: s.mediaType,
+                    thumbnailUrl: s.thumbnailUrl,
+                    caption: s.caption,
+                    createdAt: s.createdAt,
+                    expiresAt: s.expiresAt,
+                    viewed: true,
+                    mine: s.mine,
+                  )
+                : s)
+            .toList(),
+        allViewed: true,
+      );
+    }
+  }
+
+  @override
+  Future<void> delete(String storyId) async {
+    for (var i = _store.storyGroups.length - 1; i >= 0; i--) {
+      final g = _store.storyGroups[i];
+      final remaining = g.stories.where((s) => s.id != storyId).toList();
+      if (remaining.isEmpty) {
+        _store.storyGroups.removeAt(i);
+      } else {
+        _store.storyGroups[i] = StoryGroup(
+          authorId: g.authorId,
+          authorNickname: g.authorNickname,
+          authorAvatarUrl: g.authorAvatarUrl,
+          stories: remaining,
+          allViewed: remaining.every((s) => s.viewed),
+        );
+      }
+    }
+  }
 }

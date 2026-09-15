@@ -9,6 +9,7 @@ import '../../core/widgets/hud_label.dart';
 import '../../core/widgets/matrix_button.dart';
 import 'comments_sheet.dart';
 import 'post_card.dart';
+import 'stories_header.dart';
 
 /// MATRIX feed — chronological list of posts loaded from the backend.
 class FeedScreen extends StatefulWidget {
@@ -34,6 +35,9 @@ class _FeedScreenState extends State<FeedScreen> {
     // Load the feed on first build. Use post-frame so AppStateScope is ready.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       AppStateScope.of(context).loadFeed();
+      // Stories strip at the top of the feed (independent load: a failure
+      // there must never affect the posts).
+      AppStateScope.of(context).loadStories();
     });
     _scroll.addListener(_updateActiveVideo);
   }
@@ -46,7 +50,12 @@ class _FeedScreenState extends State<FeedScreen> {
   }
 
   Future<void> _refresh() async {
-    await AppStateScope.of(context).loadFeed();
+    // Captura o state ANTES de qualquer await (evita BuildContext após gap).
+    final state = AppStateScope.of(context);
+    await state.loadFeed();
+    // Stories refresh alongside the feed (same gesture) — a failure there
+    // never blocks the posts.
+    await state.loadStories();
     _updateActiveVideo();
   }
 
@@ -108,6 +117,13 @@ class _FeedScreenState extends State<FeedScreen> {
                 ],
               ),
             ),
+            // Stories ficam ANTES dos posts, claramente separados do feed
+            // (mesmo sliver, mas com o divisor da própria faixa). Só aparece
+            // para usuários autenticados — o feed em si continua público.
+            if (state.isAuthenticated)
+              SliverToBoxAdapter(
+                child: StoriesHeader(state: state),
+              ),
             if (state.isLoadingFeed && posts.isEmpty)
               const SliverFillRemaining(
                 hasScrollBody: false,
