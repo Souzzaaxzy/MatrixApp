@@ -32,6 +32,7 @@ class StoryRepository {
     String text = '',
     String? thumbnailUrl,
     String caption = '',
+    int? durationMs,
   }) async {
     final json = await _api.post<Map<String, dynamic>>(
       '/api/stories',
@@ -42,6 +43,7 @@ class StoryRepository {
         if (type == 'text' && text.trim().isNotEmpty) 'text': text.trim(),
         if (thumbnailUrl != null) 'thumbnailUrl': thumbnailUrl,
         if (caption.trim().isNotEmpty) 'caption': caption.trim(),
+        if (durationMs != null && durationMs > 0) 'durationMs': durationMs,
       },
     );
     return StoryDto.fromJson(json).toModel();

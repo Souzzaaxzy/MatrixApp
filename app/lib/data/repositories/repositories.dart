@@ -1043,13 +1043,18 @@ class UploadRepository {
     return json['url'] as String;
   }
 
-  /// Uploads a VIDEO file for a Post and returns the public URL. The server
-  /// validates the real MP4 bytes + size cap (100MB).
-  Future<String> uploadVideo(File file) async {
+  /// Uploads a VIDEO file for a Post/Story and returns the public URL. The
+  /// server validates the real MP4 bytes, the size cap (100MB) and — when
+  /// [durationMs] is provided (real media metadata) — the 2-minute cap.
+  Future<String> uploadVideo(File file, {int? durationMs}) async {
     final multipart = await MultipartFile.fromFile(file.path);
     final json = await _api.upload<Map<String, dynamic>>(
       '/api/uploads/video',
       file: multipart,
+      fields: {
+        if (durationMs != null && durationMs > 0)
+          'durationMs': '$durationMs',
+      },
     );
     return json['url'] as String;
   }

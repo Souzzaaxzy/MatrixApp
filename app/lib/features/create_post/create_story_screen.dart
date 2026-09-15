@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:video_player/video_player.dart';
 import 'package:video_thumbnail/video_thumbnail.dart';
 
 import '../../app/theme/app_colors.dart';
@@ -13,6 +14,10 @@ import '../../core/widgets/hud_label.dart';
 import '../../core/widgets/matrix_button.dart';
 import '../../data/api_config.dart';
 import '../../data/services.dart';
+
+/// Limite de duração de um vídeo de Story (2 minutos). Validado no app (antes
+/// do upload) E no servidor (que revalida a duração declarada).
+const Duration kMaxStoryVideoDuration = Duration(minutes: 2);
 
 /// Criação de Story — mesmo seletor de mídia e mesmo pipeline de upload do
 /// create_post (`pickGalleryMedia` + `/api/uploads`). Requer PREVIEW antes
@@ -34,6 +39,9 @@ class _CreateStoryScreenState extends State<CreateStoryScreen> {
   /// Story (nenhum sistema separado por tipo).
   bool _textMode = false;
   final TextEditingController _textCtrl = TextEditingController();
+
+  /// Duração real do vídeo selecionado (para o servidor revalidar o limite).
+  int? videoDurationMs;
 
   /// Mesma regra de detecção de vídeo do create_post (um só critério no app).
   @override
@@ -66,6 +74,25 @@ class _CreateStoryScreenState extends State<CreateStoryScreen> {
     }
     final file = result.file!;
     final isVideo = _isVideoPath(file.path);
+    if (isVideo) {
+      // Limite de 2 MINUTOS para vídeos de Story: bloqueia ANTES do upload e
+      // avisa o usuário (nunca publica só os primeiros segundos em silêncio).
+      final duration = await _probeVideoDuration(file.path);
+      if (!mounted) return;
+      if (duration != null && duration > kMaxStoryVideoDuration) {
+        setState(() {
+          _imagePath = null;
+          _videoPath = null;
+          _thumbnailPath = null;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('O vídeo deve ter no máximo 2 minutos.'),
+          ),
+        );
+        return;
+      }
+    }
     setState(() {
       _imagePath = isVideo ? null : file.path;
       _videoPath = isVideo ? file.path : null;
@@ -76,6 +103,22 @@ class _CreateStoryScreenState extends State<CreateStoryScreen> {
       if (mounted && cover != null) {
         setState(() => _thumbnailPath = cover);
       }
+    }
+  }
+
+  /// Duração REAL do vídeo (metadados da mídia, não um contador local) lida
+  /// pela infraestrutura existente (`video_player`). Retorna null quando não
+  /// foi possível determinar — nesse caso o SERVIDOR ainda revalida.
+  Future<Duration?> _probeVideoDuration(String path) async {
+    final controller = VideoPlayerController.file(File(path));
+    try {
+      await controller.initialize();
+      final d = controller.value.duration;
+      return d > Duration.zero ? d : null;
+    } catch (_) {
+      return null;
+    } finally {
+      await controller.dispose();
     }
   }
 
@@ -153,7 +196,17 @@ class _CreateStoryScreenState extends State<CreateStoryScreen> {
             message: 'O vídeo excede o tamanho permitido (máx. 100 MB).',
           );
         }
-        mediaUrl = await Services.instance.uploads.uploadVideo(f);
+        final duration = await _probeVideoDuration(f.path);
+        if (duration != null && duration > kMaxStoryVideoDuration) {
+          throw const ApiException(
+            statusCode: 400,
+            message: 'O vídeo deve ter no máximo 2 minutos.',
+          );
+        }
+        mediaUrl = await Services.instance.uploads.uploadVideo(
+          f,
+          durationMs: duration?.inMilliseconds,
+        );
         mediaType = 'video';
         if (_thumbnailPath != null) {
           try {
@@ -169,6 +222,9 @@ class _CreateStoryScreenState extends State<CreateStoryScreen> {
         mediaUrl: mediaUrl!,
         mediaType: mediaType,
         thumbnailUrl: thumbnailUrl,
+        durationMs: mediaType == 'video'
+            ? videoDurationMs
+            : null,
       );
       if (!mounted) return;
       navigator.pop();

@@ -6,8 +6,12 @@ import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_dimensions.dart';
 import '../../app/theme/app_text_styles.dart';
 import '../../core/services/app_state.dart';
+import '../../core/widgets/framed_avatar.dart';
 import '../../core/widgets/hud_label.dart';
+import '../../core/widgets/nickname_renderer.dart';
+import '../../core/widgets/user_avatar.dart';
 import '../../data/api_config.dart';
+import '../../models/cosmetic_item.dart';
 import '../../models/story.dart';
 
 /// Visualizador de Story — tela cheia, mídia em `BoxFit.contain` (proporção
@@ -49,9 +53,24 @@ class StoryViewer extends StatefulWidget {
   State<StoryViewer> createState() => _StoryViewerState();
 }
 
-class _StoryViewerState extends State<StoryViewer> {
+class _StoryViewerState extends State<StoryViewer>
+    with SingleTickerProviderStateMixin {
   late int _groupIndex;
   int _storyIndex = 0;
+
+  /// Duração de exibição de uma FOTO (Stories: 5s). Vídeos usam a duração
+  /// real do controller.
+  static const Duration _imageDuration = Duration(seconds: 5);
+
+  /// Linha de progresso do Story ATUAL: anima de 0→1 em sincronia com a
+  /// mídia (5s na foto; a duração real no vídeo) e dispara o avanço no fim.
+  late final AnimationController _progress = AnimationController(
+    vsync: this,
+    duration: _imageDuration,
+  )..addStatusListener(_onProgressStatus);
+
+  /// Guarda o controller de vídeo atual para animar a barra pela duração real.
+  bool _advancedForStory = false;
 
   VideoPlayerController? _video;
   bool _videoReady = false;
@@ -69,16 +88,46 @@ class _StoryViewerState extends State<StoryViewer> {
       widget.state.storyGroups.isEmpty ? 0 : widget.state.storyGroups.length - 1,
     );
     _markCurrentViewed();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _syncVideo());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _syncVideo();
+      _startProgress();
+    });
   }
 
   @override
   void dispose() {
+    _progress.dispose();
     _video?.removeListener(_onVideoTick);
     _video?.dispose();
     _replyCtrl.dispose();
     _replyFocus.dispose();
     super.dispose();
+  }
+
+  /// Auto-avanço quando a linha de progresso completa (foto) — vídeos usam
+  /// a posição real do controller. Nunca dispara duas vezes para o mesmo
+  /// Story (`_advancedForStory`).
+  void _onProgressStatus(AnimationStatus status) {
+    if (status != AnimationStatus.completed) return;
+    if (_advancedForStory) return;
+    _advancedForStory = true;
+    _next();
+  }
+
+  /// (Re)inicia a linha de progresso para o Story atual: 5s fixos para foto
+  /// (e texto) ou a duração real do vídeo quando disponível.
+  void _startProgress() {
+    final story = _story;
+    if (story == null) return;
+    _advancedForStory = false;
+    Duration target = _imageDuration;
+    final v = _video;
+    if (story.isVideo && v != null && v.value.isInitialized) {
+      final d = v.value.duration;
+      if (d > Duration.zero) target = d;
+    }
+    _progress.duration = target;
+    _progress.forward(from: 0);
   }
 
   List<StoryGroup> get _groups => widget.state.storyGroups;
@@ -123,6 +172,8 @@ class _StoryViewerState extends State<StoryViewer> {
         _video = controller;
         _videoReady = true;
       });
+      // A barra passa a acompanhar a DURAÇÃO REAL do vídeo.
+      _startProgress();
     } catch (_) {
       await controller.dispose();
     }
@@ -157,6 +208,7 @@ class _StoryViewerState extends State<StoryViewer> {
       setState(() => _storyIndex++);
       _markCurrentViewed();
       _syncVideo();
+      _startProgress();
       return;
     }
     // Fim do autor → próximo AUTOR.
@@ -167,6 +219,7 @@ class _StoryViewerState extends State<StoryViewer> {
       });
       _markCurrentViewed();
       _syncVideo();
+      _startProgress();
       return;
     }
     Navigator.of(context).maybePop();
@@ -178,6 +231,7 @@ class _StoryViewerState extends State<StoryViewer> {
       setState(() => _storyIndex--);
       _markCurrentViewed();
       _syncVideo();
+      _startProgress();
       return;
     }
     if (_groupIndex > 0) {
@@ -188,6 +242,7 @@ class _StoryViewerState extends State<StoryViewer> {
       });
       _markCurrentViewed();
       _syncVideo();
+      _startProgress();
     }
   }
 
@@ -347,40 +402,20 @@ class _StoryViewerState extends State<StoryViewer> {
             SafeArea(
               child: Column(
                 children: [
+                  // Linha de progresso: uma por Story do autor; a ATUAL
+                  // avança em tempo real (5s na foto, duração real no vídeo)
+                  // e as demais ficam concluídas/não iniciadas.
                   _ProgressBars(
                     count: group?.stories.length ?? 0,
                     current: _storyIndex,
+                    progress: _progress,
                   ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: AppDimensions.spaceLg,
-                      vertical: AppDimensions.spaceSm,
-                    ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            group?.authorNickname ?? '',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: AppTextStyles.h3.copyWith(fontSize: 16),
-                          ),
-                        ),
-                        if (story?.mine ?? false)
-                          IconButton(
-                            tooltip: 'Excluir Story',
-                            icon: Icon(Icons.delete_outline_rounded,
-                                color: AppColors.error),
-                            onPressed: _confirmDelete,
-                          ),
-                        IconButton(
-                          tooltip: 'Fechar',
-                          icon: Icon(Icons.close_rounded,
-                              color: AppColors.techWhite),
-                          onPressed: () => Navigator.of(context).maybePop(),
-                        ),
-                      ],
-                    ),
+                  // Identidade do autor: FOTO centralizada acima do NOME —
+                  // os MESMOS componentes usados em grupos/DM.
+                  _StoryIdentity(
+                    group: group,
+                    onDelete: (story?.mine ?? false) ? _confirmDelete : null,
+                    onClose: () => Navigator.of(context).maybePop(),
                   ),
                   if ((story?.caption ?? '').isNotEmpty)
                     Padding(
@@ -612,12 +647,19 @@ class _StoryImage extends StatelessWidget {
   }
 }
 
-/// Barras de progresso (uma por Story do autor) — a atual destacada.
+/// Barras de progresso (uma por Story do autor). A barra ATUAL anima em
+/// tempo real (0→1) sincronizada à mídia; as anteriores ficam cheias e as
+/// seguintes vazias.
 class _ProgressBars extends StatelessWidget {
-  const _ProgressBars({required this.count, required this.current});
+  const _ProgressBars({
+    required this.count,
+    required this.current,
+    required this.progress,
+  });
 
   final int count;
   final int current;
+  final Animation<double> progress;
 
   @override
   Widget build(BuildContext context) {
@@ -635,15 +677,130 @@ class _ProgressBars extends StatelessWidget {
                 height: 3,
                 margin: const EdgeInsets.symmetric(horizontal: 2),
                 decoration: BoxDecoration(
-                  color: i <= current
-                      ? AppColors.electricBlue
-                      : AppColors.techWhite.withValues(alpha: 0.25),
+                  color: AppColors.techWhite.withValues(alpha: 0.25),
                   borderRadius: BorderRadius.circular(2),
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(2),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: i < current
+                        // Já visto neste passe → cheio.
+                        ? FractionallySizedBox(
+                            widthFactor: 1,
+                            child: ColoredBox(
+                              color: AppColors.electricBlue,
+                              child: const SizedBox(height: 3),
+                            ),
+                          )
+                        : i == current
+                            // Atual → anima de 0→1 em sincronia com a mídia.
+                            ? AnimatedBuilder(
+                                animation: progress,
+                                builder: (context, _) => FractionallySizedBox(
+                                  widthFactor: progress.value.clamp(0.0, 1.0),
+                                  child: ColoredBox(
+                                    color: AppColors.electricBlue,
+                                    child: const SizedBox(height: 3),
+                                  ),
+                                ),
+                              )
+                            // Ainda não iniciado → vazio.
+                            : const SizedBox(height: 3),
+                  ),
                 ),
               ),
             ),
         ],
       ),
+    );
+  }
+}
+
+/// Identidade do autor dentro do Story: FOTO centralizada ACIMA do NOME,
+/// reutilizando `UserAvatar`/`FramedAvatar`/`NicknameRenderer` — o mesmo
+/// visual de grupos/DM. O nickname trunca com ellipsis (nunca sai da tela).
+class _StoryIdentity extends StatelessWidget {
+  const _StoryIdentity({
+    required this.group,
+    required this.onDelete,
+    required this.onClose,
+  });
+
+  final StoryGroup? group;
+  final VoidCallback? onDelete;
+  final VoidCallback onClose;
+
+  @override
+  Widget build(BuildContext context) {
+    final g = group;
+    return Padding(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppDimensions.spaceLg,
+        vertical: AppDimensions.spaceSm,
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Botão de fechar alinhado ao topo (área segura/touch target).
+          IconButton(
+            tooltip: 'Fechar',
+            icon: Icon(Icons.close_rounded, color: AppColors.techWhite),
+            onPressed: onClose,
+          ),
+          Expanded(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (g != null)
+                  FramedAvatar(
+                    frame: _frameOf(g),
+                    size: 56,
+                    child: UserAvatar(
+                      name: g.authorNickname,
+                      seed: g.authorNickname,
+                      imageUrl: g.authorAvatarUrl,
+                      size: 48,
+                    ),
+                  ),
+                const SizedBox(height: AppDimensions.spaceXs),
+                if (g != null)
+                  NicknameRenderer(
+                    g.authorNickname,
+                    baseStyle: AppTextStyles.h3.copyWith(fontSize: 16),
+                    background: AppColors.absoluteBlack,
+                    nameColor: g.authorNicknameColor,
+                    textAlign: TextAlign.center,
+                    maxLines: 1,
+                  ),
+              ],
+            ),
+          ),
+          // Espaço espelhando o botão de fechar (mantém o nome centralizado)
+          // + ação de excluir quando é o próprio Story.
+          SizedBox(
+            width: 48,
+            child: onDelete != null
+                ? IconButton(
+                    tooltip: 'Excluir Story',
+                    icon: Icon(Icons.delete_outline_rounded,
+                        color: AppColors.error),
+                    onPressed: onDelete,
+                  )
+                : null,
+          ),
+        ],
+      ),
+    );
+  }
+
+  CosmeticItem? _frameOf(StoryGroup g) {
+    if (g.authorFrameId == null) return null;
+    return CosmeticItem(
+      id: g.authorFrameId!,
+      slot: CosmeticItem.avatarFrame,
+      name: g.authorFrameId!,
+      assetUrl: g.authorFrameAsset ?? '',
     );
   }
 }

@@ -94,6 +94,10 @@ class AppState extends ChangeNotifier {
   /// the server. Empty until [loadStories] completes.
   List<StoryGroup> _storyGroups = const [];
   bool _loadingStories = false;
+  /// True once the active-stories list was fetched at least once this
+  /// session — lets the profile avoid a flash of "no story" before the
+  /// first load decides the ring/tap behavior.
+  bool _storyCatalogLoaded = false;
 
   // ── Stickers (figurinhas) ─────────────────────────────────
   /// The full server sticker catalog: packages + stickers + user state.
@@ -302,6 +306,42 @@ class AppState extends ChangeNotifier {
   /// most recent). Empty until [loadStories] completes.
   List<StoryGroup> get storyGroups => List.unmodifiable(_storyGroups);
   bool get isLoadingStories => _loadingStories;
+  /// Whether the active stories were already loaded at least once.
+  bool get isStoryCatalogLoaded => _storyCatalogLoaded;
+
+  /// The active stories of [userId] (newest-first), or an empty list when
+  /// that user has no active story. Drives the profile avatar ring + the
+  /// tap-to-open-story behaviour.
+  List<Story> storiesOfUser(String? userId) {
+    if (userId == null || userId.isEmpty) return const [];
+    for (final g in _storyGroups) {
+      if (g.authorId == userId) return List.unmodifiable(g.stories);
+    }
+    return const [];
+  }
+
+  /// Whether [userId] has an ACTIVE story the session user has NOT seen yet
+  /// (drives the white ring on the profile photo). Expired stories never
+  /// appear in [_storyGroups], so a stale story never shows a ring.
+  bool hasUnseenStory(String? userId) {
+    if (userId == null || userId.isEmpty) return false;
+    for (final g in _storyGroups) {
+      if (g.authorId != userId) continue;
+      return g.stories.any((s) => !s.viewed);
+    }
+    return false;
+  }
+
+  /// The index of [userId]'s group inside [storyGroups], or -1 when that
+  /// user has no active story (so the profile tap can open the viewer at the
+  /// right author).
+  int storyGroupIndexFor(String? userId) {
+    if (userId == null || userId.isEmpty) return -1;
+    for (var i = 0; i < _storyGroups.length; i++) {
+      if (_storyGroups[i].authorId == userId) return i;
+    }
+    return -1;
+  }
 
   /// The session user's OWN active stories (already newest-first), used to
   /// label the "Seu Story" card and to allow deleting them.
@@ -467,6 +507,7 @@ class AppState extends ChangeNotifier {
   /// account never borrows another's installs/favorites/recents.
   void _clearStickerState() {
     _storyGroups = const [];
+    _storyCatalogLoaded = false;
     _stickerPackages = const [];
     _stickerCatalogLoaded = false;
     _stickerFavorites = const [];
@@ -518,6 +559,7 @@ class AppState extends ChangeNotifier {
     notifyListeners();
     try {
       _storyGroups = await _storiesRepo.active();
+      _storyCatalogLoaded = true;
     } catch (_) {
       // Keep the last known list — the feed must never break because of
       // the stories strip.
@@ -537,6 +579,7 @@ class AppState extends ChangeNotifier {
     String text = '',
     String? thumbnailUrl,
     String caption = '',
+    int? durationMs,
   }) async {
     final story = await _storiesRepo.create(
       type: type,
@@ -545,6 +588,7 @@ class AppState extends ChangeNotifier {
       text: text,
       thumbnailUrl: thumbnailUrl,
       caption: caption,
+      durationMs: durationMs,
     );
     // Optimistic local insert (newest-first inside the author's group) so
     // the strip updates instantly, then reconcile with the server.

@@ -569,7 +569,7 @@ class _FakeUploadRepository implements UploadRepository {
       'https://fake.matrix.app/u/test.png';
 
   @override
-  Future<String> uploadVideo(File file) async =>
+  Future<String> uploadVideo(File file, {int? durationMs}) async =>
       'https://fake.matrix.app/u/test.mp4';
 }
 
@@ -1805,6 +1805,7 @@ class _FakeStoryRepository implements StoryRepository {
     String text = '',
     String? thumbnailUrl,
     String caption = '',
+    int? durationMs,
   }) async {
     final now = DateTime.now();
     final story = Story(

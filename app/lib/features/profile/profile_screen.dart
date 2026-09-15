@@ -1,13 +1,13 @@
 import 'dart:typed_data';
 
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:flutter/gestures.dart' show LongPressGestureRecognizer;
 import 'package:flutter/material.dart';
 
 import '../../app/routes.dart';
 import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_dimensions.dart';
 import '../../app/theme/app_text_styles.dart';
+import '../../core/services/app_state.dart';
 import '../../core/services/video_cover_service.dart';
 import '../../core/utils/profile_navigation.dart';
 import '../../core/widgets/nickname_renderer.dart';
@@ -23,6 +23,7 @@ import '../../models/friend_request.dart';
 import '../../models/matrix_user.dart';
 import '../../models/post.dart';
 import '../chat/chat_navigation.dart';
+import '../feed/story_viewer.dart';
 import 'friends_sheet.dart';
 import 'friendship_button.dart';
 import 'settings_sheet.dart';
@@ -129,6 +130,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
     Navigator.of(context).pushNamed(AppRoutes.postDetail, arguments: post.id);
   }
 
+  /// Clique na foto de perfil: abre o Story ATIVO dessa pessoa (mesmo já
+  /// visto). Se ela não tiver Story ativo, NÃO abre um visualizador vazio —
+  /// garante os Stories carregados antes de decidir.
+  Future<void> _openUserStory(AppState state, MatrixUser user) async {
+    if (!state.isStoryCatalogLoaded) {
+      await state.loadStories();
+      if (!mounted) return;
+    }
+    final index = state.storyGroupIndexFor(user.id);
+    if (index < 0) return; // sem Story ativo → nada acontece
+    await StoryViewer.open(context, state, startGroup: index);
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = AppStateScope.of(context);
@@ -207,6 +221,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   user: user,
                   isOwn: isOwn,
                   friendship: friendship,
+                  hasUnseenStory: state.hasUnseenStory(user.id),
+                  onOpenStory: () => _openUserStory(state, user),
                   onEdit: _openEditProfile,
                   onFriendsTap: () => FriendsSheet.open(context, user),
                   onMessage: () => openChatWithUser(context, user),
@@ -271,6 +287,46 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 }
 
+/// Avatar da foto de perfil com o estado de STORY como moldura:
+///   * [unseen] = true  → borda BRANCA (Story ativo não visto);
+///   * [unseen] = false → SEM borda (Story visto ou inexistente).
+///
+/// Reusa o MESMO sistema visual de Stories do feed (borda branca =
+/// não visto); a moldura antiga foi removida via `UserAvatar(ring: false)`.
+class _StoryRingAvatar extends StatelessWidget {
+  const _StoryRingAvatar({required this.unseen, required this.child});
+
+  final bool unseen;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeOut,
+      padding: EdgeInsets.all(unseen ? 4 : 0),
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        // Borda branca só quando há Story não visto; caso contrário,
+        // transparente (sem borda) — a transição é suave.
+        border: Border.all(
+          color: unseen ? Colors.white : Colors.transparent,
+          width: 2.5,
+        ),
+        boxShadow: unseen
+            ? [
+                BoxShadow(
+                  color: Colors.white.withValues(alpha: 0.25),
+                  blurRadius: AppDimensions.glowSmallBlur,
+                ),
+              ]
+            : null,
+      ),
+      child: child,
+    );
+  }
+}
+
 /// The centered header: big avatar, @nickname with a subtle glow on the @,
 /// and either the edit CTA (own profile) or the friendship button.
 class _ProfileHeader extends StatelessWidget {
@@ -281,6 +337,8 @@ class _ProfileHeader extends StatelessWidget {
     required this.onEdit,
     required this.onFriendsTap,
     required this.onMessage,
+    required this.hasUnseenStory,
+    required this.onOpenStory,
   });
 
   final MatrixUser user;
@@ -289,6 +347,15 @@ class _ProfileHeader extends StatelessWidget {
   final VoidCallback onEdit;
   final VoidCallback onFriendsTap;
   final VoidCallback onMessage;
+
+  /// True when this user has an ACTIVE story the visitor has not seen yet —
+  /// draws the white ring around the photo (same viewed/unviewed system as
+  /// the feed strip; persisted server-side).
+  final bool hasUnseenStory;
+
+  /// Simple TAP on the photo opens this user's Story. A no-op when they have
+  /// no active story (never opens an empty viewer).
+  final VoidCallback onOpenStory;
 
   @override
   Widget build(BuildContext context) {
@@ -300,12 +367,18 @@ class _ProfileHeader extends StatelessWidget {
       child: FramedAvatar(
         frame: user.frame,
         size: 110,
-        child: UserAvatar(
-          name: user.nickname,
-          seed: user.avatarSeed ?? user.nickname,
-          imageUrl: user.avatarUrl,
-          size: 98,
-          ring: true,
+        child: _StoryRingAvatar(
+          unseen: hasUnseenStory,
+          child: UserAvatar(
+            name: user.nickname,
+            seed: user.avatarSeed ?? user.nickname,
+            imageUrl: user.avatarUrl,
+            // The avatar's own decorative ring is DISABLED here: the photo
+            // border now communicates the STORY state (white = unseen, none =
+            // seen/no story) instead of a fixed accent ring.
+            size: 98,
+            ring: false,
+          ),
         ),
       ),
     );
@@ -314,32 +387,20 @@ class _ProfileHeader extends StatelessWidget {
       padding: const EdgeInsets.all(AppDimensions.spaceXl),
       child: Column(
         children: [
-          // Long-press (≈2s) on ANOTHER user's profile enlarges their photo
-          // (view-only, circular, dismiss on outside tap). This behavior is
-          // LOCAL to the profile screen — it never activates in the feed,
-          // comments, search, friends or any other list. A simple tap does
-          // nothing here (the photo is not a navigation element on its own
-          // profile).
-          RawGestureDetector(
-            // Long press must be held ~2 seconds before it fires — a plain
-            // tap never opens the enlarged photo.
-            gestures: {
-              LongPressGestureRecognizer: GestureRecognizerFactoryWithHandlers<
-                  LongPressGestureRecognizer>(
-                () => LongPressGestureRecognizer(
-                  duration: const Duration(seconds: 2),
-                ),
-                (instance) {
-                  if (!isOwn) {
-                    instance.onLongPress = () => _showProfilePhotoZoom(
-                          context,
-                          user: user,
-                          enabled: true,
-                        );
-                  }
-                },
-              ),
-            },
+          // Gesto duplo na foto (outro usuário):
+          //   * CLIQUE  → abre o Story ativo (se houver);
+          //   * PRESSÃO (long press) → amplia a foto de perfil.
+          // O GestureDetector diferencia os dois: um long press cancela o tap
+          // (nunca dispara as duas ações).
+          GestureDetector(
+            onTap: isOwn ? null : onOpenStory,
+            onLongPress: isOwn
+                ? null
+                : () => _showProfilePhotoZoom(
+                      context,
+                      user: user,
+                      enabled: true,
+                    ),
             behavior: HitTestBehavior.opaque,
             child: avatar,
           ),

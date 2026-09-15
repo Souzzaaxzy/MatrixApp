@@ -219,6 +219,26 @@ Or just `docker compose up -d --build`.
   autenticado; `loadFeed`/`_refresh` também chamam `loadStories`.
 - **Rotas:** `AppRoutes.createStory` (`/home/create-story`); registrada
   também no `test_app.dart`.
+- **Foto de PERFIL (perfil):** o avatar tem DOIS gestos distintos —
+  `onTap` → abre o Story ATIVO do usuário (`_openUserStory`; no-op se não
+  houver Story, nunca abre viewer vazio) e `onLongPress` → a foto ampliada
+  (`_showProfilePhotoZoom`, implementação existente). Um long press cancela
+  o tap, então as duas ações nunca disparam juntas. A moldura antiga
+  (`UserAvatar(ring: true)`) foi trocada por `_StoryRingAvatar`: **borda
+  BRANCA** quando `AppState.hasUnseenStory(user.id)` (Story ativo não
+  visto) e SEM borda quando visto/sem Story — mesmo sistema de visto do
+  feed, persistido no servidor.
+- **Viewer — progresso e identidade:** `_ProgressBars` tem uma barra por
+  Story: a ATUAL anima 0→1 em sincronia (`AnimationController`; 5s fixos
+  para foto/texto, duração REAL do vídeo) e auto-avança ao completar; as
+  anteriores ficam cheias e as próximas vazias. `_StoryIdentity` mostra
+  **FOTO centralizada ACIMA do NOME** (`FramedAvatar`/`UserAvatar`/
+  `NicknameRenderer` — mesmo visual de grupos/DM), com o ✕ e (no próprio
+  Story) a lixeira.
+- **Limite de vídeo (2 min):** `kMaxStoryVideoDuration` no app bloqueia
+  ANTES do upload (duração real via `video_player`); o app envia
+  `durationMs` no multipart de `/api/uploads/video` e no body do
+  `/api/stories`; o SERVIDOR revalida (`validateVideoDurationMs`).
 
 ## Stickers — painel, Android Back, favoritar e recentes
 - **Android Back fecha o painel, não a conversa:** DM

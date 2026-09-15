@@ -79,13 +79,20 @@ class ApiClient {
   Future<T> delete<T>(String path, {Options? options}) =>
       _request<T>(() => _dio.delete<T>(path, options: options));
 
-  /// Sends a multipart upload (for images).
+  /// Sends a multipart upload (for images/videos).
+  ///
+  /// [fields] adds extra non-file multipart fields (e.g. the real media
+  /// `durationMs` the server uses to enforce the video length cap).
   Future<T> upload<T>(
     String path, {
     required MultipartFile file,
+    Map<String, String>? fields,
     Options? options,
   }) async {
-    final form = FormData.fromMap({'file': file});
+    final form = FormData.fromMap({
+      ...?fields,
+      'file': file,
+    });
     return _request<T>(() => _dio.post<T>(
           path,
           data: form,
