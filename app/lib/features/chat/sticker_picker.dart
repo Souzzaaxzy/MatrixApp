@@ -139,11 +139,15 @@ class _StickerPickerState extends State<StickerPicker>
           height: StickerPicker.panelHeight,
           child: Column(
             children: [
-              // Barra de abas
+              // Barra de abas + ação de adicionar (linha 1) e faixa de pacotes
+              // (linha 2). Em duas linhas finas nada estoura em telas
+              // estreitas e o painel continua compacto.
               Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: AppDimensions.spaceMd,
-                  vertical: AppDimensions.spaceXs,
+                padding: const EdgeInsets.fromLTRB(
+                  AppDimensions.spaceSm,
+                  AppDimensions.spaceXs,
+                  AppDimensions.spaceSm,
+                  0,
                 ),
                 child: Row(
                   children: [
@@ -159,28 +163,29 @@ class _StickerPickerState extends State<StickerPicker>
                       onTap: () => _switchTo(_StickerTab.favorites),
                     ),
                     const Spacer(),
-                    // Navegação horizontal dos pacotes instalados.
-                    SizedBox(
-                      height: 32,
-                      child: ListView(
-                        scrollDirection: Axis.horizontal,
-                        shrinkWrap: true,
-                        children: [
-                          for (final pkg in _installedPackages)
-                            _PackageIcon(
-                              package: pkg,
-                              selected: _selectedPackageId == pkg.id,
-                              onTap: () => _openPackage(pkg.id),
-                            ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: AppDimensions.spaceXs),
                     // Importa um pacote pelo código do Sticker.ly.
                     _AddPackageButton(onTap: _openAddPackage),
                   ],
                 ),
               ),
+              if (_installedPackages.isNotEmpty)
+                SizedBox(
+                  height: 30,
+                  child: ListView(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: AppDimensions.spaceSm,
+                    ),
+                    children: [
+                      for (final pkg in _installedPackages)
+                        _PackageIcon(
+                          package: pkg,
+                          selected: _selectedPackageId == pkg.id,
+                          onTap: () => _openPackage(pkg.id),
+                        ),
+                    ],
+                  ),
+                ),
               const Divider(height: 1),
               Expanded(
                 child: FadeTransition(
@@ -281,8 +286,9 @@ class _StickerPickerState extends State<StickerPicker>
   static const double _kStickerTile = 62;
 }
 
-/// Botão "+ Adicionar" do painel de figurinhas (abre a importação por
-/// código do Sticker.ly). Compacto e alinhado às demais ações do painel.
+/// Botão "+" do painel de figurinhas (importação por código do Sticker.ly).
+/// Só o ícone — compacto, como as demais ações do painel, e nunca estoura
+/// a linha de abas em telas estreitas.
 class _AddPackageButton extends StatelessWidget {
   const _AddPackageButton({required this.onTap});
 
@@ -290,29 +296,27 @@ class _AddPackageButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        height: 30,
-        padding: const EdgeInsets.symmetric(horizontal: AppDimensions.spaceSm),
-        decoration: BoxDecoration(
-          color: AppColors.electricBlue.withValues(alpha: 0.18),
-          borderRadius: BorderRadius.circular(AppDimensions.radiusPill),
-          border: Border.all(color: AppColors.electricBlue),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.add_rounded, color: AppColors.electricBlue, size: 16),
-            const SizedBox(width: 2),
-            Text(
-              'Adicionar',
-              style: AppTextStyles.caption.copyWith(
-                color: AppColors.electricBlue,
-                fontWeight: FontWeight.w700,
-              ),
+    return Semantics(
+      label: 'Adicionar pacote',
+      button: true,
+      child: Tooltip(
+        message: 'Adicionar pacote (Sticker.ly)',
+        child: GestureDetector(
+          onTap: onTap,
+          child: Container(
+            width: 30,
+            height: 30,
+            decoration: BoxDecoration(
+              color: AppColors.electricBlue.withValues(alpha: 0.18),
+              shape: BoxShape.circle,
+              border: Border.all(color: AppColors.electricBlue),
             ),
-          ],
+            child: Icon(
+              Icons.add_rounded,
+              color: AppColors.electricBlue,
+              size: 18,
+            ),
+          ),
         ),
       ),
     );
@@ -332,26 +336,32 @@ class _TabButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        padding: const EdgeInsets.symmetric(
-          horizontal: AppDimensions.spaceMd,
-          vertical: AppDimensions.spaceXs,
-        ),
-        decoration: BoxDecoration(
-          color: selected
-              ? AppColors.electricBlue.withValues(alpha: 0.22)
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(AppDimensions.radiusPill),
-          border: Border.all(
-            color: selected ? AppColors.electricBlue : AppColors.deepBlue,
+    return Semantics(
+      label: '$label (figurinhas)',
+      selected: selected,
+      button: true,
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppDimensions.spaceSm,
+            vertical: 2,
           ),
-        ),
-        child: HudLabel(
-          text: label,
-          color: selected ? AppColors.electricBlue : AppColors.holographicBlue,
+          decoration: BoxDecoration(
+            color: selected
+                ? AppColors.electricBlue.withValues(alpha: 0.22)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(AppDimensions.radiusPill),
+            border: Border.all(
+              color: selected ? AppColors.electricBlue : AppColors.deepBlue,
+            ),
+          ),
+          child: HudLabel(
+            text: label,
+            color:
+                selected ? AppColors.electricBlue : AppColors.holographicBlue,
+          ),
         ),
       ),
     );
@@ -517,25 +527,30 @@ class _PickerEmpty extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(AppDimensions.spaceXl),
+    // Rolável: em telas baixas (ou com o teclado aberto) o conteúdo do
+    // estado vazio nunca estoura — só rola.
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(AppDimensions.spaceLg),
+      child: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
               Icons.auto_awesome,
               color: AppColors.holographicBlue,
-              size: 36,
+              size: 32,
             ),
-            const SizedBox(height: AppDimensions.spaceMd),
+            const SizedBox(height: AppDimensions.spaceSm),
             Text(
               title,
               textAlign: TextAlign.center,
-              style: AppTextStyles.h3.copyWith(color: AppColors.techWhite),
+              style: AppTextStyles.h3.copyWith(
+                fontSize: 15,
+                color: AppColors.techWhite,
+              ),
             ),
             if (message.isNotEmpty) ...[
-              const SizedBox(height: AppDimensions.spaceSm),
+              const SizedBox(height: AppDimensions.spaceXs),
               Text(
                 message,
                 textAlign: TextAlign.center,
