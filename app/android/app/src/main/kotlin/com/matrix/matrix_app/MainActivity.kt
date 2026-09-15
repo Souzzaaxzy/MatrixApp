@@ -54,6 +54,14 @@ class MainActivity : FlutterActivity() {
         private const val KIND_IMAGES = "images"
         private const val KIND_PACK = "pack"
         private const val KIND_ERROR = "error"
+
+        /**
+         * Contador de instâncias de MainActivity criadas neste processo —
+         * apenas para diagnóstico (o fluxo corrigido mantém 1).
+         */
+        private val instanceCounter = java.util.concurrent.atomic.AtomicInteger(0)
+
+        private fun nextInstanceSeq(): Int = instanceCounter.incrementAndGet()
     }
 
     private var channel: MethodChannel? = null
@@ -70,11 +78,27 @@ class MainActivity : FlutterActivity() {
     /** Assinatura do último intent processado — evita reprocessar o mesmo. */
     private var lastProcessedSignature: String? = null
 
+    /**
+     * Contador de instâncias desta Activity no processo. Só para diagnóstico:
+     * com o fluxo corrigido (launchMode singleTask) ele permanece em 1 —
+     * é o que confirma nos logs que compartilhamentos repetidos chegam à
+     * MESMA instância. (Não é usado para nenhuma lógica de negócio.)
+     */
+    private val instanceSeq = nextInstanceSeq()
+
+    /** Contador monotônico para os `batchId` (nunca colide). */
+    private var batchSeq = 0L
+
     private val mainHandler = Handler(Looper.getMainLooper())
     private val worker = Executors.newSingleThreadExecutor()
 
     override fun onCreate(savedInstanceState: android.os.Bundle?) {
         super.onCreate(savedInstanceState)
+        Log.d(
+            TAG,
+            "onCreate instance=$instanceSeq taskId=${taskId} " +
+                "action=${intent?.action}",
+        )
         // Processo novo: limpa temporários de shares anteriores (o Flutter
         // ainda não tem nada pendente, então não há risco de apagar um lote
         // que ainda será importado).
@@ -108,10 +132,17 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun onNewIntent(intent: Intent) {
+        // super primeiro: mantém o comportamento do embedding Flutter e dos
+        // plugins (ex.: flutter_local_notifications lê o intent aqui).
         super.onNewIntent(intent)
+        Log.d(
+            TAG,
+            "onNewIntent instance=$instanceSeq taskId=${taskId} " +
+                "action=${intent.action}",
+        )
         setIntent(intent)
-        // App JÁ aberto em qualquer tela recebeu um novo share — entrega no
-        // mesmo processo/instância e limpa o intent para não reprocessar.
+        // App JÁ aberto (ou trazido do segundo plano) recebeu um novo share —
+        // entrega na MESMA instância e limpa o intent para não reprocessar.
         handleShareIntent(intent)
     }
 
@@ -417,7 +448,7 @@ class MainActivity : FlutterActivity() {
         "coverPath" to coverPath,
         "origin" to origin,
         "rejected" to rejected,
-        "batchId" to "${System.currentTimeMillis()}-${hashCode()}",
+        "batchId" to "${System.currentTimeMillis()}-${batchSeq++}-$instanceSeq",
         "stickers" to stickers,
     )
 
@@ -425,7 +456,7 @@ class MainActivity : FlutterActivity() {
         "kind" to KIND_ERROR,
         "error" to message,
         "stickers" to emptyList<Map<String, Any?>>(),
-        "batchId" to "err-${System.currentTimeMillis()}",
+        "batchId" to "err-${System.currentTimeMillis()}-${batchSeq++}",
     )
 
     private fun deliverBatch(batch: Map<String, Any?>) {

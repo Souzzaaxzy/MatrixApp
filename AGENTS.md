@@ -115,16 +115,36 @@ Or just `docker compose up -d --build`.
 - Figurinha única continua sendo `image/*` (copiada direto).
 
 ### Instância única (o bug das janelas infinitas)
-- `launchMode="singleTop"` + **SEM** `android:taskAffinity`. Aquele
-  `taskAffinity=""` (mitigação StrandHogg) dava à activity SEM afinidade, logo
-  ela nunca entrava na task padrão do app — cada lançamento criava uma task
-  nova ("MatrixApp → MatrixApp → …"). Não reintroduzir.
-- Share com app aberto chega por `onNewIntent` (mesma instância); processo
-  frio por `onCreate` + consulta `initialSharedBatch` no arranque.
+- `launchMode="singleTask"` + **SEM** `android:taskAffinity` (ausência =
+  afinidade padrão do pacote = UMA task).
+  - `singleTop` (usado antes) só reaproveita a Activity se ela estiver NO TOPO
+    da própria task: o Sharesheet entrega com `FLAG_ACTIVITY_NEW_TASK` e, com
+    o MATRIX em segundo plano/em outra rota, cada share criava uma NOVA
+    instância/task — a cascata "MatrixApp → MatrixApp → …".
+  - `singleTask` garante no máximo UMA instância no sistema: qualquer novo
+    share traz a task existente para a frente e entrega via `onNewIntent`.
+  - `taskAffinity=""` (mitigação StrandHogg antiga) NÃO deve voltar: dá à
+    Activity nenhuma afinidade e cada launch passa a criar uma task vazia.
+  - Não usar `singleInstance`: proíbe outras atividades na task e pode
+    quebrar PendingIntents/notificações.
+- Notificações: `flutter_local_notifications` monta o PendingIntent com
+  `PackageManager.getLaunchIntentForPackage` (ACTION_MAIN/LAUNCHER). Com
+  singleTask isso cai no `onNewIntent` da MESMA instância — o plugin lê o
+  intent no `FlutterActivity.onNewIntent` (por isso chamamos `super` antes).
+- Share com app aberto/em segundo plano chega por `onNewIntent` (mesma
+  instância); processo frio por `onCreate` + consulta `initialSharedBatch`.
 - Dedupe: assinatura do intent + `consumeIntent` (limpa `EXTRA_STREAM`/
-  `ClipData`) no nativo; `batchId` no Dart (`ShareStickerService`) evita
-  reentrega em recriações. O `initialSharedBatch` responde DEPOIS do lote
-  ficar pronto (deferred result) quando o share chega antes do Flutter.
+  `ClipData`) no nativo; `batchId` monotônico no Dart
+  (`ShareStickerService`) evita reentrega. O `initialSharedBatch` responde
+  DEPOIS do lote ficar pronto (deferred result) quando o share chega antes
+  do Flutter.
+- `app.dart`: um share NUNCA apila a tela de importação — se ela já está
+  aberta o lote novo a **substitui** (`pushReplacementNamed`), então o Back
+  não revela uma pilha de telas/instâncias.
+- Diagnóstico: `MainActivity` loga `onCreate`/`onNewIntent` com
+  `instance` (contador no processo, deve ficar em 1) e `taskId` — o teste
+  `android/app/src/test/.../MainActivityManifestTest.kt` guarda o invariante
+  do manifesto (singleTask, sem taskAffinity) sem precisar de emulador.
 
 ### Validação / UI / limpeza
 - `EXTRA_STREAM` E `ClipData` são lidos; a validação dos bytes continua em

@@ -114,13 +114,22 @@ class _MatrixAppState extends State<MatrixApp> {
     if (!state.isAuthenticated) return; // el splash redirige a login primero
     // Mientras el splash siga arriba, esperar: su pushReplacementNamed
     // reemplazaría la ruta de importación y se perdería el contenido.
-    if (_routeWatcher.current != AppRoutes.home && _routeWatcher.current != AppRoutes.stickerImport) {
+    if (_routeWatcher.current != AppRoutes.home &&
+        _routeWatcher.current != AppRoutes.stickerImport) {
       return;
     }
     final navigator = _navigatorKey.currentState;
     if (navigator == null) return;
     _pendingShareTitle = null;
-    navigator.pushNamed(AppRoutes.stickerImport, arguments: title);
+    // Nunca APILAR pantallas de importación: si ya hay una abierta (el
+    // usuario compartió varias veces sin cerrarla), se REEMPLAZA por el
+    // contenido nuevo — cada share se procesa una vez y no queda una pila
+    // de pantallas que el botón atrás tendría que deshacer una a una.
+    if (_routeWatcher.current == AppRoutes.stickerImport) {
+      navigator.pushReplacementNamed(AppRoutes.stickerImport, arguments: title);
+    } else {
+      navigator.pushNamed(AppRoutes.stickerImport, arguments: title);
+    }
   }
 
   /// A peer deleted a message FOR EVERYONE (realtime). AppState forwards it

@@ -20,21 +20,28 @@
         android:roundIcon="@mipmap/ic_launcher"
         android:usesCleartextTraffic="true">
         <!--
-          launchMode="singleTop": a share that arrives while MATRIX is already
-          open is delivered to the EXISTING instance via onNewIntent — no
-          second window/task is created.
+          launchMode="singleTask" — UMA instância por sistema.
 
-          NOTE: there is deliberately no android:taskAffinity here. Setting it
-          to "" (which this project used to do to mitigate StrandHogg) gives
-          the launcher activity NO affinity, so it can never join the app's
-          default task — every launch happens into a brand-new empty task.
-          Combined with the share flow this produced the "MatrixApp →
-          MatrixApp → …" cascade of instances.
+          Por que singleTask (e não singleTop): o Sharesheet entrega o
+          compartilhamento com FLAG_ACTIVITY_NEW_TASK na task de afinidade
+          padrão do app. Com singleTop a Activity só é reaproveitada quando
+          ela já está NO TOPO da própria task; se o MATRIX estiver em segundo
+          plano (ou o usuário estiver em outra tela/rota), cada novo share
+          criava uma NOVA instância/task — a cascata "MatrixApp → MatrixApp →
+          …" relatada. singleTask garante NO MÁXIMO uma instância no sistema:
+          qualquer novo share traz a task existente para a frente e entrega o
+          Intent via onNewIntent, sem criar Activity/task nova.
+
+          Não usamos singleInstance: ele proíbe outras atividades na task e
+          pode quebrar PendingIntents/notificações e fluxos auxiliares.
+          Não há android:taskAffinity: a ausência = afinidade padrão do
+          pacote (uma única task do app). Definir "" daria à Activity NENHUMA
+          afinidade e cada launch criaria uma task vazia — era parte do bug.
         -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:launchMode="singleTop"
+            android:launchMode="singleTask"
             android:theme="@style/LaunchTheme"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
             android:hardwareAccelerated="true"
