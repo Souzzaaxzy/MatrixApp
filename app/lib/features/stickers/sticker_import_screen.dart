@@ -13,20 +13,20 @@ import '../../core/widgets/matrix_button.dart';
 import '../../data/api_config.dart';
 import '../../data/share_sticker_service.dart';
 
-/// Pantalla de importación de figuritas recibidas por el compartir nativo de
-/// Android (ACTION_SEND / ACTION_SEND_MULTIPLE / ACTION_VIEW).
+/// Tela de importação de figurinhas recebidas pelo compartilhamento nativo
+/// do Android (ACTION_SEND / ACTION_SEND_MULTIPLE / ACTION_VIEW).
 ///
-/// Muestra las previsualizaciones validadas, permite nombrar el paquete y
-/// exige confirmación antes de añadir a la colección. Los archivos inválidos
-/// o incompatibles se aíslan y se rechazan con un mensaje amigable — nada se
-/// importa sin pulsar "AÑADIR".
+/// Toda a interface está em português (pt-BR). Mostra as pré-visualizações
+/// validadas, permite nomear o pacote e exige confirmação antes de adicionar
+/// à coleção. Arquivos inválidos ou incompatíveis são isolados e recusados
+/// com uma mensagem amigável — nada é importado sem tocar em "ADICIONAR".
 ///
-/// Un paquete `.wastickers` (ZIP) llega ya extraído por el nativo con su
-/// título/autor/capa; las imágenes sueltas funcionan igual sin metadatos.
+/// Um pacote `.wastickers` (ZIP) chega já extraído pelo nativo com seu
+/// título/autor/capa; imagens soltas funcionam igual, sem metadados.
 class StickerImportScreen extends StatefulWidget {
   const StickerImportScreen({super.key, required this.title});
 
-  /// Título del paquete pre-rellenado (vacío = el usuario decide).
+  /// Nome do pacote pré-preenchido (vazio = o usuário decide).
   final String title;
 
   @override
@@ -100,8 +100,8 @@ class _StickerImportScreenState extends State<StickerImportScreen> {
         SnackBar(
           content: Text(
             counts.created > 0
-                ? '${counts.created} figurita(s) añadida(s) a la colección!'
-                : 'Todo ya estaba en tu colección.',
+                ? '${counts.created} figurinha(s) adicionada(s) à sua coleção!'
+                : 'Tudo já estava na sua coleção.',
           ),
         ),
       );
@@ -115,13 +115,13 @@ class _StickerImportScreenState extends State<StickerImportScreen> {
       if (!mounted) return;
       setState(() => _importing = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Error al importar las figuritas.')),
+        const SnackBar(content: Text('Erro ao importar as figurinhas.')),
       );
     }
   }
 
-  /// Sube los archivos validados por el sistema EXISTENTE de uploads y crea
-  /// el paquete del usuario vía la API de stickers (misma persistencia).
+  /// Sobe os arquivos validados pelo sistema EXISTENTE de uploads e cria
+  /// o pacote do usuário pela API de figurinhas (mesma persistência).
   Future<({int created, int skipped})> _doImport(
     List<ValidatedStickerFile> files,
   ) async {
@@ -130,7 +130,7 @@ class _StickerImportScreenState extends State<StickerImportScreen> {
     return state.importSharedStickers(name: name, stickers: files);
   }
 
-  /// Consume el lote y elimina los temporales del compartir (éxito o
+  /// Consome o lote e elimina los temporales del compartir (éxito o
   /// cancelación) — nunca se dejan copias del contenido externo.
   void _cleanupTemporaries() {
     ShareStickerService.instance.clearCurrent();
@@ -153,7 +153,7 @@ class _StickerImportScreenState extends State<StickerImportScreen> {
           onPressed: _cancel,
           tooltip: 'Cancelar',
         ),
-        title: const HudLabel(text: 'IMPORTAR STICKERS'),
+        title: const HudLabel(text: 'IMPORTAR FIGURINHAS'),
         centerTitle: true,
       ),
       body: SafeArea(
@@ -162,14 +162,14 @@ class _StickerImportScreenState extends State<StickerImportScreen> {
           builder: (context, snapshot) {
             if (snapshot.connectionState != ConnectionState.done) {
               return const Center(
-                child: HudLabel(text: 'VALIDANDO ARCHIVOS...', dot: true),
+                child: HudLabel(text: 'VALIDANDO ARQUIVOS...', dot: true),
               );
             }
             final data = snapshot.data;
             if (data == null) {
               return _NoValidStickers(
                 invalidCount: _invalidReasons.length,
-                message: 'No se recibió ningún archivo de figura.',
+                message: 'Nenhum arquivo de figurinha recebido.',
               );
             }
             if (data.kind == SharedBatchKind.error) {
@@ -202,8 +202,8 @@ class _StickerImportScreenState extends State<StickerImportScreen> {
                 children: [
                   HudLabel(
                     text: data.stickers.length == 1
-                        ? '1 FIGURITA ENCONTRADA'
-                        : '${data.stickers.length} FIGURITAS ENCONTRADAS',
+                        ? '1 FIGURINHA ENCONTRADA'
+                        : '${data.stickers.length} FIGURINHAS ENCONTRADAS',
                     color: AppColors.electricBlue,
                   ),
                   const Spacer(),
@@ -243,7 +243,7 @@ class _StickerImportScreenState extends State<StickerImportScreen> {
                     const SizedBox(width: AppDimensions.spaceMd),
                     Expanded(
                       child: Text(
-                        'Capa del paquete',
+                        'Capa do pacote',
                         style: AppTextStyles.bodyMuted,
                       ),
                     ),
@@ -282,8 +282,8 @@ class _StickerImportScreenState extends State<StickerImportScreen> {
               if (invalidCount > 0) ...[
                 const SizedBox(height: AppDimensions.spaceLg),
                 Text(
-                  'Archivos que no son imágenes PNG, WebP o JPEG (o que '
-                  'están corruptos/más de 5 MB):',
+                  'Arquivos que não são imagens PNG, WebP ou JPEG (ou que '
+                  'estão corrompidos/maiores que 5 MB):',
                   style: AppTextStyles.bodyMuted,
                 ),
                 const SizedBox(height: AppDimensions.spaceSm),
@@ -321,7 +321,7 @@ class _StickerImportScreenState extends State<StickerImportScreen> {
             children: [
               Align(
                 alignment: Alignment.centerLeft,
-                child: Text('NOMBRE DEL PAQUETE', style: AppTextStyles.label),
+                child: Text('NOME DO PACOTE', style: AppTextStyles.label),
               ),
               const SizedBox(height: AppDimensions.spaceSm),
               TextField(
@@ -331,7 +331,7 @@ class _StickerImportScreenState extends State<StickerImportScreen> {
                 style: AppTextStyles.body,
                 cursorColor: AppColors.electricBlue,
                 decoration: InputDecoration(
-                  hintText: 'Ej.: Mis stickers',
+                  hintText: 'Ex.: Minhas figurinhas',
                   hintStyle: AppTextStyles.bodyMuted,
                   counterText: '',
                   filled: true,
@@ -355,7 +355,7 @@ class _StickerImportScreenState extends State<StickerImportScreen> {
               ),
               const SizedBox(height: AppDimensions.spaceMd),
               MatrixButton(
-                label: 'AÑADIR',
+                label: 'ADICIONAR',
                 icon: Icons.add_rounded,
                 expanded: true,
                 isLoading: _importing,
@@ -368,7 +368,7 @@ class _StickerImportScreenState extends State<StickerImportScreen> {
     );
   }
 
-  /// La capa del paquete si el nativo la extrajo y sigue existiendo.
+  /// Capa do pacote se o nativo a extraiu e ela ainda existe.
   String? _resolveCover(_ImportData data) {
     final cover = data.coverPath;
     if (cover == null || cover.isEmpty) return null;
@@ -376,7 +376,7 @@ class _StickerImportScreenState extends State<StickerImportScreen> {
   }
 }
 
-/// Datos validados que alimentan la pantalla.
+/// Dados validados que alimentam a tela.
 class _ImportData {
   const _ImportData({
     required this.kind,
@@ -419,7 +419,7 @@ class _NoValidStickers extends StatelessWidget {
             ),
             const SizedBox(height: AppDimensions.spaceMd),
             Text(
-              'Ninguna figurita válida para importar',
+              'Nenhuma figurinha válida para importar',
               textAlign: TextAlign.center,
               style: AppTextStyles.h3.copyWith(color: AppColors.techWhite),
             ),
@@ -427,15 +427,15 @@ class _NoValidStickers extends StatelessWidget {
             Text(
               message ??
                   (invalidCount > 0
-                      ? 'Los archivos recibidos no son imágenes PNG, WebP o '
-                          'JPEG válidas (o exceden 5 MB).'
-                      : 'No se recibió ningún archivo de figura.'),
+                      ? 'Os arquivos recebidos não são imagens PNG, WebP ou '
+                          'JPEG válidas (ou passam de 5 MB).'
+                      : 'Nenhum arquivo de figurinha recebido.'),
               textAlign: TextAlign.center,
               style: AppTextStyles.bodyMuted,
             ),
             const SizedBox(height: AppDimensions.spaceLg),
             MatrixButton(
-              label: 'VOLVER',
+              label: 'VOLTAR',
               variant: MatrixButtonVariant.outline,
               onPressed: () {
                 ShareStickerService.instance.clearCurrent();

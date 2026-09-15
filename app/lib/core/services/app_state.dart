@@ -1312,6 +1312,23 @@ class AppState extends ChangeNotifier {
     return result;
   }
 
+  /// Prévia de um pacote do Sticker.ly (código ou link). Não altera nada —
+  /// apenas consulta o SERVIDOR, que é quem fala com a fonte externa (o APK
+  /// nunca carrega credenciais nem chama o Sticker.ly direto).
+  Future<StickerlyPackPreview> previewStickerlyPack(String code) {
+    return _stickersRepo.stickerlyPreview(code);
+  }
+
+  /// Importa um pacote do Sticker.ly para a coleção do usuário. Reimportar o
+  /// mesmo código não duplica (dedupe no servidor por origem/hash).
+  Future<({StickerPackage? package, int created, int skipped, bool already})>
+      importStickerlyPack(String code) async {
+    final result = await _stickersRepo.stickerlyImport(code);
+    // Refresca catálogo/instalados para o pacote aparecer no painel.
+    await loadStickers();
+    return result;
+  }
+
   /// Opens (or creates) the single conversation with [otherUserId] and
   /// returns it. The server enforces the friends-only rule.
   Future<Conversation> getOrCreateConversation(String otherUserId) {

@@ -24,6 +24,7 @@ import 'chat_attach_button.dart';
 import 'chat_media_bubble.dart';
 import 'chat_navigation.dart';
 import 'reply_swipe.dart';
+import 'sticker_panel.dart';
 import 'sticker_picker.dart';
 import 'voice_player_bubble.dart';
 import 'voice_recorder.dart';
@@ -948,12 +949,16 @@ class _ConversationScreenState extends State<ConversationScreen>
                   }
                 }),
             ),
-            // Painel de figurinhas integrado à base da conversa.
-            if (_stickerPickerOpen && conversation != null && _state != null)
-              StickerPicker(
+            // Painel de figurinhas integrado à base da conversa (abertura/
+            // fechamento com transição suave; montado só quando visível).
+            AnimatedStickerPanel(
+              visible:
+                  _stickerPickerOpen && conversation != null && _state != null,
+              child: StickerPicker(
                 state: _state!,
                 onPick: (sticker) => _sendSticker(sticker),
               ),
+            ),
           ],
         ),
       ),
@@ -1265,7 +1270,7 @@ class _ConversationScreenState extends State<ConversationScreen>
         normalShownCounter++;
       }
       final firstOfRun = showAvatar;
-      items.add(_MessageBubble(
+      final bubble = _MessageBubble(
         message: m,
         index: i,
         isLast: isLast,
@@ -1276,7 +1281,12 @@ class _ConversationScreenState extends State<ConversationScreen>
         onLongPress: () => _showMessageMenu(i),
         replySelected: _replyTargetIndex == i,
         onOpenReplyTarget: _openReplyTarget,
-      ));
+      );
+      // Entrada suave para figurinhas recém-enviadas/recebidas (as demais
+      // mensagens não animam — evita trabalho na lista inteira).
+      items.add(
+        m.isSticker ? StickerEntrance(child: bubble) : bubble,
+      );
     }
     return Listener(
       onPointerMove: (_) {},
@@ -1573,8 +1583,12 @@ class _MessageBubble extends StatelessWidget {
                     ),
                     const SizedBox(height: 1),
                     Text(
+                      // ReplyInfo carries only text; a media/sticker original
+                      // arrives empty → a readable label instead of "".
                       message.replyTo!.exists
-                          ? message.replyTo!.content
+                          ? (message.replyTo!.content.isNotEmpty
+                              ? message.replyTo!.content
+                              : '(figurinha ou mídia)')
                           : '(a mensagem original foi apagada)',
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
@@ -1657,6 +1671,17 @@ class _MessageBubble extends StatelessWidget {
             : AppColors.holographicBlue,
         fontFamily: 'JetBrainsMono',
       );
+}
+
+/// Short, human label for a message inside a reply preview/quote. Stickers,
+/// photos, videos and voice messages carry no text — labeling them keeps the
+/// reply UI meaningful (and in pt-BR).
+String replyPreviewLabel(ChatMessage message) {
+  if (message.isSticker) return 'Figurinha';
+  if (message.isImage) return 'Foto';
+  if (message.isVideo) return 'Vídeo';
+  if (message.isVoice) return 'Mensagem de voz';
+  return message.content;
 }
 
 /// Bottom composer: message input + send button, riding the keyboard.
@@ -2245,7 +2270,9 @@ class _ReplyPreviewBar extends StatelessWidget {
   Widget build(BuildContext context) {
     // The swiped message is itself the original being replied to — show its
     // own preview (the server separately renders the quote inside bubble).
-    final preview = target.content.isNotEmpty ? target.content : 'mensagem';
+    // Stickers/voice/media have no text content → a proper label instead of
+    // the old "mensagem" placeholder.
+    final preview = replyPreviewLabel(target);
     return Container(
       decoration: BoxDecoration(
         color: AppColors.navBarBackground,

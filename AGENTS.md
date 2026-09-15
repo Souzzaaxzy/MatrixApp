@@ -62,6 +62,38 @@ Or just `docker compose up -d --build`.
   "sem capa" na sessão. O tile do perfil (`_VideoThumb`) mostra placeholder
   VÍDEO + badge de play enquanto não há capa.
 
+## Stickers (figurinhas) — tamanho, transições e importação
+- **Render do chat:** `ChatMediaBubble._StickerBubble` (`features/chat/`
+  `chat_media_bubble.dart`) — usado por DM e grupo. Tamanho COMPACTO:
+  `~34%` da largura limitado a 148px e a `28%` da altura útil, sempre
+  `BoxFit.contain` (proporção, transparência e APNG intactos; sem corte/
+  deformação). O placeholder tem a MESMA caixa — sem salto de layout.
+- **Grade do painel:** `StickerPicker` (`features/chat/sticker_picker.dart`)
+  — `LayoutBuilder` + célula alvo de 62px → ~5–8 colunas, espaçamento `xs`
+  (compacta e responsiva). Altura do painel em `StickerPicker.panelHeight`.
+  Toque dá um "punch" de escala curto (`_StickerTile`) que NÃO atrasa o envio.
+- **Transições (leves, sem blur/partículas/loops):**
+  `AnimatedStickerPanel` (`features/chat/sticker_panel.dart`) faz a morte/
+  nascimento do painel (AnimatedSize + fade/slide de 200ms) e só monta o
+  filho quando visível; `StickerEntrance` anima a figurinha que chega no
+  chat; a troca de aba/pacote é um fade de 180ms (`_switchCtrl`); o modal
+  usa o `showModalBottomSheet` padrão. Toque no campo de mensagem continua
+  fechando o painel (`_onInputFocusChanged`).
+- **Import por código do Sticker.ly:** botão `+ Adicionar` no painel →
+  `StickerlyImportSheet` (`features/chat/stickerly_import_sheet.dart`):
+  código/link → BUSCAR → prévia (nome/autor/capa/figurinhas) →
+  `ADICIONAR AO MATRIX` (com confirmação; pacote já existente informado).
+  Reutiliza o sistema atual (`StickerRepository` → `AppState` →
+  `POST /api/stickers/stickerly/{preview,import}`). O APK NUNCA fala com o
+  Sticker.ly nem guarda credenciais — quem consulta/baixa é o SERVIDOR.
+- **Servidor:** `modules/stickers/stickerly.service.ts` + 2 rotas em
+  `sticker.routes.ts`. `StickerPackage.authorId/source/sourceId` identificam
+  pacotes do usuário (privados ao dono; dedupe por código). O import baixa
+  com concorrência limitada, valida magic bytes, guarda no /static e
+  deduplica por SHA-256. Base da fonte configurável por `STICKERLY_API_BASE`.
+- **Import via compartilhamento Android:** ver seção "Stickers — compartilhar
+  Android" abaixo (fluxo `.wastickers`, inalterado).
+
 ## Stickers — compartilhar Android (importação)
 - O app recebe figuritas via `ACTION_SEND` / `ACTION_SEND_MULTIPLE` / `VIEW`.
   O `MainActivity` (Kotlin) copia/extrai o conteúdo para o cache e entrega ao

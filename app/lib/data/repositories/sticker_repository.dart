@@ -95,4 +95,80 @@ class StickerRepository {
       skipped: (json['skipped'] as num?)?.toInt() ?? 0,
     );
   }
+
+  /// Prévia de um pacote do Sticker.ly a partir do código/link (`QSXLKY` ou
+  /// `https://sticker.ly/s/QSXLKY`). Não importa nada — o servidor consulta a
+  /// fonte e devolve os dados para a confirmação do usuário.
+  Future<StickerlyPackPreview> stickerlyPreview(String code) async {
+    final json = await _api.post<Map<String, dynamic>>(
+      '/api/stickers/stickerly/preview',
+      data: {'code': code},
+    );
+    return StickerlyPackPreview.fromJson(json);
+  }
+
+  /// Importa o pacote do Sticker.ly para a coleção do usuário. O servidor
+  /// baixa, valida e cria o pacote com dedupe por hash/origem.
+  Future<({StickerPackage? package, int created, int skipped, bool already})>
+      stickerlyImport(String code) async {
+    final json = await _api.post<Map<String, dynamic>>(
+      '/api/stickers/stickerly/import',
+      data: {'code': code},
+    );
+    final raw = json['package'];
+    return (
+      package: raw is Map<String, dynamic>
+          ? StickerPackageDto.fromJson(raw).toModel()
+          : null,
+      created: (json['created'] as num?)?.toInt() ?? 0,
+      skipped: (json['skipped'] as num?)?.toInt() ?? 0,
+      already: (json['alreadyInstalled'] as bool?) ?? false,
+    );
+  }
+}
+
+/// Prévia de um pacote do Sticker.ly (resultado de `stickerlyPreview`) —
+/// apenas dados para exibir/confirmar; nada foi importado ainda.
+class StickerlyPackPreview {
+  const StickerlyPackPreview({
+    required this.code,
+    required this.name,
+    required this.author,
+    required this.iconUrl,
+    required this.stickerCount,
+    required this.animated,
+    required this.previewUrls,
+    required this.alreadyInstalled,
+  });
+
+  factory StickerlyPackPreview.fromJson(Map<String, dynamic> json) {
+    final stickers = (json['stickers'] as List? ?? const [])
+        .whereType<Map<String, dynamic>>()
+        .map((s) => (s['url'] as String?) ?? '')
+        .where((u) => u.isNotEmpty)
+        .toList();
+    return StickerlyPackPreview(
+      code: (json['code'] as String?) ?? '',
+      name: (json['name'] as String?) ?? '',
+      author: (json['author'] as String?) ?? '',
+      iconUrl: (json['iconUrl'] as String?) ?? '',
+      stickerCount: (json['stickerCount'] as num?)?.toInt() ?? stickers.length,
+      animated: (json['animated'] as bool?) ?? false,
+      previewUrls: stickers,
+      alreadyInstalled: (json['alreadyInstalled'] as bool?) ?? false,
+    );
+  }
+
+  final String code;
+  final String name;
+  final String author;
+  final String iconUrl;
+  final int stickerCount;
+  final bool animated;
+
+  /// URLs (absolutas, na fonte) das figurinhas — só para pré-visualizar.
+  final List<String> previewUrls;
+
+  /// True quando o usuário já tem este pacote na coleção.
+  final bool alreadyInstalled;
 }

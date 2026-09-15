@@ -113,6 +113,9 @@ class FakeStore {
   /// Hashes SHA-256 de figuritas ya importadas (dedupe simulada del server).
   final Set<String> importedStickerHashes = {};
 
+  /// Sticker.ly pack codes already imported (fake dedupe of the source).
+  final Set<String> stickerlyImported = {};
+
   /// Group messages by group id (fake persistence).
   late final Map<String, List<ChatMessage>> groupMessagesById = {};
 
@@ -1599,6 +1602,59 @@ class _FakeStickerRepository implements StickerRepository {
 
   @override
   Future<List<Sticker>> recents() async => List.of(_store.stickerRecents);
+
+  @override
+  Future<StickerlyPackPreview> stickerlyPreview(String code) async {
+    if (code.length < 4) {
+      throw const ApiException(
+          statusCode: 400, message: 'Código inválido.');
+    }
+    if (code.toUpperCase() == 'MISSING') {
+      throw const ApiException(
+          statusCode: 404,
+          message: 'Não foi possível encontrar esse pacote.');
+    }
+    return StickerlyPackPreview(
+      code: code.toUpperCase(),
+      name: 'Pacote Sticker.ly',
+      author: 'Autor Ly',
+      iconUrl: 'https://fake.matrix.app/ly/tray.png',
+      stickerCount: 2,
+      animated: false,
+      previewUrls: const ['https://fake.matrix.app/ly/1.webp'],
+      alreadyInstalled: _store.stickerlyImported.contains(code.toUpperCase()),
+    );
+  }
+
+  @override
+  Future<({StickerPackage? package, int created, int skipped, bool already})>
+      stickerlyImport(String code) async {
+    final upper = code.toUpperCase();
+    if (_store.stickerlyImported.contains(upper)) {
+      return (package: null, created: 0, skipped: 0, already: true);
+    }
+    _store.stickerlyImported.add(upper);
+    final pkg = StickerPackage(
+      id: 'ly_$upper',
+      name: 'Pacote Sticker.ly',
+      slug: 'stickerly-${upper.toLowerCase()}',
+      description: 'Importado do Sticker.ly.',
+      author: 'Autor Ly',
+      iconUrl: 'https://fake.matrix.app/ly/tray.png',
+      installed: true,
+      stickerCount: 1,
+      stickers: [
+        Sticker(
+          id: 'ly_${upper}_0',
+          packageId: 'ly_$upper',
+          order: 0,
+          fileUrl: 'https://fake.matrix.app/ly/1.webp',
+        ),
+      ],
+    );
+    _store.stickerPackages.insert(0, pkg);
+    return (package: pkg, created: 1, skipped: 0, already: false);
+  }
 
   @override
   Future<void> markRecent(String stickerId) async {

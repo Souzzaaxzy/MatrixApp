@@ -140,56 +140,71 @@ class _ResponsiveChatImageState extends State<_ResponsiveChatImage> {
 }
 
 /// A sticker message — rendered DIRECTLY as the image, no text bubble.
-/// Sized like modern messaging apps: large but bounded to the chat width.
+///
+/// Deliberately COMPACT (WhatsApp-like): bounded to a fraction of the chat
+/// width and of the available height, always with `BoxFit.contain` so the
+/// aspect ratio is preserved (no crop, no distortion, transparency and APNG
+/// animation untouched). The image and its placeholders share one explicit
+/// box, so there is no layout jump when the bytes arrive.
 class _StickerBubble extends StatelessWidget {
   const _StickerBubble({required this.url});
 
   final String url;
 
+  /// Hard ceiling for a sticker in the chat (also caps very wide screens).
+  static const double _maxSide = 148;
+
   @override
   Widget build(BuildContext context) {
-    final mediaWidth = MediaQuery.sizeOf(context).width;
-    final maxW =
-        (mediaWidth * 0.5).clamp(140.0, 240.0).toDouble();
-    return ConstrainedBox(
-      constraints: BoxConstraints(
-        maxWidth: maxW,
-        maxHeight: maxW * 1.1,
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(AppDimensions.radiusMd),
-        child: CachedNetworkImage(
-          imageUrl: url,
-          fit: BoxFit.contain,
-          placeholder: (_, __) => Container(
-            width: maxW,
-            height: maxW,
-            color: AppColors.nightBlue,
-            child: const Center(
-              child: SizedBox(
-                width: 22,
-                height: 22,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2.5,
-                  color: Color(0xFF008CFF),
-                ),
-              ),
-            ),
-          ),
-          errorWidget: (_, __, ___) => Container(
-            width: maxW,
-            height: maxW * 0.8,
-            color: AppColors.nightBlue,
-            child: const Icon(
-              Icons.broken_image_outlined,
-              color: Color(0xFF008CFF),
-              size: 34,
-            ),
-          ),
-        ),
+    // Available height (minus chrome) keeps a tall sticker from dominating.
+    final media = MediaQuery.sizeOf(context);
+    final viewInsets = MediaQuery.viewInsetsOf(context).bottom;
+    final availableHeight = media.height - viewInsets;
+    final size = (media.width * 0.34).clamp(
+      96.0,
+      _maxSide,
+    );
+    final heightBudget = (availableHeight * 0.28).clamp(96.0, _maxSide);
+    final side = size < heightBudget ? size : heightBudget;
+
+    return SizedBox(
+      width: side,
+      height: side,
+      child: CachedNetworkImage(
+        imageUrl: url,
+        fit: BoxFit.contain,
+        placeholder: (_, __) => _placeholder(side),
+        errorWidget: (_, __, ___) => _error(side),
       ),
     );
   }
+
+  Widget _placeholder(double side) => SizedBox(
+        width: side,
+        height: side,
+        child: const Center(
+          child: SizedBox(
+            width: 18,
+            height: 18,
+            child: CircularProgressIndicator(
+              strokeWidth: 2,
+              color: Color(0xFF008CFF),
+            ),
+          ),
+        ),
+      );
+
+  Widget _error(double side) => SizedBox(
+        width: side,
+        height: side,
+        child: const Center(
+          child: Icon(
+            Icons.broken_image_outlined,
+            color: Color(0xFF008CFF),
+            size: 26,
+          ),
+        ),
+      );
 }
 
 /// Enlarged image viewer (tap media → full image with zoom via InteractiveViewer).

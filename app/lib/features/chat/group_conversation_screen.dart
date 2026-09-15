@@ -24,6 +24,7 @@ import 'chat_attach_button.dart';
 import 'chat_media_bubble.dart';
 import 'chat_navigation.dart';
 import 'reply_swipe.dart';
+import 'sticker_panel.dart';
 import 'sticker_picker.dart';
 import 'voice_player_bubble.dart';
 import 'voice_recorder.dart';
@@ -1436,12 +1437,15 @@ class _GroupConversationScreenState extends State<GroupConversationScreen>
               : const SizedBox.shrink(),
         ),
         _composer(),
-        // Painel de figurinhas integrado à base do grupo.
-        if (_stickerPickerOpen && _state != null)
-          StickerPicker(
+        // Painel de figurinhas integrado à base do grupo (abertura/fechamento
+        // com transição suave; montado só quando visível).
+        AnimatedStickerPanel(
+          visible: _stickerPickerOpen && _state != null,
+          child: StickerPicker(
             state: _state!,
             onPick: (sticker) => _sendGroupSticker(sticker),
           ),
+        ),
       ],
     );
   }
@@ -1472,7 +1476,7 @@ class _GroupConversationScreenState extends State<GroupConversationScreen>
         items.add(_DaySeparator(label: day));
         lastDay = day;
       }
-      items.add(_GroupMessageBubble(
+      final groupBubble = _GroupMessageBubble(
         message: m,
         mine: m.senderId == _state?.currentUser?.id,
         onLongPress: () => _showMessageMenu(i),
@@ -1480,7 +1484,11 @@ class _GroupConversationScreenState extends State<GroupConversationScreen>
         replySelected: _replyTarget?.id == m.id,
         replyingTo: (_replyTarget?.id == m.id) ? _replyTarget : null,
         onOpenReplyTarget: _openReplyTarget,
-      ));
+      );
+      // Ligera entrada suave para figurinhas (resto da lista não anima).
+      items.add(
+        m.isSticker ? StickerEntrance(child: groupBubble) : groupBubble,
+      );
     }
     return ListView.builder(
       controller: _scroll,
