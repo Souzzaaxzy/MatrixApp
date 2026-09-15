@@ -85,11 +85,104 @@ class _StickerPickerState extends State<StickerPicker>
     widget.onPick(sticker);
   }
 
-  void _toggleFavorite(Sticker sticker) {
-    if (sticker.favorited) {
-      widget.state.unfavoriteSticker(sticker.id);
-    } else {
-      widget.state.favoriteSticker(sticker.id);
+  /// Menu de toque-longo na figurinha: adicionar/remover das favoritas.
+  /// Integrado ao painel (não cria uma tela nova).
+  Future<void> _openStickerMenu(Sticker sticker) async {
+    final wasFavorited = sticker.favorited;
+    final action = await showModalBottomSheet<_StickerTileAction>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      barrierColor: Colors.black.withValues(alpha: 0.5),
+      builder: (_) => _StickerTileMenu(favorited: wasFavorited),
+    );
+    if (!mounted || action == null) return;
+    final messenger = ScaffoldMessenger.of(context);
+    switch (action) {
+      case _StickerTileAction.addFavorite:
+        await widget.state.favoriteSticker(sticker.id);
+        if (!mounted) return;
+        messenger.showSnackBar(
+          const SnackBar(content: Text('Figurinha adicionada às favoritas.')),
+        );
+      case _StickerTileAction.removeFavorite:
+        await widget.state.unfavoriteSticker(sticker.id);
+        if (!mounted) return;
+        messenger.showSnackBar(
+          const SnackBar(content: Text('Figurinha removida das favoritas.')),
+        );
+    }
+  }
+
+  /// Confirma e EXCLUI o pacote selecionado. Ao remover, volta ao estado
+  /// padrão do painel (Recentes) para nunca deixar um pacote selecionado
+  /// inexistente nem tela vazia quebrada.
+  Future<void> _confirmDeletePackage(StickerPackage pkg) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.bluishBlack,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AppDimensions.radiusLg),
+          side: BorderSide(color: AppColors.deepBlue),
+        ),
+        title: Text(
+          'Excluir pacote?',
+          style: AppTextStyles.hud.copyWith(
+            fontSize: 16,
+            color: AppColors.techWhite,
+          ),
+        ),
+        content: Text(
+          'As figurinhas deste pacote serão removidas do MATRIX.',
+          style: AppTextStyles.bodyMuted,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text(
+              'Cancelar',
+              style: TextStyle(color: AppColors.holographicBlue),
+            ),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text(
+              'Excluir',
+              style: TextStyle(color: AppColors.error),
+            ),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final preserved = await widget.state.deleteStickerPackage(pkg.id);
+      if (!mounted) return;
+      setState(() {
+        // O pacote saiu do catálogo — volta ao estado padrão do painel.
+        _selectedPackageId = null;
+        _tab = _StickerTab.recents;
+      });
+      _switchCtrl.forward(from: 0);
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            preserved > 0
+                ? 'Pacote excluído. Suas favoritas foram mantidas.'
+                : 'Pacote excluído.',
+          ),
+        ),
+      );
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      messenger.showSnackBar(SnackBar(content: Text(e.message)));
+    } catch (_) {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Não foi possível excluir o pacote.')),
+      );
     }
   }
 
@@ -171,18 +264,33 @@ class _StickerPickerState extends State<StickerPicker>
               if (_installedPackages.isNotEmpty)
                 SizedBox(
                   height: 30,
-                  child: ListView(
-                    scrollDirection: Axis.horizontal,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: AppDimensions.spaceSm,
-                    ),
+                  child: Row(
                     children: [
-                      for (final pkg in _installedPackages)
-                        _PackageIcon(
-                          package: pkg,
-                          selected: _selectedPackageId == pkg.id,
-                          onTap: () => _openPackage(pkg.id),
+                      Expanded(
+                        child: ListView(
+                          scrollDirection: Axis.horizontal,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: AppDimensions.spaceSm,
+                          ),
+                          children: [
+                            for (final pkg in _installedPackages)
+                              _PackageIcon(
+                                package: pkg,
+                                selected: _selectedPackageId == pkg.id,
+                                onTap: () => _openPackage(pkg.id),
+                              ),
+                          ],
                         ),
+                      ),
+                      // Lixeira do pacote SELECIONADO (lado direito) — só
+                      // aparece quando o usuário está DENTRO de um pacote.
+                      // Nunca uma lixeira por figurinha.
+                      if (_tab == _StickerTab.packages &&
+                          _selectedPackage != null)
+                        _DeletePackageButton(
+                          onTap: () => _confirmDeletePackage(_selectedPackage!),
+                        ),
+                      const SizedBox(width: AppDimensions.spaceXs),
                     ],
                   ),
                 ),
@@ -274,7 +382,7 @@ class _StickerPickerState extends State<StickerPicker>
             return _StickerTile(
               sticker: sticker,
               onTap: () => _pickSticker(sticker),
-              onLongPress: () => _toggleFavorite(sticker),
+              onLongPress: () => _openStickerMenu(sticker),
             );
           },
         );
@@ -284,6 +392,138 @@ class _StickerPickerState extends State<StickerPicker>
 
   /// Largura alvo de cada célula (compacta, ~5 colunas num telefone comum).
   static const double _kStickerTile = 62;
+}
+
+/// Ações do menu de toque-longo numa figurinha.
+enum _StickerTileAction { addFavorite, removeFavorite }
+
+/// Mini menu (toque-longo) da figurinha no painel. Uma única ação, em
+/// português, com ícone nativo — nada de emoji.
+class _StickerTileMenu extends StatelessWidget {
+  const _StickerTileMenu({required this.favorited});
+
+  final bool favorited;
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      top: false,
+      child: Container(
+        margin: const EdgeInsets.all(AppDimensions.spaceMd),
+        padding: const EdgeInsets.symmetric(vertical: AppDimensions.spaceXs),
+        decoration: BoxDecoration(
+          color: AppColors.bluishBlack,
+          borderRadius: BorderRadius.circular(AppDimensions.radiusXl),
+          border: Border.all(color: AppColors.deepBlue),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.4),
+              blurRadius: 20,
+            ),
+          ],
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _PickerMenuAction(
+                icon: favorited
+                    ? Icons.star_rounded
+                    : Icons.star_border_rounded,
+                iconColor: favorited
+                    ? AppColors.electricBlue
+                    : AppColors.holographicBlue,
+                label: favorited
+                    ? 'Remover das favoritas'
+                    : 'Adicionar às favoritas',
+                onTap: () => Navigator.of(context).pop(
+                  favorited
+                      ? _StickerTileAction.removeFavorite
+                      : _StickerTileAction.addFavorite,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PickerMenuAction extends StatelessWidget {
+  const _PickerMenuAction({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.iconColor,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final Color? iconColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppDimensions.spaceLg,
+          vertical: AppDimensions.spaceMd,
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: iconColor ?? AppColors.holographicBlue, size: 20),
+            const SizedBox(width: AppDimensions.spaceMd),
+            Expanded(
+              child: Text(
+                label,
+                style: AppTextStyles.body.copyWith(color: AppColors.techWhite),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Botão de lixeira do PACOTE selecionado (lado direito do painel). Ícone
+/// nativo, compacto, seguindo o visual do MATRIX.
+class _DeletePackageButton extends StatelessWidget {
+  const _DeletePackageButton({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      label: 'Excluir pacote',
+      button: true,
+      child: Tooltip(
+        message: 'Excluir pacote',
+        child: GestureDetector(
+          onTap: onTap,
+          child: Container(
+            width: 30,
+            height: 30,
+            decoration: BoxDecoration(
+              color: AppColors.error.withValues(alpha: 0.14),
+              shape: BoxShape.circle,
+              border: Border.all(color: AppColors.error),
+            ),
+            child: Icon(
+              Icons.delete_outline_rounded,
+              color: AppColors.error,
+              size: 18,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 /// Botão "+" do painel de figurinhas (importação por código do Sticker.ly).

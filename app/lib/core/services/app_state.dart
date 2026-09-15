@@ -1230,6 +1230,14 @@ class AppState extends ChangeNotifier {
     return null;
   }
 
+  /// Whether [stickerId] is currently in the session user's favorites.
+  /// Single source of truth for the UI (picker + chat message menu) — reads
+  /// the loaded favorites list, never a duplicated local flag.
+  bool isStickerFavorited(String? stickerId) {
+    if (stickerId == null || stickerId.isEmpty) return false;
+    return _stickerFavorites.any((s) => s.id == stickerId);
+  }
+
   /// Installs a sticker package locally + on the server and refreshes the
   /// catalog state so the picker navigates into it immediately.
   Future<void> installStickerPackage(String packageId) async {
@@ -1256,6 +1264,25 @@ class AppState extends ChangeNotifier {
         .map((p) => p.id == packageId ? p.copyWith(installed: false) : p)
         .toList();
     notifyListeners();
+  }
+
+  /// DELETES a package the session user owns (imported from share/Sticker.ly)
+  /// and drops it from the local catalog immediately, so the picker updates
+  /// without a reload. The server preserves the user's favorited stickers as
+  /// standalone copies — the favorites/recents lists are refreshed after.
+  ///
+  /// Throws [ApiException] on failure (e.g. 403 for a non-owned package) so
+  /// the UI can show a clear message and keep the package.
+  Future<int> deleteStickerPackage(String packageId) async {
+    final preserved = await _stickersRepo.deletePackage(packageId);
+    _stickerPackages =
+        _stickerPackages.where((p) => p.id != packageId).toList();
+    notifyListeners();
+    if (preserved > 0) {
+      await loadStickerFavorites();
+      await loadStickerRecents();
+    }
+    return preserved;
   }
 
   /// Moves a sticker to the FRONT of the session user's recents (deduped).

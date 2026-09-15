@@ -112,19 +112,28 @@ class _MatrixAppState extends State<MatrixApp> {
     final title = _pendingShareTitle;
     if (title == null) return;
     if (!state.isAuthenticated) return; // el splash redirige a login primero
-    // Mientras el splash siga arriba, esperar: su pushReplacementNamed
-    // reemplazaría la ruta de importación y se perdería el contenido.
-    if (_routeWatcher.current != AppRoutes.home &&
-        _routeWatcher.current != AppRoutes.stickerImport) {
+    // Só espera enquanto as rotas de BOOT ainda estão no topo: o
+    // `pushReplacementNamed` do splash (ou do login) SUBSTITUIRIA a tela de
+    // confirmação e o pacote se perderia. ANTES havia um allowlist
+    // (home/stickerImport) que bloqueava a confirmação quando o usuário
+    // estava em QUALQUER outra tela — por exemplo numa conversa, justamente
+    // de onde se compartilha uma figurinha. Era a causa da confirmação
+    // "sumida". Agora só bloqueamos as rotas de arranque.
+    const bootRoutes = {
+      AppRoutes.splash,
+      AppRoutes.login,
+      AppRoutes.register,
+      AppRoutes.recover,
+    };
+    if (bootRoutes.contains(_routeWatcher.current)) {
       return;
     }
     final navigator = _navigatorKey.currentState;
     if (navigator == null) return;
     _pendingShareTitle = null;
-    // Nunca APILAR pantallas de importación: si ya hay una abierta (el
-    // usuario compartió varias veces sin cerrarla), se REEMPLAZA por el
-    // contenido nuevo — cada share se procesa una vez y no queda una pila
-    // de pantallas que el botón atrás tendría que deshacer una a una.
+    // Nunca APILAR telas de importação: se uma já está aberta (o usuário
+    // compartilhou de novo sem fechá-la), o lote novo a SUBSTITUI — cada
+    // share é processado uma vez e não sobra uma pilha para o Back desfazer.
     if (_routeWatcher.current == AppRoutes.stickerImport) {
       navigator.pushReplacementNamed(AppRoutes.stickerImport, arguments: title);
     } else {

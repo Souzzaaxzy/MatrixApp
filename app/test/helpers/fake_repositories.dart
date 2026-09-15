@@ -116,6 +116,10 @@ class FakeStore {
   /// Sticker.ly pack codes already imported (fake dedupe of the source).
   final Set<String> stickerlyImported = {};
 
+  /// Cópias autônomas de favoritas preservadas quando o pacote é excluído
+  /// (espelha o pacote-arquivo oculto do servidor).
+  final List<Sticker> favoriteArchive = [];
+
   /// Group messages by group id (fake persistence).
   late final Map<String, List<ChatMessage>> groupMessagesById = {};
 
@@ -1577,6 +1581,28 @@ class _FakeStickerRepository implements StickerRepository {
   @override
   Future<void> uninstall(String packageId) async {
     await Future<void>.delayed(Duration.zero);
+  }
+
+  @override
+  Future<int> deletePackage(String packageId) async {
+    // Preserva as favoritas do pacote (mesma regra do servidor): move cada
+    // favorita para uma cópia autônoma, depois remove o pacote do catálogo.
+    final pkg = _store.stickerPackages.where((p) => p.id == packageId).firstOrNull;
+    var preserved = 0;
+    if (pkg != null) {
+      final ids = pkg.stickers.map((s) => s.id).toSet();
+      final favs = _store.stickerFavorites.where((f) => ids.contains(f.id));
+      preserved = favs.length;
+      for (final fav in favs) {
+        _store.favoriteArchive.add(fav.copyWith(favorited: true));
+      }
+      _store.stickerFavorites.removeWhere((f) => ids.contains(f.id));
+      _store.stickerFavorites.addAll(
+        _store.favoriteArchive.where((f) => ids.contains(f.id)),
+      );
+      _store.stickerPackages.removeWhere((p) => p.id == packageId);
+    }
+    return preserved;
   }
 
   @override

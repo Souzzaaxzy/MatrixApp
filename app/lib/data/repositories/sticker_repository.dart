@@ -42,6 +42,17 @@ class StickerRepository {
     await _api.delete('/api/stickers/packages/$packageId/install');
   }
 
+  /// Deletes a package the session user OWNS (imported from share/Sticker.ly).
+  /// The server archives it (old messages keep rendering) and preserves the
+  /// user's favorited stickers as standalone copies. Returns how many
+  /// favorites were preserved.
+  Future<int> deletePackage(String packageId) async {
+    final json = await _api.delete<Map<String, dynamic>>(
+      '/api/stickers/packages/$packageId',
+    );
+    return (json['preservedFavorites'] as num?)?.toInt() ?? 0;
+  }
+
   /// The session user's favorites, newest first.
   Future<List<Sticker>> favorites() async {
     final json = await _api.get<Map<String, dynamic>>('/api/stickers/favorites');

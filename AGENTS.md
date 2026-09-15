@@ -65,13 +65,32 @@ Or just `docker compose up -d --build`.
 ## Stickers (figurinhas) — tamanho, transições e importação
 - **Render do chat:** `ChatMediaBubble._StickerBubble` (`features/chat/`
   `chat_media_bubble.dart`) — usado por DM e grupo. Tamanho COMPACTO:
-  `~34%` da largura limitado a 148px e a `28%` da altura útil, sempre
+  `~27%` da largura limitado a 118px e a `22%` da altura útil, sempre
   `BoxFit.contain` (proporção, transparência e APNG intactos; sem corte/
   deformação). O placeholder tem a MESMA caixa — sem salto de layout.
 - **Grade do painel:** `StickerPicker` (`features/chat/sticker_picker.dart`)
   — `LayoutBuilder` + célula alvo de 62px → ~5–8 colunas, espaçamento `xs`
   (compacta e responsiva). Altura do painel em `StickerPicker.panelHeight`.
   Toque dá um "punch" de escala curto (`_StickerTile`) que NÃO atrasa o envio.
+- **Confirmação de importação (share):** o lote compartilhado abre SEMPRE a
+  `StickerImportScreen`, que mostra prévia + "Adicionar este pacote ao
+  Matrix?" com CANCELAR/ADICIONAR — nada entra na coleção antes do toque.
+  `app.dart` só SEGURA a abertura enquanto as rotas de BOOT (splash/login/
+  register/recover) estão no topo; NÃO usar allowlist de rotas "permitidas"
+  (isso já bloqueou a confirmação quando o usuário estava numa conversa).
+- **Excluir pacote:** lixeira (`_DeletePackageButton`) no LADO DIREITO da
+  faixa de pacotes, visível só quando o usuário está DENTRO de um pacote
+  (nunca por figurinha). Confirma via dialog e chama
+  `AppState.deleteStickerPackage` → `DELETE /api/stickers/packages/:id`.
+  Ao excluir, o painel volta para "Recentes" (nunca fica um pacote
+  selecionado inexistente). Só o DONO de um pacote importado pode excluir.
+- **Favoritas:** toque-longo numa figurinha do painel abre o mini menu
+  (`_StickerTileMenu`) e, na mensagem, o menu existente ganhou
+  "Adicionar às favoritas" (DM e grupo) — ambos usam
+  `AppState.isStickerFavorited` (fonte única) e a persistência do servidor
+  (upsert, nunca duplica). Favoritas SOBREVIVEM à exclusão do pacote: o
+  servidor recria cada favorita como figurinha autônoma num pacote-arquivo
+  oculto do usuário.
 - **Transições (leves, sem blur/partículas/loops):**
   `AnimatedStickerPanel` (`features/chat/sticker_panel.dart`) faz a morte/
   nascimento do painel (AnimatedSize + fade/slide de 200ms) e só monta o
@@ -91,6 +110,9 @@ Or just `docker compose up -d --build`.
   pacotes do usuário (privados ao dono; dedupe por código). O import baixa
   com concorrência limitada, valida magic bytes, guarda no /static e
   deduplica por SHA-256. Base da fonte configurável por `STICKERLY_API_BASE`.
+  **URLs salvas** vêm de `publicBase()` (`utils/storage.ts`): STORAGE_PUBLIC_
+  BASE_URL → PUBLIC_API_URL → caminho RELATIVO `/static/...` (nunca
+  `localhost` — era o que deixava as figurinhas importadas VAZIAS no app).
 - **Import via compartilhamento Android:** ver seção "Stickers — compartilhar
   Android" abaixo (fluxo `.wastickers`, inalterado).
 

@@ -152,19 +152,21 @@ class _StickerBubble extends StatelessWidget {
   final String url;
 
   /// Hard ceiling for a sticker in the chat (also caps very wide screens).
-  static const double _maxSide = 148;
+  /// Kept deliberately SMALL so a sticker never dominates the conversation.
+  static const double _maxSide = 118;
 
   @override
   Widget build(BuildContext context) {
-    // Available height (minus chrome) keeps a tall sticker from dominating.
+    // Available height (minus chrome) keeps a tall sticker from dominating;
+    // the width fraction + the hard ceiling make it compact on every device.
     final media = MediaQuery.sizeOf(context);
     final viewInsets = MediaQuery.viewInsetsOf(context).bottom;
     final availableHeight = media.height - viewInsets;
-    final size = (media.width * 0.34).clamp(
-      96.0,
+    final size = (media.width * 0.27).clamp(
+      84.0,
       _maxSide,
     );
-    final heightBudget = (availableHeight * 0.28).clamp(96.0, _maxSide);
+    final heightBudget = (availableHeight * 0.22).clamp(84.0, _maxSide);
     final side = size < heightBudget ? size : heightBudget;
 
     return SizedBox(

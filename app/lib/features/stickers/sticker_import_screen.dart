@@ -354,12 +354,35 @@ class _StickerImportScreenState extends State<StickerImportScreen> {
                 ),
               ),
               const SizedBox(height: AppDimensions.spaceMd),
-              MatrixButton(
-                label: 'ADICIONAR',
-                icon: Icons.add_rounded,
-                expanded: true,
-                isLoading: _importing,
-                onPressed: _importing ? null : _import,
+              // Confirmação explícita: o pacote NÃO é adicionado à coleção
+              // antes de o usuário tocar em ADICIONAR.
+              Center(
+                child: Text(
+                  'Adicionar este pacote ao Matrix?',
+                  style: AppTextStyles.bodyMuted
+                      .copyWith(color: AppColors.techWhite),
+                ),
+              ),
+              const SizedBox(height: AppDimensions.spaceSm),
+              Row(
+                children: [
+                  Expanded(
+                    child: MatrixButton(
+                      label: 'CANCELAR',
+                      variant: MatrixButtonVariant.outline,
+                      onPressed: _importing ? null : _cancel,
+                    ),
+                  ),
+                  const SizedBox(width: AppDimensions.spaceMd),
+                  Expanded(
+                    child: MatrixButton(
+                      label: 'ADICIONAR',
+                      icon: Icons.add_rounded,
+                      isLoading: _importing,
+                      onPressed: _importing ? null : _import,
+                    ),
+                  ),
+                ],
               ),
             ],
           ),

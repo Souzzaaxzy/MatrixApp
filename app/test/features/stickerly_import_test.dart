@@ -319,4 +319,156 @@ void main() {
       expect(find.byType(StickerPicker), findsNothing);
     });
   });
+
+  group('Excluir pacote', () {
+    Future<AppState> ownedState() async {
+      final repos = FakeRepositories();
+      repos.store.stickerPackages.add(StickerPackage(
+        id: 'own1',
+        name: 'Pacote Importado',
+        slug: 'importado',
+        description: '',
+        author: 'MATRIX',
+        iconUrl: 'http://x/pack.png',
+        installed: true,
+        stickerCount: 2,
+        stickers: [
+          Sticker(id: 'o1', packageId: 'own1', order: 0, fileUrl: 'http://x/1.webp'),
+          Sticker(id: 'o2', packageId: 'own1', order: 1, fileUrl: 'http://x/2.webp'),
+        ],
+      ));
+      final state = AppState(repositories: repos);
+      await state.restoreSession();
+      await state.loadStickers();
+      return state;
+    }
+
+    test('remove o pacote do catálogo e preserva favoritas', () async {
+      final state = await ownedState();
+      // Favorita uma figurinha do pacote.
+      await state.favoriteSticker('o1');
+      expect(state.isStickerFavorited('o1'), isTrue);
+
+      final preserved = await state.deleteStickerPackage('own1');
+      expect(preserved, 1);
+      expect(state.stickerPackages.any((p) => p.id == 'own1'), isFalse);
+      // A favorita continua disponível (cópia autônoma), já sem o pacote.
+      expect(state.stickerFavorites, isNotEmpty);
+      expect(
+        state.stickerFavorites.any((s) => s.fileUrl == 'http://x/1.webp'),
+        isTrue,
+      );
+    });
+
+    test('excluir pacote sem favoritas não preserva nada', () async {
+      final state = await ownedState();
+      final preserved = await state.deleteStickerPackage('own1');
+      expect(preserved, 0);
+      expect(state.stickerPackages.any((p) => p.id == 'own1'), isFalse);
+    });
+
+    testWidgets('lixeira aparece só DENTRO do pacote e exige confirmação',
+        (tester) async {
+      tester.view.physicalSize = const Size(1080, 2340);
+      tester.view.devicePixelRatio = 2.0;
+      addTearDown(tester.view.reset);
+
+      final state = await ownedState();
+      await pumpMatrixApp(
+        tester,
+        Scaffold(body: StickerPicker(state: state, onPick: (_) {})),
+        state: state,
+      );
+      await tester.pumpAndSettle();
+
+      // Na aba inicial (Recentes) não há lixeira.
+      expect(find.byTooltip('Excluir pacote'), findsNothing);
+
+      // Abre o pacote → a lixeira aparece no lado direito.
+      await tester.tap(find.byType(CachedNetworkImage).first);
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('Excluir pacote'), findsOneWidget);
+
+      // Cancelar mantém o pacote.
+      await tester.tap(find.byTooltip('Excluir pacote'));
+      await tester.pumpAndSettle();
+      expect(find.text('Excluir pacote?'), findsOneWidget);
+      await tester.tap(find.text('Cancelar'));
+      await tester.pumpAndSettle();
+      expect(state.stickerPackages.any((p) => p.id == 'own1'), isTrue);
+
+      // Confirmar remove o pacote.
+      await tester.tap(find.byTooltip('Excluir pacote'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Excluir'));
+      await tester.pumpAndSettle();
+      expect(state.stickerPackages.any((p) => p.id == 'own1'), isFalse);
+    });
+  });
+
+  group('Favoritar pela figurinha (painel e mensagem)', () {
+    Future<AppState> favState() async {
+      final repos = FakeRepositories();
+      repos.store.stickerPackages.add(StickerPackage(
+        id: 'p1',
+        name: 'Pack',
+        slug: 'pack',
+        description: '',
+        author: 'MATRIX',
+        iconUrl: 'http://x/pack.png',
+        installed: true,
+        stickerCount: 1,
+        stickers: [
+          Sticker(id: 's1', packageId: 'p1', order: 0, fileUrl: 'http://x/s.webp'),
+        ],
+      ));
+      repos.store.stickerRecents.add(
+        Sticker(id: 's1', packageId: 'p1', order: 0, fileUrl: 'http://x/s.webp'),
+      );
+      final state = AppState(repositories: repos);
+      await state.restoreSession();
+      await state.loadStickers();
+      await state.loadStickerRecents();
+      return state;
+    }
+
+    test('isStickerFavorited reflete o estado real (sem duplicar)', () async {
+      final state = await favState();
+      expect(state.isStickerFavorited('s1'), isFalse);
+      await state.favoriteSticker('s1');
+      expect(state.isStickerFavorited('s1'), isTrue);
+      // Favoritar de novo não duplica (upsert no servidor + guarda local).
+      await state.favoriteSticker('s1');
+      expect(
+        state.stickerFavorites.where((s) => s.id == 's1').length,
+        1,
+      );
+      await state.unfavoriteSticker('s1');
+      expect(state.isStickerFavorited('s1'), isFalse);
+    });
+
+    testWidgets('toque longo na figurinha abre o menu de favoritas',
+        (tester) async {
+      tester.view.physicalSize = const Size(1080, 2340);
+      tester.view.devicePixelRatio = 2.0;
+      addTearDown(tester.view.reset);
+
+      final state = await favState();
+      await pumpMatrixApp(
+        tester,
+        Scaffold(body: StickerPicker(state: state, onPick: (_) {})),
+        state: state,
+      );
+      await tester.pumpAndSettle();
+
+      await tester.longPress(find.byType(CachedNetworkImage).last);
+      await tester.pumpAndSettle();
+      expect(find.text('Adicionar às favoritas'), findsOneWidget);
+
+      await tester.tap(find.text('Adicionar às favoritas'));
+      await tester.pumpAndSettle();
+      expect(state.isStickerFavorited('s1'), isTrue);
+      expect(find.textContaining('favoritas'), findsWidgets);
+    });
+  });
 }

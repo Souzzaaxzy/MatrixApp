@@ -544,13 +544,21 @@ class _ConversationScreenState extends State<ConversationScreen>
       backgroundColor: Colors.transparent,
       barrierColor: Colors.black.withValues(alpha: 0.5),
       isScrollControlled: true,
-      builder: (_) => _MessageActionMenu(message: message, index: index),
+      builder: (_) => _MessageActionMenu(
+        message: message,
+        index: index,
+        stickerFavorited:
+            AppStateScope.maybeOf(context)?.isStickerFavorited(message.stickerId) ??
+                false,
+      ),
     );
     if (action == null || !mounted) return;
 
     switch (action) {
       case _MessageAction.reply:
         _startReply(index);
+      case _MessageAction.addFavorite:
+        await _toggleStickerFavorite(message);
       case _MessageAction.deleteForMe:
         await _confirmAndDeleteMessageForMe(
           conversationId,
@@ -561,6 +569,30 @@ class _ConversationScreenState extends State<ConversationScreen>
           conversationId,
           message,
         );
+    }
+  }
+
+  /// Adiciona/remove uma figurinha das favoritas a partir da MENSAGEM
+  /// (toque-longo → menu). Usa a persistência existente do servidor; o
+  /// feedback é um aviso curto. Nunca duplica (o servidor faz upsert).
+  Future<void> _toggleStickerFavorite(ChatMessage message) async {
+    final state = AppStateScope.maybeOf(context);
+    final stickerId = message.stickerId;
+    if (state == null || stickerId == null || stickerId.isEmpty) return;
+    final wasFavorited = state.isStickerFavorited(stickerId);
+    final messenger = ScaffoldMessenger.of(context);
+    if (wasFavorited) {
+      await state.unfavoriteSticker(stickerId);
+      if (!mounted) return;
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Figurinha removida das favoritas.')),
+      );
+    } else {
+      await state.favoriteSticker(stickerId);
+      if (!mounted) return;
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Figurinha adicionada às favoritas.')),
+      );
     }
   }
 
@@ -2332,17 +2364,25 @@ class _ReplyPreviewBar extends StatelessWidget {
 }
 
 /// Actions a user can take on a message via the long-press menu.
-enum _MessageAction { reply, deleteForMe, deleteForEveryone }
+enum _MessageAction { reply, addFavorite, deleteForMe, deleteForEveryone }
 
 /// Bottom menu shown when a message bubble is long-pressed. Options respect
 /// the real (server-validated) rules: replying is always allowed; "Excluir"
 /// removes the message only for ME; "Excluir para todos" removes it for every
 /// participant.
 class _MessageActionMenu extends StatelessWidget {
-  const _MessageActionMenu({required this.message, required this.index});
+  const _MessageActionMenu({
+    required this.message,
+    required this.index,
+    this.stickerFavorited = false,
+  });
 
   final ChatMessage message;
   final int index;
+
+  /// Whether this sticker is already in the user's favorites (resolved from
+  /// [AppState] by the caller — the message payload carries no such flag).
+  final bool stickerFavorited;
 
   @override
   Widget build(BuildContext context) {
@@ -2390,6 +2430,18 @@ class _MessageActionMenu extends StatelessWidget {
                       onTap: () =>
                           Navigator.of(context).pop(_MessageAction.reply),
                     ),
+                    if (message.isSticker)
+                      _ActionItem(
+                        icon: stickerFavorited
+                            ? Icons.star_rounded
+                            : Icons.star_border_rounded,
+                        iconColor: AppColors.electricBlue,
+                        label: stickerFavorited
+                            ? 'Remover das favoritas'
+                            : 'Adicionar às favoritas',
+                        onTap: () => Navigator.of(context)
+                            .pop(_MessageAction.addFavorite),
+                      ),
                     _ActionItem(
                       icon: Icons.remove_circle_outline_rounded,
                       iconColor: AppColors.holographicBlue,

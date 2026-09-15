@@ -763,12 +763,16 @@ class _GroupConversationScreenState extends State<GroupConversationScreen>
         message: message,
         canDeleteAnyone: canDeleteAnyone,
         canBan: canBan,
+        stickerFavorited:
+            _state?.isStickerFavorited(message.stickerId) ?? false,
       ),
     );
     if (action == null || !mounted) return;
     switch (action) {
       case _MessageAction.reply:
         _startReply(_messages.indexOf(message));
+      case _MessageAction.addFavorite:
+        await _toggleStickerFavorite(message);
       case _MessageAction.seenInfo:
         await _openSeenInfo(message);
       case _MessageAction.deleteForMe:
@@ -777,6 +781,30 @@ class _GroupConversationScreenState extends State<GroupConversationScreen>
         await _confirmDeleteForEveryone(message);
       case _MessageAction.banUser:
         await _confirmBanUser(message);
+    }
+  }
+
+  /// Adiciona/remove uma figurinha das favoritas a partir da MENSAGEM do
+  /// grupo (toque-longo → menu). Mesma persistência do servidor do DM;
+  /// upsert nunca duplica.
+  Future<void> _toggleStickerFavorite(ChatMessage message) async {
+    final state = _state;
+    final stickerId = message.stickerId;
+    if (state == null || stickerId == null || stickerId.isEmpty) return;
+    final wasFavorited = state.isStickerFavorited(stickerId);
+    final messenger = ScaffoldMessenger.of(context);
+    if (wasFavorited) {
+      await state.unfavoriteSticker(stickerId);
+      if (!mounted) return;
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Figurinha removida das favoritas.')),
+      );
+    } else {
+      await state.favoriteSticker(stickerId);
+      if (!mounted) return;
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Figurinha adicionada às favoritas.')),
+      );
     }
   }
 
@@ -2132,6 +2160,7 @@ class _GroupReplyPreviewBar extends StatelessWidget {
 
 enum _MessageAction {
   reply,
+  addFavorite,
   deleteForMe,
   deleteForEveryone,
   banUser,
@@ -2143,9 +2172,14 @@ class _MessageActionSheet extends StatelessWidget {
     required this.message,
     this.canDeleteAnyone = false,
     this.canBan = false,
+    this.stickerFavorited = false,
   });
 
   final ChatMessage message;
+
+  /// Whether this sticker is already in the user's favorites (resolved from
+  /// [AppState] by the caller — the message payload carries no such flag).
+  final bool stickerFavorited;
 
   /// Whether the session user may delete this message for everyone — the
   /// sender of the message OR the group owner (server-validated). The
@@ -2202,6 +2236,16 @@ class _MessageActionSheet extends StatelessWidget {
                         label: 'Responder',
                         onTap: () =>
                             Navigator.of(context).pop(_MessageAction.reply)),
+                    if (message.isSticker)
+                      _ActionItem(
+                          icon: stickerFavorited
+                              ? Icons.star_rounded
+                              : Icons.star_border_rounded,
+                          label: stickerFavorited
+                              ? 'Remover das favoritas'
+                              : 'Adicionar às favoritas',
+                          onTap: () => Navigator.of(context)
+                              .pop(_MessageAction.addFavorite)),
                     if (message.mine)
                       _ActionItem(
                           icon: Icons.done_all_rounded,
