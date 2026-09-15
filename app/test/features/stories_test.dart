@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:matrix_app/core/services/app_state.dart';
 import 'package:matrix_app/features/feed/feed_screen.dart';
 import 'package:matrix_app/features/feed/stories_header.dart';
+import 'package:matrix_app/features/feed/story_viewer.dart';
 import 'package:matrix_app/models/story.dart';
 
 import '../helpers/fake_repositories.dart';
@@ -174,6 +175,51 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(tester.takeException(), isNull);
+    });
+  });
+
+
+  group('StoryViewer', () {
+    testWidgets('abre, navega (próximo/anterior) e fecha pelo botão',
+        (tester) async {
+      tester.view.physicalSize = const Size(1080, 2340);
+      tester.view.devicePixelRatio = 2.0;
+      addTearDown(tester.view.reset);
+
+      final state = await seededStories();
+      await pumpMatrixApp(
+        tester,
+        Builder(
+          builder: (ctx) => ElevatedButton(
+            onPressed: () => StoryViewer.open(ctx, state, startGroup: 0),
+            child: const Text('abrir'),
+          ),
+        ),
+        state: state,
+      );
+      await tester.tap(find.text('abrir'));
+      // Pumps LIMITADOS: a mídia remota mantém um stream de imagem aberto,
+      // então pumpAndSettle nunca estabiliza em teste.
+      for (var i = 0; i < 6; i++) {
+        await tester.pump(const Duration(milliseconds: 120));
+      }
+      expect(find.byType(StoryViewer), findsOneWidget);
+      // Toca à esquerda/à direita para navegar sem exceções de layout.
+      await tester.tapAt(const Offset(900, 1200));
+      for (var i = 0; i < 4; i++) {
+        await tester.pump(const Duration(milliseconds: 120));
+      }
+      await tester.tapAt(const Offset(100, 1200));
+      for (var i = 0; i < 4; i++) {
+        await tester.pump(const Duration(milliseconds: 120));
+      }
+      expect(tester.takeException(), isNull);
+      // Fecha pelo botão (o Back do Android usa a mesma rota).
+      await tester.tap(find.byTooltip('Fechar'));
+      for (var i = 0; i < 4; i++) {
+        await tester.pump(const Duration(milliseconds: 120));
+      }
+      expect(find.byType(StoryViewer), findsNothing);
     });
   });
 
