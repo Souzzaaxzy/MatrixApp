@@ -56,6 +56,11 @@ class _StoryViewerState extends State<StoryViewer> {
   VideoPlayerController? _video;
   bool _videoReady = false;
 
+  // Resposta ao Story: campo de texto + envio (vira MENSAGEM REAL no chat).
+  final TextEditingController _replyCtrl = TextEditingController();
+  final FocusNode _replyFocus = FocusNode();
+  bool _sendingReply = false;
+
   @override
   void initState() {
     super.initState();
@@ -71,6 +76,8 @@ class _StoryViewerState extends State<StoryViewer> {
   void dispose() {
     _video?.removeListener(_onVideoTick);
     _video?.dispose();
+    _replyCtrl.dispose();
+    _replyFocus.dispose();
     super.dispose();
   }
 
@@ -99,8 +106,9 @@ class _StoryViewerState extends State<StoryViewer> {
     final story = _story;
     await _disposeVideo();
     if (story == null || !story.isVideo) return;
-    final controller =
-        VideoPlayerController.networkUrl(Uri.parse(ApiConfig.resolveUrl(story.mediaUrl)));
+    final controller = VideoPlayerController.networkUrl(
+      Uri.parse(ApiConfig.resolveUrl(story.mediaUrl ?? story.thumbnailUrl ?? '')),
+    );
     try {
       await controller.initialize();
       controller.setLooping(true);
@@ -213,6 +221,47 @@ class _StoryViewerState extends State<StoryViewer> {
     }
   }
 
+  Future<void> _toggleLike() async {
+    final story = _story;
+    if (story == null) return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await widget.state.toggleStoryLike(story.id);
+    } catch (_) {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Não foi possível curtir o Story.')),
+      );
+    }
+  }
+
+  /// Envia a resposta: o SERVIDOR cria uma MENSAGEM REAL no chat entre quem
+  /// respondeu e o autor do Story (mesma infraestrutura de conversas).
+  Future<void> _sendReply() async {
+    final story = _story;
+    if (story == null || _sendingReply) return;
+    final text = _replyCtrl.text.trim();
+    if (text.isEmpty) return;
+    setState(() => _sendingReply = true);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await widget.state.replyToStory(story.id, text);
+      if (!mounted) return;
+      _replyCtrl.clear();
+      _replyFocus.unfocus();
+      setState(() => _sendingReply = false);
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Resposta enviada para o chat.')),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _sendingReply = false);
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Não foi possível enviar a resposta.')),
+      );
+    }
+  }
+
   Future<void> _confirmDelete() async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -249,9 +298,15 @@ class _StoryViewerState extends State<StoryViewer> {
 
   @override
   Widget build(BuildContext context) {
-    final story = _story;
-    final group = _group;
-    return Scaffold(
+    // O viewer também ouve o AppState: curtir (com o flip otimista do
+    // coração), marcar como visto e navegar repintam na hora, sem recarregar
+    // a tela nem reiniciar o app.
+    return ListenableBuilder(
+      listenable: widget.state,
+      builder: (context, _) {
+        final story = _story;
+        final group = _group;
+        return Scaffold(
       backgroundColor: AppColors.absoluteBlack,
       body: GestureDetector(
         // Arrastar para baixo fecha (gesto natural de stories).
@@ -339,11 +394,146 @@ class _StoryViewerState extends State<StoryViewer> {
                       ),
                     ),
                   const Spacer(),
+                  // Barra de interação: "Responda a esse stories" + coração.
+                  // Não é mostrada no próprio Story (não faz sentido
+                  // responder/curtir a si mesmo).
+                  if (story != null && !story.mine)
+                    _StoryInteractionBar(
+                      controller: _replyCtrl,
+                      focusNode: _replyFocus,
+                      sending: _sendingReply,
+                      liked: story.liked,
+                      likeCount: story.likeCount,
+                      onSend: _sendReply,
+                      onToggleLike: _toggleLike,
+                    ),
                 ],
               ),
             ),
           ],
         ),
+      ),
+      );
+      },
+    );
+  }
+}
+
+/// Barra inferior do visualizador: campo "Responda a esse stories" (bordas
+/// arredondadas) + botão de coração no MESMO padrão do feed (♡/♥).
+class _StoryInteractionBar extends StatelessWidget {
+  const _StoryInteractionBar({
+    required this.controller,
+    required this.focusNode,
+    required this.sending,
+    required this.liked,
+    required this.likeCount,
+    required this.onSend,
+    required this.onToggleLike,
+  });
+
+  final TextEditingController controller;
+  final FocusNode focusNode;
+  final bool sending;
+  final bool liked;
+  final int likeCount;
+  final VoidCallback onSend;
+  final VoidCallback onToggleLike;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        AppDimensions.spaceLg,
+        0,
+        AppDimensions.spaceLg,
+        AppDimensions.spaceMd,
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Container(
+              decoration: BoxDecoration(
+                color: AppColors.absoluteBlack.withValues(alpha: 0.6),
+                borderRadius: BorderRadius.circular(AppDimensions.radiusPill),
+                border: Border.all(color: AppColors.deepBlue),
+              ),
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppDimensions.spaceLg,
+              ),
+              child: TextField(
+                controller: controller,
+                focusNode: focusNode,
+                enabled: !sending,
+                textInputAction: TextInputAction.send,
+                onSubmitted: (_) => onSend(),
+                style: AppTextStyles.body.copyWith(color: AppColors.techWhite),
+                cursorColor: AppColors.electricBlue,
+                decoration: InputDecoration(
+                  isDense: true,
+                  border: InputBorder.none,
+                  hintText: 'Responda a esse stories',
+                  hintStyle: AppTextStyles.bodyMuted,
+                  suffixIcon: sending
+                      ? const Padding(
+                          padding: EdgeInsets.all(
+                            AppDimensions.spaceSm,
+                          ),
+                          child: SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: AppColors.electricBlue,
+                            ),
+                          ),
+                        )
+                      : IconButton(
+                          tooltip: 'Enviar resposta',
+                          icon: Icon(
+                            Icons.send_rounded,
+                            color: AppColors.electricBlue,
+                            size: 20,
+                          ),
+                          onPressed: onSend,
+                        ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: AppDimensions.spaceSm),
+          // Coração: MESMO padrão visual do sistema de curtidas do feed.
+          Semantics(
+            label: 'Curtir Story',
+            button: true,
+            child: GestureDetector(
+              onTap: onToggleLike,
+              behavior: HitTestBehavior.opaque,
+              child: Padding(
+                padding: const EdgeInsets.all(AppDimensions.spaceXs),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      liked ? Icons.favorite : Icons.favorite_border,
+                      color: liked ? AppColors.error : AppColors.techWhite,
+                      size: 28,
+                    ),
+                    if (likeCount > 0) ...[
+                      const SizedBox(width: 4),
+                      Text(
+                        '$likeCount',
+                        style: AppTextStyles.caption.copyWith(
+                          color: AppColors.techWhite,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -363,6 +553,22 @@ class _StoryMedia extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Story de TEXTO: sem mídia — o texto aparece CENTRALIZADO e legível.
+    if (story.isText) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(AppDimensions.spaceXxl),
+          child: Text(
+            story.text,
+            textAlign: TextAlign.center,
+            style: AppTextStyles.h3.copyWith(
+              fontSize: 24,
+              color: AppColors.techWhite,
+            ),
+          ),
+        ),
+      );
+    }
     if (story.isVideo) {
       final v = video;
       if (v != null && videoReady && v.value.isInitialized) {
@@ -376,7 +582,7 @@ class _StoryMedia extends StatelessWidget {
       // Enquanto o vídeo não está pronto, mostra a capa (se houver).
       return _StoryImage(url: story.coverUrl);
     }
-    return _StoryImage(url: story.mediaUrl);
+    return _StoryImage(url: story.mediaUrl ?? '');
   }
 }
 

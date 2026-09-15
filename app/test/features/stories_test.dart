@@ -3,7 +3,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:matrix_app/core/services/app_state.dart';
 import 'package:matrix_app/features/feed/feed_screen.dart';
 import 'package:matrix_app/features/feed/stories_header.dart';
+import 'package:matrix_app/app/theme/app_theme.dart';
+import 'package:matrix_app/core/widgets/nickname_renderer.dart';
+import 'package:matrix_app/core/widgets/user_avatar.dart';
+import 'package:matrix_app/features/chat/story_reply_reference.dart';
 import 'package:matrix_app/features/feed/story_viewer.dart';
+import 'package:matrix_app/models/conversation.dart';
 import 'package:matrix_app/models/story.dart';
 
 import '../helpers/fake_repositories.dart';
@@ -243,6 +248,154 @@ void main() {
       final headerY = tester.getTopLeft(find.byType(StoriesHeader)).dy;
       expect(headerY, greaterThanOrEqualTo(0));
       expect(tester.takeException(), isNull);
+    });
+  });
+
+  group('Stories — texto, curtidas e respostas', () {
+    test('cria Story de TEXTO (sem mídia) e ele aparece na lista', () async {
+      final state = await seededStories();
+      final story = await state.createStory(
+        type: 'text',
+        text: 'Bom dia, galera!',
+      );
+      expect(story.isText, isTrue);
+      expect(story.text, 'Bom dia, galera!');
+      expect(state.myStories.any((s) => s.id == story.id && s.isText), isTrue);
+    });
+
+    test('curtir alterna o coração e não duplica (servidor manda)', () async {
+      final state = await seededStories();
+      final id = state.storyGroups.first.stories.first.id;
+      expect(state.storyGroups.first.stories.first.liked, isFalse);
+      await state.toggleStoryLike(id);
+      var story = state.storyGroups
+          .expand((g) => g.stories)
+          .firstWhere((s) => s.id == id);
+      expect(story.liked, isTrue);
+      expect(story.likeCount, 1);
+      // Toggle de novo remove (mesma semântica do feed).
+      await state.toggleStoryLike(id);
+      story = state.storyGroups
+          .expand((g) => g.stories)
+          .firstWhere((s) => s.id == id);
+      expect(story.liked, isFalse);
+      expect(story.likeCount, 0);
+    });
+
+    test('responder a um Story devolve uma MENSAGEM REAL do chat', () async {
+      final state = await seededStories();
+      final id = state.storyGroups.first.stories.first.id;
+      final result = await state.replyToStory(id, 'Que legal!');
+      expect(result.message.content, 'Que legal!');
+      expect(result.message.type, 'story_reply');
+      expect(result.message.story, isNotNull);
+      expect(result.message.story!.storyId, id);
+      expect(result.conversationId, isNotEmpty);
+    });
+
+    testWidgets('card mostra avatar no TOPO e borda BRANCA quando não visto',
+        (tester) async {
+      tester.view.physicalSize = const Size(1080, 2340);
+      tester.view.devicePixelRatio = 2.0;
+      addTearDown(tester.view.reset);
+
+      final state = await seededStories();
+      await pumpMatrixApp(
+        tester,
+        Scaffold(body: StoriesHeader(state: state)),
+        state: state,
+      );
+      await tester.pumpAndSettle();
+      // O avatar fica ACIMA do nickname (região superior do card), nunca no
+      // meio da mídia.
+      final avatar = find.byType(UserAvatar).first;
+      final nick = find.byType(NicknameRenderer).first;
+      expect(
+        tester.getCenter(avatar).dy,
+        lessThan(tester.getCenter(nick).dy),
+      );
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('viewer mostra "Responda a esse stories" e o coração',
+        (tester) async {
+      tester.view.physicalSize = const Size(1080, 2340);
+      tester.view.devicePixelRatio = 2.0;
+      addTearDown(tester.view.reset);
+
+      final state = await seededStories();
+      await pumpMatrixApp(
+        tester,
+        Builder(
+          builder: (ctx) => ElevatedButton(
+            onPressed: () => StoryViewer.open(ctx, state, startGroup: 0),
+            child: const Text('abrir'),
+          ),
+        ),
+        state: state,
+      );
+      await tester.tap(find.text('abrir'));
+      for (var i = 0; i < 20; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      expect(find.text('Responda a esse stories'), findsOneWidget);
+      expect(find.byIcon(Icons.favorite_border), findsOneWidget);
+
+      // Tocar no coração preenche (♥) via o MESMO sistema de curtidas.
+      await tester.tap(find.byIcon(Icons.favorite_border));
+      for (var i = 0; i < 12; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      expect(find.byIcon(Icons.favorite), findsOneWidget);
+    });
+  });
+
+  group('Resposta de Story no chat', () {
+    testWidgets('bolha mostra "respondeu ao seu stories" + texto',
+        (tester) async {
+      final chatMod = ChatMessage(
+        id: 'm1',
+        conversationId: 'c1',
+        senderId: 'u2',
+        content: 'Que legal!',
+        createdAt: DateTime(2024, 1, 1),
+        mine: true,
+        type: 'story_reply',
+        story: const StoryReference(
+          storyId: 's1',
+          type: 'image',
+          thumbnailUrl: 'http://x/thumb.jpg',
+        ),
+      );
+      final reply = StoryReplyReference(story: chatMod.story!, mine: true);
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.dark,
+          home: Scaffold(body: reply),
+        ),
+      );
+      await tester.pump();
+      expect(find.text('respondeu ao seu stories'), findsOneWidget);
+    });
+
+    testWidgets('referência de Story de TEXTO mostra o texto do Story',
+        (tester) async {
+      const ref = StoryReference(
+        storyId: 's2',
+        type: 'text',
+        preview: 'Bom dia, galera!',
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.dark,
+          home: const Scaffold(
+            body: StoryReplyReference(story: ref, mine: false),
+          ),
+        ),
+      );
+      await tester.pump();
+      expect(find.text('respondeu ao seu stories'), findsOneWidget);
+      expect(find.text('Bom dia, galera!'), findsOneWidget);
     });
   });
 }

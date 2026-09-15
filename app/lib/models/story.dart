@@ -14,6 +14,8 @@ class Story {
     required this.mediaType,
     required this.createdAt,
     required this.expiresAt,
+    this.type = 'image',
+    this.text = '',
     this.authorNicknameColor,
     this.authorFrameId,
     this.authorFrameAsset,
@@ -21,6 +23,8 @@ class Story {
     this.caption = '',
     this.viewed = false,
     this.mine = false,
+    this.liked = false,
+    this.likeCount = 0,
   });
 
   final String id;
@@ -39,8 +43,15 @@ class Story {
   final String? authorFrameId;
   final String? authorFrameAsset;
 
+  /// 'image' | 'video' | 'text' — ONE shape for every story kind.
+  final String type;
+
   /// Image OR video reference (absolute or API-relative `/static/...`).
-  final String mediaUrl;
+  /// Null for a TEXT story (which carries [text] instead).
+  final String? mediaUrl;
+
+  /// Text content (TEXT stories only; empty otherwise).
+  final String text;
 
   /// `image` | `video` — drives the viewer (video autoplays muted).
   final String mediaType;
@@ -60,10 +71,16 @@ class Story {
   /// Whether the SESSION user is the author (drives the delete action).
   final bool mine;
 
-  bool get isVideo => mediaType == 'video';
+  bool get isVideo => type == 'video' || mediaType == 'video';
+  bool get isText => type == 'text';
 
-  /// Best still image for the card: the cover when present, else the media.
-  String get coverUrl => thumbnailUrl ?? mediaUrl;
+  /// Best still image for the card/viewer: the cover when present, else the
+  /// media. Empty for a text story (rendered as text instead).
+  String get coverUrl => thumbnailUrl ?? mediaUrl ?? '';
+
+  /// Whether the SESSION user liked this story (same semantics as the feed).
+  final bool liked;
+  final int likeCount;
 }
 
 /// Active stories of ONE author, as the horizontal header consumes them.

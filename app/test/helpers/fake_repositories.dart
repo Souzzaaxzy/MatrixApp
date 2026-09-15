@@ -125,6 +125,9 @@ class FakeStore {
   /// Active stories grouped by author (fake server state).
   final List<StoryGroup> storyGroups = [];
 
+  /// Story ids the session user liked (fake server state).
+  final Set<String> storyLikes = {};
+
   /// Cópias autônomas de favoritas preservadas quando o pacote é excluído
   /// (espelha o pacote-arquivo oculto do servidor).
   final List<Sticker> favoriteArchive = [];
@@ -1796,8 +1799,10 @@ class _FakeStoryRepository implements StoryRepository {
 
   @override
   Future<Story> create({
-    required String mediaUrl,
-    required String mediaType,
+    String type = 'image',
+    String? mediaUrl,
+    String mediaType = 'image',
+    String text = '',
     String? thumbnailUrl,
     String caption = '',
   }) async {
@@ -1809,6 +1814,8 @@ class _FakeStoryRepository implements StoryRepository {
       authorAvatarUrl: null,
       mediaUrl: mediaUrl,
       mediaType: mediaType,
+      type: type,
+      text: text,
       thumbnailUrl: thumbnailUrl,
       caption: caption,
       createdAt: now,
@@ -1838,6 +1845,41 @@ class _FakeStoryRepository implements StoryRepository {
       ));
     }
     return story;
+  }
+
+  @override
+  Future<({bool liked, int likeCount})> toggleLike(String storyId) async {
+    // Espelha o servidor: uma curtida por usuário+story (toggle).
+    if (_store.storyLikes.contains(storyId)) {
+      _store.storyLikes.remove(storyId);
+      return (liked: false, likeCount: 0);
+    }
+    _store.storyLikes.add(storyId);
+    return (liked: true, likeCount: 1);
+  }
+
+  @override
+  Future<({ChatMessage message, String conversationId})> reply(
+    String storyId,
+    String text,
+  ) async {
+    // O servidor cria uma mensagem REAL na conversa com o autor do Story.
+    final now = DateTime.now();
+    final msg = ChatMessage(
+      id: 'story_reply_${now.microsecondsSinceEpoch}',
+      conversationId: 'story_conv',
+      senderId: _store.currentUserId ?? '',
+      content: text,
+      createdAt: now,
+      mine: true,
+      type: 'story_reply',
+      story: StoryReference(
+        storyId: storyId,
+        type: 'text',
+        preview: text,
+      ),
+    );
+    return (message: msg, conversationId: 'story_conv');
   }
 
   @override

@@ -32,7 +32,16 @@ class StoriesHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final groups = state.storyGroups;
-    return Column(
+    // Acabamento arredondado na BASE da faixa (sem linha separadora) — a
+    // transição para o feed fica contínua, no estilo stories do Instagram.
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.bluishBlack.withValues(alpha: 0.35),
+        borderRadius: const BorderRadius.vertical(
+          bottom: Radius.circular(AppDimensions.radiusXl),
+        ),
+      ),
+      child: Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
@@ -88,8 +97,9 @@ class StoriesHeader extends StatelessWidget {
               ),
             ),
           ),
-        const Divider(height: 1),
+        const SizedBox(height: AppDimensions.spaceSm),
       ],
+      ),
     );
   }
 }
@@ -110,6 +120,10 @@ class _StoryCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final unviewed = !group.allViewed;
     final label = group.authorNickname;
+    final story = group.stories.first;
+    // Avatar no TOPO (nunca sobre a mídia) + nickname embaixo; a mídia do
+    // Story ocupa o corpo central do card, claramente visível.
+    final avatarSize = size * 0.30;
     return SizedBox(
       width: size,
       child: Column(
@@ -123,81 +137,43 @@ class _StoryCard extends StatelessWidget {
               decoration: BoxDecoration(
                 color: AppColors.nightBlue,
                 borderRadius: BorderRadius.circular(AppDimensions.radiusLg),
+                // NÃO VISTO → borda BRANCA clara; visto → borda neutra.
                 border: Border.all(
-                  color: unviewed ? AppColors.electricBlue : AppColors.deepBlue,
-                  width: unviewed
-                      ? AppDimensions.borderWidthActive
-                      : AppDimensions.borderWidthThin,
+                  color: unviewed ? Colors.white : AppColors.deepBlue,
+                  width: unviewed ? 2 : AppDimensions.borderWidthThin,
                 ),
                 boxShadow: unviewed
                     ? [
                         BoxShadow(
-                          color: AppColors.glowSmall,
+                          color: Colors.white.withValues(alpha: 0.25),
                           blurRadius: AppDimensions.glowSmallBlur,
                         ),
                       ]
                     : null,
               ),
-              child: Stack(
-                children: [
-                  // Capa (cover do vídeo ou a própria imagem) preenchendo o
-                  // quadrado; o AVATAR vai por cima, centralizado.
-                  Positioned.fill(
-                    child: ClipRRect(
-                      borderRadius:
-                          BorderRadius.circular(AppDimensions.radiusLg - 2),
-                      child: _StoryCover(group: group),
-                    ),
-                  ),
-                  Positioned.fill(
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        borderRadius:
-                            BorderRadius.circular(AppDimensions.radiusLg - 2),
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [
-                            Colors.transparent,
-                            AppColors.absoluteBlack.withValues(alpha: 0.55),
-                          ],
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(AppDimensions.radiusLg - 2),
+                child: Column(
+                  children: [
+                    // Avatar na região SUPERIOR, centralizado horizontalmente.
+                    Padding(
+                      padding: const EdgeInsets.only(top: 6),
+                      child: FramedAvatar(
+                        frame: _frame(group),
+                        size: avatarSize,
+                        child: UserAvatar(
+                          name: label,
+                          seed: label,
+                          imageUrl: group.authorAvatarUrl,
+                          size: avatarSize * 0.86,
                         ),
                       ),
                     ),
-                  ),
-                  // Avatar centralizado horizontalmente.
-                  Center(
-                    child: FramedAvatar(
-                      frame: _frame(group),
-                      size: size * 0.46,
-                      child: UserAvatar(
-                        name: label,
-                        seed: label,
-                        imageUrl: group.authorAvatarUrl,
-                        size: size * 0.4,
-                      ),
-                    ),
-                  ),
-                  if (unviewed)
-                    Positioned(
-                      top: 6,
-                      right: 6,
-                      child: Container(
-                        width: 8,
-                        height: 8,
-                        decoration: BoxDecoration(
-                          color: AppColors.electricBlue,
-                          shape: BoxShape.circle,
-                          boxShadow: [
-                            BoxShadow(
-                              color: AppColors.electricBlue,
-                              blurRadius: 4,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                ],
+                    // Mídia do Story logo abaixo do avatar, ocupando o
+                    // restante do card (nunca coberta pelo avatar).
+                    Expanded(child: _StoryCover(story: story)),
+                  ],
+                ),
               ),
             ),
           ),
@@ -232,21 +208,43 @@ class _StoryCard extends StatelessWidget {
 
 /// Capa do card: a primeira figurinha do autor (a mais recente).
 class _StoryCover extends StatelessWidget {
-  const _StoryCover({required this.group});
+  const _StoryCover({required this.story});
 
-  final StoryGroup group;
+  final Story story;
 
   @override
   Widget build(BuildContext context) {
-    final story = group.stories.first;
+    // Story de TEXTO: sem mídia — mostra o texto em um painel legível
+    // (mesma estrutura de card, apenas outro conteúdo).
+    if (story.isText) {
+      return ColoredBox(
+        color: AppColors.bluishBlack,
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(6),
+            child: Text(
+              story.text,
+              textAlign: TextAlign.center,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+              style: AppTextStyles.caption.copyWith(
+                fontSize: 10,
+                color: AppColors.techWhite,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
     final url = ApiConfig.resolveUrl(story.coverUrl);
     // Imagem de capa/mídia com cache — nunca baixa em resolução máxima
-    // desnecessariamente (memCacheWidth limita o decode ao tamanho do card).
+    // desnecessariamente (cacheWidth limita o decode ao tamanho do card).
+    // Para VÍDEO usa a CAPA (thumbnail), nunca o vídeo completo.
     return Image.network(
       url,
       fit: BoxFit.cover,
       cacheWidth: 200,
-      // STORIES NÃO USAM NEM UMA IMAGEM QUEBRADA NA CARA: cai no fundo.
+      // NÃO MOSTRAR IMAGEM QUEBRADA: cai num fundo com ícone do tipo.
       errorBuilder: (_, __, ___) => ColoredBox(
         color: AppColors.nightBlue,
         child: Center(

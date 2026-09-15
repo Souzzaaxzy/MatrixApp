@@ -23,6 +23,7 @@ import '../../models/sticker.dart';
 import '../../app/routes.dart';
 import 'chat_attach_button.dart';
 import 'chat_media_bubble.dart';
+import 'story_reply_reference.dart';
 import 'chat_navigation.dart';
 import 'reply_swipe.dart';
 import 'sticker_panel.dart';
@@ -1985,6 +1986,24 @@ class _MessageContent extends StatelessWidget {
           message: message,
           mine: message.senderId ==
               AppStateScope.maybeOf(context)?.currentUser?.id);
+    }
+    if (message.story != null) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          StoryReplyReference(
+            story: message.story!,
+            mine: message.senderId ==
+                AppStateScope.maybeOf(context)?.currentUser?.id,
+          ),
+          const SizedBox(height: 6),
+          Text(
+            message.content,
+            style: AppTextStyles.body.copyWith(color: AppColors.techWhite),
+          ),
+        ],
+      );
     }
     if (message.isMedia || message.isSticker) {
       return ChatMediaBubble(message: message, onStickerTap: onStickerTap);

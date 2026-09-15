@@ -23,6 +23,7 @@ import '../../models/conversation.dart';
 import '../../models/sticker.dart';
 import 'chat_attach_button.dart';
 import 'chat_media_bubble.dart';
+import 'story_reply_reference.dart';
 import 'chat_navigation.dart';
 import 'reply_swipe.dart';
 import 'sticker_panel.dart';
@@ -1671,6 +1672,12 @@ class _MessageBubble extends StatelessWidget {
                   ],
                 ),
               ),
+            ),
+          // Resposta a Story: mostra a referência ANTES do texto.
+          if (message.story != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 6),
+              child: StoryReplyReference(story: message.story!, mine: mine),
             ),
           if (message.isVoice)
             VoicePlayerBubble(message: message, mine: mine)

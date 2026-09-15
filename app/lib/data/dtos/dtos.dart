@@ -563,6 +563,7 @@ class ChatMessageDto {
   final String? stickerUrl;
   final String? stickerId;
   final String? stickerPackageId;
+  final StoryReference? story;
   final List<ChatMention> mentions;
   final bool mentionAll;
   final bool mentioned;
@@ -586,6 +587,7 @@ class ChatMessageDto {
     this.stickerUrl,
     this.stickerId,
     this.stickerPackageId,
+    this.story,
     this.mentions = const [],
     this.mentionAll = false,
     this.mentioned = false,
@@ -607,6 +609,7 @@ class ChatMessageDto {
           'image' => 'image',
           'video' => 'video',
           'sticker' => 'sticker',
+          'story_reply' => 'story_reply',
           _ => 'text',
         },
         audioUrl: audioUrl,
@@ -616,6 +619,7 @@ class ChatMessageDto {
         stickerUrl: stickerUrl,
         stickerId: stickerId,
         stickerPackageId: stickerPackageId,
+        story: story,
         mentions: mentions,
         mentionAll: mentionAll,
         mentioned: mentioned,
@@ -649,6 +653,16 @@ class ChatMessageDto {
       stickerUrl: json['stickerUrl'] as String?,
       stickerId: json['stickerId'] as String?,
       stickerPackageId: json['stickerPackageId'] as String?,
+      story: json['story'] is Map<String, dynamic>
+          ? StoryReference(
+              storyId: ((json['story'] as Map<String, dynamic>)['storyId'] as String?) ?? '',
+              type: ((json['story'] as Map<String, dynamic>)['type'] as String?) ?? 'image',
+              thumbnailUrl:
+                  (json['story'] as Map<String, dynamic>)['thumbnailUrl'] as String?,
+              preview:
+                  ((json['story'] as Map<String, dynamic>)['preview'] as String?) ?? '',
+            )
+          : null,
       mentions: mentionsRaw is List
           ? mentionsRaw
               .whereType<Map<String, dynamic>>()
@@ -1044,14 +1058,18 @@ class StickerPackageDto {
 /// A single Story from the feed header.
 class StoryDto {
   final String id;
-  final String mediaUrl;
+  final String? mediaUrl;
   final String mediaType;
+  final String type;
+  final String text;
   final String? thumbnailUrl;
   final String caption;
   final DateTime createdAt;
   final DateTime expiresAt;
   final bool viewed;
   final bool mine;
+  final bool liked;
+  final int likeCount;
   final String authorId;
   final String authorNickname;
   final String? authorAvatarUrl;
@@ -1063,12 +1081,16 @@ class StoryDto {
     required this.id,
     required this.mediaUrl,
     required this.mediaType,
+    this.type = 'image',
+    this.text = '',
     this.thumbnailUrl,
     required this.caption,
     required this.createdAt,
     required this.expiresAt,
     required this.viewed,
     required this.mine,
+    this.liked = false,
+    this.likeCount = 0,
     required this.authorId,
     required this.authorNickname,
     this.authorAvatarUrl,
@@ -1087,20 +1109,30 @@ class StoryDto {
         authorFrameAsset: authorFrameAsset,
         mediaUrl: mediaUrl,
         mediaType: mediaType,
+        type: type,
+        text: text,
         thumbnailUrl: thumbnailUrl,
         caption: caption,
         createdAt: createdAt,
         expiresAt: expiresAt,
         viewed: viewed,
         mine: mine,
+        liked: liked,
+        likeCount: likeCount,
       );
 
   factory StoryDto.fromJson(Map<String, dynamic> json) {
     final author = (json['author'] as Map<String, dynamic>?) ?? const {};
+    final rawType = (json['type'] as String?) ??
+        ((json['mediaType'] as String?) ?? 'image');
     return StoryDto(
       id: json['id'] as String,
-      mediaUrl: json['mediaUrl'] as String,
+      mediaUrl: json['mediaUrl'] as String?,
       mediaType: (json['mediaType'] as String?) ?? 'image',
+      type: rawType,
+      text: (json['text'] as String?) ?? '',
+      liked: (json['liked'] as bool?) ?? false,
+      likeCount: (json['likeCount'] as num?)?.toInt() ?? 0,
       thumbnailUrl: json['thumbnailUrl'] as String?,
       caption: (json['caption'] as String?) ?? '',
       createdAt: DateTime.tryParse((json['createdAt'] as String?) ?? '') ??

@@ -140,6 +140,7 @@ class ChatMessage {
     this.stickerUrl,
     this.stickerId,
     this.stickerPackageId,
+    this.story,
     this.mentions = const [],
     this.mentionAll = false,
     this.mentioned = false,
@@ -192,6 +193,11 @@ class ChatMessage {
   /// The package this sticker belongs to (sticker messages only).
   final String? stickerPackageId;
 
+  /// STORY REPLY messages only: the story this message answers + its
+  /// snapshot (type/thumbnail/text preview). Persisted WITH the message, so
+  /// the reference keeps rendering after the story expires. Null otherwise.
+  final StoryReference? story;
+
   bool get isImage => type == 'image';
   bool get isVideo => type == 'video';
   bool get isMedia => isImage || isVideo;
@@ -226,6 +232,7 @@ class ChatMessage {
     String? stickerUrl,
     String? stickerId,
     String? stickerPackageId,
+    StoryReference? story,
     ChatUser? sender,
     List<ChatMention>? mentions,
     bool? mentionAll,
@@ -250,6 +257,7 @@ class ChatMessage {
         stickerUrl: stickerUrl ?? this.stickerUrl,
         stickerId: stickerId ?? this.stickerId,
         stickerPackageId: stickerPackageId ?? this.stickerPackageId,
+        story: story ?? this.story,
         mentions: mentions ?? this.mentions,
         mentionAll: mentionAll ?? this.mentionAll,
         mentioned: mentioned ?? this.mentioned,
@@ -416,6 +424,30 @@ class ReplyInfo {
   /// False when the original message was deleted (still renders a
   /// "mensagem apagada" placeholder rather than breaking the view).
   final bool exists;
+}
+
+/// The story a chat REPLY answers. The snapshot travels with the message so
+/// the chat renders the reference even after the story expired/vanished.
+class StoryReference {
+  const StoryReference({
+    required this.storyId,
+    required this.type,
+    this.thumbnailUrl,
+    this.preview = '',
+  });
+
+  final String storyId;
+
+  /// 'image' | 'video' | 'text'.
+  final String type;
+
+  /// Thumbnail/cover of the referenced story (null for text stories).
+  final String? thumbnailUrl;
+
+  /// Text preview (used for text stories, or as a caption fallback).
+  final String preview;
+
+  bool get isText => type == 'text';
 }
 
 /// A single group participant (profile menu). Avatar/nickname plus a

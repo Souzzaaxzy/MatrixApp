@@ -30,7 +30,18 @@ class _CreateStoryScreenState extends State<CreateStoryScreen> {
   String? _thumbnailPath;
   bool _publishing = false;
 
+  /// 'media' (foto/vídeo) ou 'text' — MESMA tela/estrutura para os tipos de
+  /// Story (nenhum sistema separado por tipo).
+  bool _textMode = false;
+  final TextEditingController _textCtrl = TextEditingController();
+
   /// Mesma regra de detecção de vídeo do create_post (um só critério no app).
+  @override
+  void dispose() {
+    _textCtrl.dispose();
+    super.dispose();
+  }
+
   bool _isVideoPath(String path) {
     final lower = path.toLowerCase();
     return lower.endsWith('.mp4') ||
@@ -89,6 +100,34 @@ class _CreateStoryScreenState extends State<CreateStoryScreen> {
 
   Future<void> _publish() async {
     if (_publishing) return;
+    if (_textMode) {
+      if (_textCtrl.text.trim().isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Escreva algo para o Story.')),
+        );
+        return;
+      }
+      setState(() => _publishing = true);
+      final messenger = ScaffoldMessenger.of(context);
+      final navigator = Navigator.of(context);
+      final state = AppStateScope.of(context);
+      try {
+        await state.createStory(type: 'text', text: _textCtrl.text);
+        if (!mounted) return;
+        navigator.pop();
+      } on ApiException catch (e) {
+        if (!mounted) return;
+        messenger.showSnackBar(SnackBar(content: Text(e.message)));
+      } catch (_) {
+        if (!mounted) return;
+        messenger.showSnackBar(
+          const SnackBar(content: Text('Erro ao publicar o Story.')),
+        );
+      } finally {
+        if (mounted) setState(() => _publishing = false);
+      }
+      return;
+    }
     if (_imagePath == null && _videoPath == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Selecione uma mídia para o Story.')),
@@ -126,6 +165,7 @@ class _CreateStoryScreenState extends State<CreateStoryScreen> {
         }
       }
       await state.createStory(
+        type: mediaType,
         mediaUrl: mediaUrl!,
         mediaType: mediaType,
         thumbnailUrl: thumbnailUrl,
@@ -165,36 +205,90 @@ class _CreateStoryScreenState extends State<CreateStoryScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              const SizedBox(height: AppDimensions.spaceMd),
+              // Seletor de TIPO: Foto/Vídeo ou Texto — mesma tela, sem
+              // fluxo paralelo por tipo.
+              Row(
+                children: [
+                  Expanded(
+                    child: _TypeChip(
+                      label: 'Foto/Vídeo',
+                      icon: Icons.photo_camera_rounded,
+                      selected: !_textMode,
+                      onTap: _publishing
+                          ? null
+                          : () => setState(() => _textMode = false),
+                    ),
+                  ),
+                  const SizedBox(width: AppDimensions.spaceSm),
+                  Expanded(
+                    child: _TypeChip(
+                      label: 'Texto',
+                      icon: Icons.text_fields_rounded,
+                      selected: _textMode,
+                      onTap: _publishing
+                          ? null
+                          : () => setState(() => _textMode = true),
+                    ),
+                  ),
+                ],
+              ),
               const SizedBox(height: AppDimensions.spaceLg),
-              // PREVIEW da mídia selecionada (obrigatório antes de publicar).
+              // PREVIEW (obrigatório antes de publicar) — mídia ou texto.
               Expanded(
                 child: Center(
-                  child: !hasMedia
-                      ? Text(
-                          'Selecione uma foto ou um vídeo para o seu Story.',
+                  child: _textMode
+                      ? TextField(
+                          controller: _textCtrl,
+                          enabled: !_publishing,
+                          maxLength: 300,
+                          maxLines: 6,
+                          minLines: 4,
                           textAlign: TextAlign.center,
-                          style: AppTextStyles.bodyMuted,
+                          textCapitalization: TextCapitalization.sentences,
+                          style: AppTextStyles.h3.copyWith(fontSize: 20),
+                          cursorColor: AppColors.electricBlue,
+                          decoration: InputDecoration(
+                            hintText: 'Escreva algo para o seu Story...',
+                            hintStyle: AppTextStyles.bodyMuted,
+                            counterStyle: AppTextStyles.caption,
+                            filled: true,
+                            fillColor: AppColors.bluishBlack,
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(
+                                AppDimensions.radiusLg,
+                              ),
+                              borderSide: BorderSide(color: AppColors.deepBlue),
+                            ),
+                          ),
                         )
-                      : ClipRRect(
-                          borderRadius:
-                              BorderRadius.circular(AppDimensions.radiusLg),
-                          child: _videoPath != null
-                              ? _VideoPreviewPlaceholder(
-                                  thumbnailPath: _thumbnailPath,
-                                )
-                              : Image.file(
-                                  File(_imagePath!),
-                                  fit: BoxFit.contain,
-                                  errorBuilder: (_, __, ___) => Text(
-                                    'Não foi possível abrir esta imagem.',
-                                    style: AppTextStyles.bodyMuted,
-                                  ),
-                                ),
-                        ),
+                      : !hasMedia
+                          ? Text(
+                              'Selecione uma foto ou um vídeo para o seu Story.',
+                              textAlign: TextAlign.center,
+                              style: AppTextStyles.bodyMuted,
+                            )
+                          : ClipRRect(
+                              borderRadius: BorderRadius.circular(
+                                AppDimensions.radiusLg,
+                              ),
+                              child: _videoPath != null
+                                  ? _VideoPreviewPlaceholder(
+                                      thumbnailPath: _thumbnailPath,
+                                    )
+                                  : Image.file(
+                                      File(_imagePath!),
+                                      fit: BoxFit.contain,
+                                      errorBuilder: (_, __, ___) => Text(
+                                        'Não foi possível abrir esta imagem.',
+                                        style: AppTextStyles.bodyMuted,
+                                      ),
+                                    ),
+                            ),
                 ),
               ),
               const SizedBox(height: AppDimensions.spaceMd),
-              if (hasMedia)
+              if (!_textMode && hasMedia)
                 const Center(
                   child: HudLabel(
                     text: 'PRÉ-VISUALIZAÇÃO',
@@ -202,20 +296,23 @@ class _CreateStoryScreenState extends State<CreateStoryScreen> {
                   ),
                 ),
               const SizedBox(height: AppDimensions.spaceMd),
-              MatrixButton(
-                label: hasMedia ? 'Trocar mídia' : 'Selecionar mídia',
-                icon: Icons.photo_library_rounded,
-                variant: MatrixButtonVariant.outline,
-                expanded: true,
-                onPressed: _publishing ? null : _pickMedia,
-              ),
-              const SizedBox(height: AppDimensions.spaceSm),
+              if (!_textMode)
+                MatrixButton(
+                  label: hasMedia ? 'Trocar mídia' : 'Selecionar mídia',
+                  icon: Icons.photo_library_rounded,
+                  variant: MatrixButtonVariant.outline,
+                  expanded: true,
+                  onPressed: _publishing ? null : _pickMedia,
+                ),
+              if (!_textMode) const SizedBox(height: AppDimensions.spaceSm),
               MatrixButton(
                 label: 'PUBLICAR STORY',
                 icon: Icons.send_rounded,
                 expanded: true,
                 isLoading: _publishing,
-                onPressed: (!hasMedia || _publishing) ? null : _publish,
+                onPressed: (hasMedia || _textMode) && !_publishing
+                    ? _publish
+                    : null,
               ),
               const SizedBox(height: AppDimensions.spaceLg),
             ],
@@ -246,6 +343,55 @@ class _VideoPreviewPlaceholder extends StatelessWidget {
         const SizedBox(height: AppDimensions.spaceSm),
         Text('Vídeo selecionado', style: AppTextStyles.bodyMuted),
       ],
+    );
+  }
+}
+
+/// Chip de seleção do tipo de Story (mesma tela para todos os tipos).
+class _TypeChip extends StatelessWidget {
+  const _TypeChip({
+    required this.label,
+    required this.icon,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final IconData icon;
+  final bool selected;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = selected ? AppColors.electricBlue : AppColors.holographicBlue;
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        height: 40,
+        decoration: BoxDecoration(
+          color: selected
+              ? AppColors.electricBlue.withValues(alpha: 0.18)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(AppDimensions.radiusPill),
+          border: Border.all(
+            color: selected ? AppColors.electricBlue : AppColors.deepBlue,
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, color: color, size: 18),
+            const SizedBox(width: AppDimensions.spaceSm),
+            Text(
+              label,
+              style: AppTextStyles.caption.copyWith(
+                color: color,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

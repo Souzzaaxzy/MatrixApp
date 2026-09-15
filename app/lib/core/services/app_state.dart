@@ -531,14 +531,18 @@ class AppState extends ChangeNotifier {
   /// uploads pipeline (image or video). Refreshes the strip immediately so
   /// the author sees their own story without restarting the app.
   Future<Story> createStory({
-    required String mediaUrl,
-    required String mediaType,
+    String type = 'image',
+    String? mediaUrl,
+    String mediaType = 'image',
+    String text = '',
     String? thumbnailUrl,
     String caption = '',
   }) async {
     final story = await _storiesRepo.create(
+      type: type,
       mediaUrl: mediaUrl,
       mediaType: mediaType,
+      text: text,
       thumbnailUrl: thumbnailUrl,
       caption: caption,
     );
@@ -566,6 +570,72 @@ class AppState extends ChangeNotifier {
     }
     await loadStories();
     return story;
+  }
+
+  /// Toggles the session user's LIKE on a story — same semantics as the feed
+  /// (the server enforces one like per user+story, so tapping fast can never
+  /// duplicate). Updates the local stories in place for an instant heart
+  /// flip, then reconciles with the server's authoritative counts.
+  Future<void> toggleStoryLike(String storyId) async {
+    // Optimistic flip first (cheap, no rebuild of the whole list).
+    final before = _storiesRepoLikeState(storyId);
+    _applyStoryLike(storyId, liked: !before.liked, likeCount: before.likeCount + (before.liked ? -1 : 1));
+    try {
+      final result = await _storiesRepo.toggleLike(storyId);
+      _applyStoryLike(storyId, liked: result.liked, likeCount: result.likeCount);
+    } catch (_) {
+      // Roll back to the pre-tap state (the server is the source of truth).
+      _applyStoryLike(storyId, liked: before.liked, likeCount: before.likeCount);
+    }
+  }
+
+  ({bool liked, int likeCount}) _storiesRepoLikeState(String storyId) {
+    for (final g in _storyGroups) {
+      for (final st in g.stories) {
+        if (st.id == storyId) return (liked: st.liked, likeCount: st.likeCount);
+      }
+    }
+    return (liked: false, likeCount: 0);
+  }
+
+  /// Rebuilds the story groups with one story's like state replaced —
+  /// O(n) over the list, no extra network, no full reload.
+  void _applyStoryLike(String storyId, {required bool liked, required int likeCount}) {
+    var changed = false;
+    final groups = _storyGroups.map((g) {
+      var inGroup = false;
+      final stories = g.stories.map((st) {
+        if (st.id != storyId) return st;
+        inGroup = true;
+        return _copyStory(st, liked: liked, likeCount: likeCount);
+      }).toList();
+      if (!inGroup) return g;
+      changed = true;
+      return StoryGroup(
+        authorId: g.authorId,
+        authorNickname: g.authorNickname,
+        authorAvatarUrl: g.authorAvatarUrl,
+        authorNicknameColor: g.authorNicknameColor,
+        authorFrameId: g.authorFrameId,
+        authorFrameAsset: g.authorFrameAsset,
+        stories: stories,
+        allViewed: g.allViewed,
+      );
+    }).toList();
+    if (changed) {
+      _storyGroups = groups;
+      notifyListeners();
+    }
+  }
+
+  /// Replies to a story. The server creates a REAL direct message to the
+  /// story's author; here we ONLY return it so the caller (viewer) can give
+  /// feedback — the chat itself is refreshed by the existing message flow.
+  Future<({ChatMessage message, String conversationId})> replyToStory(
+    String storyId,
+    String text,
+  ) {
+    return _storiesRepo.reply(storyId, text);
   }
 
   /// Marks a story as seen (idempotent server-side) and reflects it locally
@@ -1478,6 +1548,31 @@ class AppState extends ChangeNotifier {
       // Best-effort: the next full reload reconciles with the server.
     }
   }
+
+  /// A copy of [story] with the like fields replaced (Stories have no
+  /// copyWith — this keeps the model immutable and the update explicit).
+  Story _copyStory(Story story, {required bool liked, required int likeCount}) =>
+      Story(
+        id: story.id,
+        authorId: story.authorId,
+        authorNickname: story.authorNickname,
+        authorAvatarUrl: story.authorAvatarUrl,
+        authorNicknameColor: story.authorNicknameColor,
+        authorFrameId: story.authorFrameId,
+        authorFrameAsset: story.authorFrameAsset,
+        mediaUrl: story.mediaUrl,
+        mediaType: story.mediaType,
+        type: story.type,
+        text: story.text,
+        thumbnailUrl: story.thumbnailUrl,
+        caption: story.caption,
+        createdAt: story.createdAt,
+        expiresAt: story.expiresAt,
+        viewed: story.viewed,
+        mine: story.mine,
+        liked: liked,
+        likeCount: likeCount,
+      );
 
   /// Whether [stickerId] currently appears in the session user's recents.
   /// Drives the contextual "Remover das recentes" action in the picker.

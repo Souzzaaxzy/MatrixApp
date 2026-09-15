@@ -184,33 +184,41 @@ Or just `docker compose up -d --build`.
 - O resultado é criado com `POST /api/stickers/import` (dedupe por hash no
   servidor) — servidor NÃO precisou mudar.
 
-## Stories (24h) — faixa no topo do feed
-- **Modelo/DTO/repo:** `models/story.dart` (`Story`, `StoryGroup`),
+## Stories (24h) — foto, vídeo e texto + curtidas e respostas
+- **Modelo/DTO/repo:** `models/story.dart` (`Story` com `type`
+  image|video|text, `text`, `liked`, `likeCount`; `StoryGroup`),
   `data/dtos/dtos.dart` (`StoryDto`, `StoryGroupsDto`),
-  `data/repositories/story_repository.dart` — registrado em `Services`/
-  `Repositories` como `stories`.
-- **Estado:** `AppState` expõe `storyGroups`/`myStories` e os métodos
-  `loadStories`, `createStory`, `markStoryViewed`, `deleteStory`
-  (atualização otimista + reconciliação). `_clearStickerState` também limpa
-  os Stories no logout.
-- **UI:** `features/feed/stories_header.dart` — faixa HORIZONTAL de cards
-  QUADRADOS (avatar centralizado + nickname com `maxLines: 1` e ellipsis,
-  então NUNCA estoura o card). Card alvo de 92px → responsivo; reutiliza
-  `UserAvatar`/`FramedAvatar`/`NicknameRenderer` (mesmo sistema do feed).
-  `features/feed/story_viewer.dart` — viewer fullscreen (`BoxFit.contain`),
-  toque esquerda/direita para navegar, arrastar para baixo/✕/Back fecham,
-  lixeira (com confirmação) só no próprio Story. UM vídeo por vez (controller
-  descartado ao trocar).
+  `data/repositories/story_repository.dart` (`create` cobre os 3 tipos,
+  `toggleLike`, `reply`) — registrado em `Services`/`Repositories` como
+  `stories`.
+- **Estado:** `AppState` expõe `storyGroups`/`myStories` + `loadStories`,
+  `createStory` (type/text), `toggleStoryLike` (flip OTIMISTA + rollback),
+  `replyToStory`, `markStoryViewed`, `deleteStory`.
+- **Card (`features/feed/stories_header.dart`):** o AVATAR fica no TOPO
+  (centralizado, nunca sobre a mídia) e a mídia do Story ocupa o corpo
+  central — claramente visível; nickname abaixo com ellipsis. Story NÃO
+  VISTO = **borda branca**; visto = borda neutra (some na hora, via
+  AppState). A faixa termina com **canto arredondado** e SEM `Divider` entre
+  Stories e feed (transição contínua). Story de TEXTO mostra o texto no
+  card.
+- **Viewer (`features/feed/story_viewer.dart`):** fullscreen `BoxFit.contain`,
+  navegação por toque/arrastar/✕/Back, UM vídeo por vez. Ouve o `AppState`
+  (curtida/visto repintam na hora). Barra inferior com
+  **"Responda a esse stories"** (bordas pill, teclado nativo) + **coração**
+  no MESMO padrão do feed (♡/♥); não aparece no próprio Story.
+- **Resposta → MENSAGEM REAL:** `replyToStory` chama
+  `POST /api/stories/:id/reply`; o servidor cria uma DM para o AUTOR com
+  `type='story_reply'` + `story` (referência + snapshot). Renderizada por
+  `features/chat/story_reply_reference.dart` ("respondeu ao seu stories" +
+  thumb/texto) na bolha de DM E de grupo; a snapshot garante que a
+  referência continue legível após o Story expirar.
+- **Criação:** `CreateStoryScreen` tem o seletor **Foto/Vídeo | Texto**
+  (mesma tela; sem fluxo paralelo), preview obrigatório e reusa
+  `pickGalleryMedia` + `/api/uploads`.
 - **Feed:** o header entra como primeiro sliver ANTES dos posts e só quando
-  autenticado; `loadFeed`/`_refresh` também chamam `loadStories` (falha ali
-  nunca afeta os posts).
-- **Criação:** o FAB do perfil (`CreatePostFab`) abre um sheet
-  ("Nova publicação" / "Novo Story") — um único botão, sem duplicar. Story
-  usa `CreateStoryScreen` (`features/create_post/create_story_screen.dart`)
-  com o MESMO `pickGalleryMedia` e `/api/uploads` do create_post, com
-  preview obrigatório e capa de vídeo via `video_thumbnail`.
+  autenticado; `loadFeed`/`_refresh` também chamam `loadStories`.
 - **Rotas:** `AppRoutes.createStory` (`/home/create-story`); registrada
-  também no `test_app.dart` (rotas fake dos testes).
+  também no `test_app.dart`.
 
 ## Stickers — painel, Android Back, favoritar e recentes
 - **Android Back fecha o painel, não a conversa:** DM
