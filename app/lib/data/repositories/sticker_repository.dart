@@ -88,6 +88,13 @@ class StickerRepository {
     await _api.post('/api/stickers/$stickerId/recent');
   }
 
+  /// Removes a sticker from the session user's RECENTS only (idempotent).
+  /// The sticker, its package, its favorite and any message that references
+  /// it are untouched — only the "recently used" entry disappears.
+  Future<void> removeRecent(String stickerId) async {
+    await _api.delete('/api/stickers/$stickerId/recent');
+  }
+
   /// Importa un lote de figuritas procedentes del compartir de Android.
   ///
   /// Los archivos ya fueron subidos por el sistema de uploads existente; aquí

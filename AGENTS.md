@@ -212,6 +212,33 @@ Or just `docker compose up -d --build`.
 - **Rotas:** `AppRoutes.createStory` (`/home/create-story`); registrada
   também no `test_app.dart` (rotas fake dos testes).
 
+## Stickers — painel, Android Back, favoritar e recentes
+- **Android Back fecha o painel, não a conversa:** DM
+  (`conversation_screen.dart`) e grupo (`group_conversation_screen.dart`)
+  embrulham o `Scaffold` em `PopScope(canPop: !_stickerPickerOpen)`: com o
+  painel aberto o Back apenas fecha o painel (e devolve o foco/teclado ao
+  campo), permanecendo na MESMA conversa; sem painel, o Back segue a rota.
+- **Máquina de estados única:** `_openStickerPanel()` /
+  `_closeStickerPanel({refocus})` são o ÚNICO caminho de abrir/fechar —
+  usados pelo botão do composer, pelo toque no campo e pelo Back. Abrir
+  sempre tira o foco (teclado cede lugar); fechar com `refocus: true`
+  devolve o foco (teclado volta). Evita "teclado + painel" ao mesmo tempo.
+- **Favoritar no chat = TOQUE na figurinha** (`ChatMediaBubble.onStickerTap`,
+  ligado a `_toggleStickerFavorite`): o long press NÃO favorita mais — ele
+  continua abrindo o menu normal da mensagem (responder/excluir/…), que
+  perdeu a opção de favoritar. Upsert no servidor (nunca duplica).
+- **Popup do painel (toque-longo numa figurinha):** ordem fixa —
+  "Remover das recentes" (só quando ela ESTÁ nos recentes, via
+  `AppState.isStickerRecent`) e depois "Favoritar"/"Remover das favoritas".
+- **Remover das recentes:** `AppState.removeStickerRecent` →
+  `DELETE /api/stickers/:id/recent`. Escopo estrito: remove APENAS a linha
+  de recentes do usuário — pacote, favorito, mensagem e arquivo intactos.
+  Atualização imediata no painel; persistido no servidor.
+- **Ícone do botão de figurinhas:** `core/widgets/puzzle_icon.dart`
+  (`PuzzleIcon`) — peça de quebra-cabeça MONOCROMÁTICA desenhada em
+  `CustomPainter` (nunca um emoji colorido), colorida pelo estado do botão.
+  O botão de clipe (`ChatAttachButton`) permanece inalterado.
+
 ## Architecture — Server
 The backend lives in the separate repo `Souzzaaxzy/ServidorMtx`. Key points
 for reference when working on the app's data layer:

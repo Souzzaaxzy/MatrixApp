@@ -85,19 +85,34 @@ class _StickerPickerState extends State<StickerPicker>
     widget.onPick(sticker);
   }
 
-  /// Menu de toque-longo na figurinha: adicionar/remover das favoritas.
-  /// Integrado ao painel (não cria uma tela nova).
+  /// Menu de toque-longo na figurinha do painel.
+  ///
+  /// Abre o popup com DUAS ações, nesta ordem: "Remover das recentes" (só
+  /// quando a figurinha realmente está nos recentes — ação contextual) e
+  /// "Favoritar"/"Remover das favoritas" (reaproveita o sistema existente).
+  /// Nada é duplicado: favoritar é idempotente no servidor.
   Future<void> _openStickerMenu(Sticker sticker) async {
     final wasFavorited = sticker.favorited;
+    // Contexto: só oferecemos "Remover das recentes" quando faz sentido.
+    final isRecent = widget.state.isStickerRecent(sticker.id);
     final action = await showModalBottomSheet<_StickerTileAction>(
       context: context,
       backgroundColor: Colors.transparent,
       barrierColor: Colors.black.withValues(alpha: 0.5),
-      builder: (_) => _StickerTileMenu(favorited: wasFavorited),
+      builder: (_) => _StickerTileMenu(
+        favorited: wasFavorited,
+        canRemoveRecent: isRecent,
+      ),
     );
     if (!mounted || action == null) return;
     final messenger = ScaffoldMessenger.of(context);
     switch (action) {
+      case _StickerTileAction.removeRecent:
+        await widget.state.removeStickerRecent(sticker.id);
+        if (!mounted) return;
+        messenger.showSnackBar(
+          const SnackBar(content: Text('Figurinha removida das recentes.')),
+        );
       case _StickerTileAction.addFavorite:
         await widget.state.favoriteSticker(sticker.id);
         if (!mounted) return;
@@ -394,15 +409,23 @@ class _StickerPickerState extends State<StickerPicker>
   static const double _kStickerTile = 62;
 }
 
-/// Ações do menu de toque-longo numa figurinha.
-enum _StickerTileAction { addFavorite, removeFavorite }
+/// Ações do popup de toque-longo numa figurinha do painel.
+enum _StickerTileAction { removeRecent, addFavorite, removeFavorite }
 
-/// Mini menu (toque-longo) da figurinha no painel. Uma única ação, em
-/// português, com ícone nativo — nada de emoji.
+/// Popup (toque-longo) da figurinha no painel.
+///
+/// Ordem fixa das ações: "Remover das recentes" e depois
+/// "Favoritar"/"Remover das favoritas". A primeira é CONTEXTUAL — só aparece
+/// quando a figurinha está de fato nos recentes (`canRemoveRecent`), então
+/// nunca se remove algo que não está lá.
 class _StickerTileMenu extends StatelessWidget {
-  const _StickerTileMenu({required this.favorited});
+  const _StickerTileMenu({
+    required this.favorited,
+    this.canRemoveRecent = false,
+  });
 
   final bool favorited;
+  final bool canRemoveRecent;
 
   @override
   Widget build(BuildContext context) {
@@ -427,6 +450,16 @@ class _StickerTileMenu extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              // 1) Remover das recentes (somente no contexto de recentes).
+              if (canRemoveRecent)
+                _PickerMenuAction(
+                  icon: Icons.history_toggle_off_rounded,
+                  iconColor: AppColors.holographicBlue,
+                  label: 'Remover das recentes',
+                  onTap: () => Navigator.of(context)
+                      .pop(_StickerTileAction.removeRecent),
+                ),
+              // 2) Favoritar / remover das favoritas (sistema existente).
               _PickerMenuAction(
                 icon: favorited
                     ? Icons.star_rounded
@@ -434,9 +467,7 @@ class _StickerTileMenu extends StatelessWidget {
                 iconColor: favorited
                     ? AppColors.electricBlue
                     : AppColors.holographicBlue,
-                label: favorited
-                    ? 'Remover das favoritas'
-                    : 'Adicionar às favoritas',
+                label: favorited ? 'Remover das favoritas' : 'Favoritar',
                 onTap: () => Navigator.of(context).pop(
                   favorited
                       ? _StickerTileAction.removeFavorite

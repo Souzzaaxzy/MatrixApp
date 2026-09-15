@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:matrix_app/core/services/app_state.dart';
 import 'package:matrix_app/core/utils/sticker_import_validator.dart';
+import 'package:matrix_app/core/widgets/puzzle_icon.dart';
 import 'package:matrix_app/data/share_sticker_service.dart';
 import 'package:matrix_app/features/chat/chat_navigation.dart';
 import 'package:matrix_app/features/chat/conversation_screen.dart';
@@ -148,7 +149,9 @@ void main() {
       await tester.pumpAndSettle();
 
       // Abre o painel de stickers pelo botão (ícone real, não emoji).
-      final stickerBtn = find.byIcon(Icons.sticky_note_2_outlined);
+      // O botão de figurinhas agora usa o ícone de quebra-cabeça
+      // monocromático (PuzzleIcon), não mais um Icon do Material.
+      final stickerBtn = find.byType(PuzzleIcon);
       expect(stickerBtn, findsOneWidget);
       await tester.tap(stickerBtn);
       await tester.pumpAndSettle();

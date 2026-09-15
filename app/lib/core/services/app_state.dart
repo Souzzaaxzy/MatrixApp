@@ -1460,6 +1460,30 @@ class AppState extends ChangeNotifier {
     _stickersRepo.markRecent(stickerId).catchError((_) {});
   }
 
+  /// Removes a sticker from the RECENTS list (local + server, persisted).
+  ///
+  /// Scoped on purpose: only the "recently used" entry goes away. The
+  /// sticker keeps existing in its package, in FAVORITES and in any message
+  /// that references it. Updates the picker immediately (no reload).
+  Future<void> removeStickerRecent(String stickerId) async {
+    final had = _stickerRecents.any((s) => s.id == stickerId);
+    if (!had) return; // nothing to remove — never touch anything else.
+    _stickerRecents =
+        _stickerRecents.where((s) => s.id != stickerId).toList();
+    _stickerRecentsLoaded = true;
+    notifyListeners();
+    try {
+      await _stickersRepo.removeRecent(stickerId);
+    } catch (_) {
+      // Best-effort: the next full reload reconciles with the server.
+    }
+  }
+
+  /// Whether [stickerId] currently appears in the session user's recents.
+  /// Drives the contextual "Remover das recentes" action in the picker.
+  bool isStickerRecent(String stickerId) =>
+      _stickerRecents.any((s) => s.id == stickerId);
+
   /// Importa figuritas recibidas por el compartir nativo de Android.
   ///
   /// Cada archivo validado se sube por el sistema de uploads EXISTENTE y se

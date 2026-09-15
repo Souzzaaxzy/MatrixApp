@@ -6,6 +6,7 @@ import 'package:matrix_app/features/chat/chat_navigation.dart';
 import 'package:matrix_app/features/chat/conversation_screen.dart';
 import 'package:matrix_app/features/chat/sticker_picker.dart';
 import 'package:matrix_app/features/chat/stickerly_import_sheet.dart';
+import 'package:matrix_app/core/widgets/puzzle_icon.dart';
 import 'package:matrix_app/features/chat/sticker_panel.dart';
 import 'package:matrix_app/models/sticker.dart';
 
@@ -308,7 +309,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Abre o painel pelo ícone de figurinhas do composer.
-      await tester.tap(find.byIcon(Icons.sticky_note_2_outlined));
+      await tester.tap(find.byType(PuzzleIcon));
       await tester.pumpAndSettle();
       expect(find.byType(StickerPicker), findsOneWidget);
       expect(tester.takeException(), isNull);
@@ -463,9 +464,9 @@ void main() {
 
       await tester.longPress(find.byType(CachedNetworkImage).last);
       await tester.pumpAndSettle();
-      expect(find.text('Adicionar às favoritas'), findsOneWidget);
+      expect(find.text('Favoritar'), findsOneWidget);
 
-      await tester.tap(find.text('Adicionar às favoritas'));
+      await tester.tap(find.text('Favoritar'));
       await tester.pumpAndSettle();
       expect(state.isStickerFavorited('s1'), isTrue);
       expect(find.textContaining('favoritas'), findsWidgets);

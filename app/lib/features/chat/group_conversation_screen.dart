@@ -13,6 +13,7 @@ import '../../core/widgets/app_state_scope.dart';
 import '../../core/widgets/hud_label.dart';
 import '../../core/widgets/matrix_button.dart';
 import '../../core/widgets/matrix_text_field.dart';
+import '../../core/widgets/puzzle_icon.dart';
 import '../../core/widgets/mention_composer_controller.dart';
 import '../../core/widgets/user_avatar.dart';
 import '../../data/api_config.dart';
@@ -142,9 +143,28 @@ class _GroupConversationScreenState extends State<GroupConversationScreen>
       // Tocar no campo de mensagem com o painel de figurinhas aberto fecha
       // o painel e devolve o foco+teclado ao campo (composer moderno).
       if (_inputFocus.hasFocus && _stickerPickerOpen) {
-        setState(() => _stickerPickerOpen = false);
+        // Mesma transição usada pelo Android Back (um único caminho).
+        _closeStickerPanel(refocus: false);
       }
     });
+  }
+
+  /// Abre o painel de figurinhas: o teclado CEDE espaço (campo perde o foco),
+  /// evitando o estado inconsistente "teclado + painel" ao mesmo tempo.
+  void _openStickerPanel() {
+    setState(() => _stickerPickerOpen = true);
+    if (_inputFocus.hasFocus) _inputFocus.unfocus();
+  }
+
+  /// Fecha o painel de figurinhas — transição ÚNICA usada por: tocar no campo,
+  /// o voltar do Android e o botão de sticker do composer. Com [refocus] o
+  /// campo recupera o foco (o teclado volta) e o usuário fica no mesmo grupo.
+  void _closeStickerPanel({bool refocus = true}) {
+    if (!_stickerPickerOpen) return;
+    setState(() => _stickerPickerOpen = false);
+    if (refocus && !_inputFocus.hasFocus) {
+      _inputFocus.requestFocus();
+    }
   }
 
   @override
@@ -763,16 +783,12 @@ class _GroupConversationScreenState extends State<GroupConversationScreen>
         message: message,
         canDeleteAnyone: canDeleteAnyone,
         canBan: canBan,
-        stickerFavorited:
-            _state?.isStickerFavorited(message.stickerId) ?? false,
       ),
     );
     if (action == null || !mounted) return;
     switch (action) {
       case _MessageAction.reply:
         _startReply(_messages.indexOf(message));
-      case _MessageAction.addFavorite:
-        await _toggleStickerFavorite(message);
       case _MessageAction.seenInfo:
         await _openSeenInfo(message);
       case _MessageAction.deleteForMe:
@@ -1275,7 +1291,16 @@ class _GroupConversationScreenState extends State<GroupConversationScreen>
       ),
     );
 
-    return Scaffold(
+    // O painel de figurinhas é um ESTADO do grupo, não uma tela: com o painel
+    // aberto o Back do Android apenas FECHA o painel (devolvendo o teclado) —
+    // nunca sai da conversa. Sem painel, o Back segue a rota normalmente.
+    return PopScope(
+      canPop: !_stickerPickerOpen,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        _closeStickerPanel();
+      },
+      child: Scaffold(
       backgroundColor: AppColors.absoluteBlack,
       // Default IME handling — the Scaffold resizes with the Android keyboard so
       // the composer sits directly above it (same proven behavior as the DM chat;
@@ -1301,6 +1326,7 @@ class _GroupConversationScreenState extends State<GroupConversationScreen>
       body: SafeArea(
         top: false,
         child: _buildBody(),
+      ),
       ),
     );
   }
@@ -1508,6 +1534,7 @@ class _GroupConversationScreenState extends State<GroupConversationScreen>
         message: m,
         mine: m.senderId == _state?.currentUser?.id,
         onLongPress: () => _showMessageMenu(i),
+        onStickerTap: m.isSticker ? () => _toggleStickerFavorite(m) : null,
         onStartReply: () => _startReply(i),
         replySelected: _replyTarget?.id == m.id,
         replyingTo: (_replyTarget?.id == m.id) ? _replyTarget : null,
@@ -1562,14 +1589,15 @@ class _GroupConversationScreenState extends State<GroupConversationScreen>
               // como no DM — mantém o campo como campo normal e o clipe.
               prefix: _GroupStickerButton(
                 active: _stickerPickerOpen,
-                onTap: () => setState(() {
-                  _stickerPickerOpen = !_stickerPickerOpen;
-                  // Ao ABRIR o painel o teclado cede espaço a ele; ao
-                  // fechar a decisão de foco é do usuário (tocar no campo).
-                  if (_stickerPickerOpen && _inputFocus.hasFocus) {
-                    _inputFocus.unfocus();
+                // Abrir/fechar pelo botão do composer — o MESMO caminho de
+                // estado usado pelo Back e pelo toque no campo.
+                onTap: () {
+                  if (_stickerPickerOpen) {
+                    _closeStickerPanel(refocus: false);
+                  } else {
+                    _openStickerPanel();
                   }
-                }),
+                },
               ),
               maxLines: 5,
               minLines: 1,
@@ -1622,13 +1650,9 @@ class _GroupStickerButton extends StatelessWidget {
       onTap: onTap,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-        child: Icon(
-          active
-              ? Icons.sticky_note_2_rounded
-              : Icons.sticky_note_2_outlined,
-          color: color,
-          size: 24,
-        ),
+        // Ícone de figurinhas: peça de quebra-cabeça monocromática (nunca
+        // um emoji colorido do sistema). A cor segue o estado do botão.
+        child: PuzzleIcon(color: color, size: 24),
       ),
     );
   }
@@ -1708,6 +1732,7 @@ class _GroupMessageBubble extends StatelessWidget {
     required this.message,
     required this.mine,
     this.onLongPress,
+    this.onStickerTap,
     this.replyingTo,
     this.onOpenReplyTarget,
     this.onStartReply,
@@ -1717,6 +1742,10 @@ class _GroupMessageBubble extends StatelessWidget {
   final ChatMessage message;
   final bool mine;
   final VoidCallback? onLongPress;
+
+  /// Toque na própria FIGURINHA = favoritar (o long press continua sendo o
+  /// menu normal da mensagem).
+  final VoidCallback? onStickerTap;
   final ChatMessage? replyingTo;
 
   /// Tapping a reply quote scrolls to the ORIGINAL message (when loaded).
@@ -1865,7 +1894,7 @@ class _GroupMessageBubble extends StatelessWidget {
                 ),
               ),
             ),
-          _MessageContent(message: message),
+          _MessageContent(message: message, onStickerTap: onStickerTap),
           if (!mine) ...[
             const SizedBox(height: 4),
             Text(
@@ -1944,9 +1973,10 @@ class _ReplyQuote extends StatelessWidget {
 }
 
 class _MessageContent extends StatelessWidget {
-  const _MessageContent({required this.message});
+  const _MessageContent({required this.message, this.onStickerTap});
 
   final ChatMessage message;
+  final VoidCallback? onStickerTap;
 
   @override
   Widget build(BuildContext context) {
@@ -1957,7 +1987,7 @@ class _MessageContent extends StatelessWidget {
               AppStateScope.maybeOf(context)?.currentUser?.id);
     }
     if (message.isMedia || message.isSticker) {
-      return ChatMediaBubble(message: message);
+      return ChatMediaBubble(message: message, onStickerTap: onStickerTap);
     }
     final selfId = AppStateScope.maybeOf(context)?.currentUser?.id;
     final content = message.content;
@@ -2160,7 +2190,6 @@ class _GroupReplyPreviewBar extends StatelessWidget {
 
 enum _MessageAction {
   reply,
-  addFavorite,
   deleteForMe,
   deleteForEveryone,
   banUser,
@@ -2172,14 +2201,9 @@ class _MessageActionSheet extends StatelessWidget {
     required this.message,
     this.canDeleteAnyone = false,
     this.canBan = false,
-    this.stickerFavorited = false,
   });
 
   final ChatMessage message;
-
-  /// Whether this sticker is already in the user's favorites (resolved from
-  /// [AppState] by the caller — the message payload carries no such flag).
-  final bool stickerFavorited;
 
   /// Whether the session user may delete this message for everyone — the
   /// sender of the message OR the group owner (server-validated). The
@@ -2236,16 +2260,6 @@ class _MessageActionSheet extends StatelessWidget {
                         label: 'Responder',
                         onTap: () =>
                             Navigator.of(context).pop(_MessageAction.reply)),
-                    if (message.isSticker)
-                      _ActionItem(
-                          icon: stickerFavorited
-                              ? Icons.star_rounded
-                              : Icons.star_border_rounded,
-                          label: stickerFavorited
-                              ? 'Remover das favoritas'
-                              : 'Adicionar às favoritas',
-                          onTap: () => Navigator.of(context)
-                              .pop(_MessageAction.addFavorite)),
                     if (message.mine)
                       _ActionItem(
                           icon: Icons.done_all_rounded,

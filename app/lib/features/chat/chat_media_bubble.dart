@@ -16,11 +16,20 @@ import '../../models/conversation.dart';
 ///   the post Video preview) with a play overlay; tapping opens the fullscreen
 ///   player (same player used by posts — no second player stack).
 class ChatMediaBubble extends StatelessWidget {
-  const ChatMediaBubble(
-      {super.key, required this.message, this.maxWidth = 260});
+  const ChatMediaBubble({
+    super.key,
+    required this.message,
+    this.maxWidth = 260,
+    this.onStickerTap,
+  });
 
   final ChatMessage message;
   final double maxWidth;
+
+  /// Called when a STICKER message is TAPPED. Favoriting a sticker in the
+  /// chat is a simple tap on the sticker itself — never a long press (the
+  /// long press keeps opening the normal message menu).
+  final VoidCallback? onStickerTap;
 
   @override
   Widget build(BuildContext context) {
@@ -33,7 +42,12 @@ class ChatMediaBubble extends StatelessWidget {
 
   Widget _content(BuildContext context) {
     if (message.isSticker && message.stickerUrl != null) {
-      return _StickerBubble(url: ApiConfig.resolveUrl(message.stickerUrl!));
+      return GestureDetector(
+        // Toque na própria figurinha = favoritar (sem long press).
+        onTap: onStickerTap,
+        behavior: HitTestBehavior.opaque,
+        child: _StickerBubble(url: ApiConfig.resolveUrl(message.stickerUrl!)),
+      );
     }
     if (message.isImage && message.imageUrl != null) {
       return ClipRRect(

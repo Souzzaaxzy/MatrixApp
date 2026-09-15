@@ -1704,6 +1704,12 @@ class _FakeStickerRepository implements StickerRepository {
   }
 
   @override
+  Future<void> removeRecent(String stickerId) async {
+    // Somente a entrada de RECENTES sai — pacote/favorito/mensagem intactos.
+    _store.stickerRecents.removeWhere((s) => s.id == stickerId);
+  }
+
+  @override
   Future<({int created, int skipped})> importPackage(
     String name,
     List<Map<String, dynamic>> stickers,
