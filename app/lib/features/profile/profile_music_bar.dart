@@ -10,9 +10,10 @@ import '../../app/theme/app_text_styles.dart';
 import '../../data/api_config.dart';
 import '../../models/profile_music.dart';
 import '../../core/widgets/play_pause_icon.dart';
+import '../../core/widgets/progress_ring.dart';
 
-/// A música fixada no perfil: botão ⏯️ + nome da música, com uma barra de
-/// progresso fina.
+/// A música fixada no perfil: botão ⏯️ com ANEL DE PROGRESSO em volta e o
+/// nome da música ao lado (o padrão do Instagram).
 ///
 /// Fica logo abaixo do `#id` no cabeçalho do perfil. Só UM player toca por
 /// vez (o mesmo cuidado do player de mensagem de voz): abrir outro perfil, ou
@@ -203,83 +204,69 @@ class _ProfileMusicBarState extends State<ProfileMusicBar> {
     final elapsed = (_position - _windowStart).inMilliseconds.clamp(0, windowMs);
     final progress = windowMs > 0 ? elapsed / windowMs : 0.0;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
+    return Row(
       children: [
-        Row(
-          children: [
-            // Botão ⏯️ desenhado — nunca um emoji colorido do sistema.
-            InkWell(
-              onTap: _toggle,
-              borderRadius: BorderRadius.circular(999),
-              child: Container(
-                width: 34,
-                height: 34,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: AppColors.electricBlue.withValues(alpha: 0.14),
-                  border: Border.all(
-                    color: AppColors.electricBlue.withValues(alpha: 0.55),
-                  ),
-                ),
-                child: Center(
-                  child: _loading
-                      ? SizedBox(
-                          width: 14,
-                          height: 14,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(
-                              AppColors.electricBlue,
-                            ),
+        // Botão ⏯️ desenhado, com o ANEL DE PROGRESSO em volta (o padrão do
+        // Instagram): a trilha mostra o quanto falta e o arco cresce do topo
+        // enquanto o trecho toca.
+        InkWell(
+          onTap: _toggle,
+          borderRadius: BorderRadius.circular(999),
+          child: ProgressRing(
+            progress: progress,
+            size: 46,
+            strokeWidth: 2.5,
+            color: AppColors.electricBlue,
+            child: Container(
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: AppColors.electricBlue.withValues(alpha: 0.14),
+              ),
+              child: Center(
+                child: _loading
+                    ? SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            AppColors.electricBlue,
                           ),
-                        )
-                      : PlayPauseIcon(
-                          playing: _playing,
-                          color: AppColors.electricBlue,
                         ),
-                ),
-              ),
-            ),
-            const SizedBox(width: AppDimensions.spaceSm),
-            // Nome da música à direita do botão, com ellipsis (nunca estoura
-            // a largura do cabeçalho).
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    widget.music.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppTextStyles.body.copyWith(fontSize: 13),
-                  ),
-                  if (widget.music.artist.trim().isNotEmpty)
-                    Text(
-                      widget.music.artist,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: AppTextStyles.hud.copyWith(
-                        fontSize: 10,
-                        color: AppColors.holographicBlue,
+                      )
+                    : PlayPauseIcon(
+                        playing: _playing,
+                        color: AppColors.electricBlue,
                       ),
-                    ),
-                ],
               ),
             ),
-          ],
+          ),
         ),
-        // Barra fina de progresso do trecho.
-        const SizedBox(height: 6),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(2),
-          child: LinearProgressIndicator(
-            value: progress,
-            minHeight: 2,
-            backgroundColor: AppColors.holographicBlue.withValues(alpha: 0.25),
-            valueColor: AlwaysStoppedAnimation<Color>(AppColors.electricBlue),
+        const SizedBox(width: AppDimensions.spaceSm),
+        // Nome da música à direita do botão, com ellipsis (nunca estoura
+        // a largura do cabeçalho).
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                widget.music.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppTextStyles.body.copyWith(fontSize: 13),
+              ),
+              if (widget.music.artist.trim().isNotEmpty)
+                Text(
+                  widget.music.artist,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTextStyles.hud.copyWith(
+                    fontSize: 10,
+                    color: AppColors.holographicBlue,
+                  ),
+                ),
+            ],
           ),
         ),
       ],

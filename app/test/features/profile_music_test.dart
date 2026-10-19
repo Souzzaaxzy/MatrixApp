@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:matrix_app/core/services/app_state.dart';
 import 'package:matrix_app/core/widgets/play_pause_icon.dart';
+import 'package:matrix_app/core/widgets/progress_ring.dart';
 import 'package:matrix_app/core/widgets/user_avatar.dart';
 import 'package:matrix_app/features/profile/music_search_service.dart';
 import 'package:matrix_app/features/profile/profile_music_bar.dart';
@@ -155,6 +156,80 @@ void main() {
       expect(parsed.durationLabel, '3:30');
     });
   });
+
+  // ── Anel de progresso (o padrão do Instagram) ────────────────
+  group('ProgressRing', () {
+    testWidgets('draws the ring AROUND the child (not below it)', (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: Center(
+              child: ProgressRing(
+                progress: 0.5,
+                size: 46,
+                child: SizedBox(width: 20, height: 20, child: Placeholder()),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+      final ring = tester.getRect(find.byType(ProgressRing));
+      final inner = tester.getRect(find.byType(Placeholder));
+      // O botão fica DENTRO do anel, não abaixo dele.
+      expect(inner.center, ring.center);
+      expect(inner.width, lessThan(ring.width));
+      expect(inner.height, lessThan(ring.height));
+    });
+
+    testWidgets('the ring keeps a constant size in every state', (tester) async {
+      // O anel NÃO pode mudar de tamanho ao tocar/pausar (o botão pularia).
+      for (final p in [0.0, 0.25, 1.0]) {
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: Center(
+                child: ProgressRing(
+                  progress: p,
+                  size: 46,
+                  child: const SizedBox(width: 20, height: 20),
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pump();
+        final size = tester.getSize(find.byType(ProgressRing));
+        expect(size.width, 46);
+        expect(size.height, 46);
+      }
+    });
+
+    testWidgets('clamps out-of-range progress instead of overdrawing', (tester) async {
+      // progress > 1 (relógio do player adiantado) ou NaN (divisão por zero)
+      // não podem desenhar um arco maior que o círculo nem quebrar.
+      for (final p in [-0.5, 1.7, double.nan, double.infinity]) {
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: Center(
+                child: ProgressRing(
+                  progress: p,
+                  size: 46,
+                  child: const SizedBox(width: 20, height: 20),
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pump();
+        expect(tester.takeException(), isNull);
+        expect(find.byType(ProgressRing), findsOneWidget);
+      }
+    });
+  });
+
+  // ── The ⏯️ icon ──────────────────────────────────────────────
 
   // ── The ⏯️ icon ──────────────────────────────────────────────
   group('PlayPauseIcon', () {
@@ -436,6 +511,25 @@ void main() {
       expect(button.left, lessThan(name.left));
       // Same row: their vertical centres are close.
       expect((button.center.dy - name.center.dy).abs(), lessThan(24));
+    });
+
+    testWidgets('the progress ring WRAPS the button on the real profile', (tester) async {
+      // Trava o pedido: o anel fica EM VOLTA do botão (padrão Instagram),
+      // não como uma barra embaixo.
+      await pumpMatrixApp(
+        tester,
+        const ProfileScreen(nickname: 'carla'),
+      );
+      await tester.pump(const Duration(milliseconds: 400));
+
+      final ring = tester.getRect(find.byType(ProgressRing));
+      final icon = tester.getRect(find.byType(PlayPauseIcon));
+      // O ícone fica DENTRO do anel…
+      expect(icon.center.dx, closeTo(ring.center.dx, 1));
+      expect(icon.center.dy, closeTo(ring.center.dy, 1));
+      expect(icon.width, lessThan(ring.width));
+      // …e não há mais a barra linear de progresso.
+      expect(find.byType(LinearProgressIndicator), findsNothing);
     });
 
     testWidgets('a profile with no music renders no music bar', (tester) async {

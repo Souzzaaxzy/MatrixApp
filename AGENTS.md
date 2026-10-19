@@ -271,9 +271,17 @@ Or just `docker compose up -d --build`.
 
 ## Música do perfil (botão ⏯️ + escolher no editar perfil)
 - **Perfil:** `features/profile/profile_music_bar.dart` (`ProfileMusicBar`)
-  fica logo ABAIXO do `#id`: botão ⏯️ + nome da música (e o artista numa
-  linha menor) e uma barra de progresso fina. Só aparece quando o usuário
-  tem música (`user.music != null`).
+  fica logo ABAIXO do `#id`: botão ⏯️ com **ANEL DE PROGRESSO em volta** e o
+  nome da música (e o artista numa linha menor) ao lado — o padrão do
+  Instagram. Só aparece quando o usuário tem música (`user.music != null`).
+- **O anel é DESENHADO** (`core/widgets/progress_ring.dart`, `ProgressRing`),
+  não um `CircularProgressIndicator`: o widget do Material desenha um arco
+  solto e não permite trilha + arco com largura/posição exatas. O anel tem
+  TRILHA (quanto falta) + ARCO que cresce a partir do TOPO (12h), no sentido
+  horário — o ponto de partida que o olho espera num player. Tamanho fixo em
+  todos os estados (o botão não pode "pular" ao tocar/pausar) e `progress` é
+  fixado em [0,1] (um relógio adiantado ou NaN não pode desenhar arco maior
+  que o círculo).
 - **O ícone ⏯️ é DESENHADO**, não é `Icons.play_arrow`/`Icons.pause`:
   `core/widgets/play_pause_icon.dart` (`PlayPauseIcon`) pinta triângulo OU
   duas barras no MESMO glifo com `CustomPainter` — largura constante (o
