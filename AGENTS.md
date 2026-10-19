@@ -269,6 +269,32 @@ Or just `docker compose up -d --build`.
   `CustomPainter` (nunca um emoji colorido), colorida pelo estado do botão.
   O botão de clipe (`ChatAttachButton`) permanece inalterado.
 
+## Música do perfil (botão ⏯️ + escolher no editar perfil)
+- **Perfil:** `features/profile/profile_music_bar.dart` (`ProfileMusicBar`)
+  fica logo ABAIXO do `#id`: botão ⏯️ + nome da música (e o artista numa
+  linha menor) e uma barra de progresso fina. Só aparece quando o usuário
+  tem música (`user.music != null`).
+- **O ícone ⏯️ é DESENHADO**, não é `Icons.play_arrow`/`Icons.pause`:
+  `core/widgets/play_pause_icon.dart` (`PlayPauseIcon`) pinta triângulo OU
+  duas barras no MESMO glifo com `CustomPainter` — largura constante (o
+  botão não "pula" ao alternar) e cor do tema (nunca emoji colorido).
+- **Escolher a música:** `features/profile/profile_music_picker.dart`, aberto
+  por "ESCOLHER MÚSICA"/"TROCAR MÚSICA" no editar perfil. Fluxo: buscar →
+  até 3 opções (música + autor, já sem títulos de vídeo — o servidor limpa)
+  → escolher o TRECHO (duração em passos de 5s, máx. 1:00; início travado
+  para o trecho não passar do fim da faixa) → CONFIRMAR.
+- O picker NÃO salva: devolve `PendingProfileMusic` e quem salva é o
+  `edit_profile_screen` (`AppState.setProfileMusic`). O download do trecho
+  acontece no SERVIDOR só na confirmação, então explorar as opções é barato.
+- `models/profile_music.dart`: `ProfileMusic` (fixada) e `MusicSearchResult`
+  (resultado). `excerptLabel` mostra a janela real ("1:12 – 1:57") em vez de
+  fingir que o trecho é a música inteira.
+- Um player por vez no app (mesmo cuidado do player de voz): abrir outro
+  perfil, ou sair da tela, para a música anterior.
+- `test/features/profile_music_test.dart` trava o essencial: o botão à
+  ESQUERDA do nome, a barra abaixo do `#id`, o teto de 1:00, o clamp do
+  início, e o estado do `AppState` ao definir/limpar.
+
 ## Architecture — Server
 The backend lives in the separate repo `Souzzaaxzy/ServidorMtx`. Key points
 for reference when working on the app's data layer:

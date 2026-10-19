@@ -21,6 +21,7 @@ import '../../models/friend_request.dart';
 import '../../models/matrix_notification.dart';
 import '../../models/matrix_user.dart';
 import '../../models/post.dart';
+import '../../models/profile_music.dart';
 import '../../models/sticker.dart';
 import '../../models/story.dart';
 import '../utils/mock_data_service.dart';
@@ -1029,6 +1030,9 @@ class AppState extends ChangeNotifier {
           // The public `#id` comes from the server and is authoritative.
           publicId: () => result.user.publicId,
           publicIdLabel: () => result.user.publicIdLabel,
+          // Same resolver idea for the pinned song: clearing it elsewhere
+          // must clear it here too, not keep a stale value.
+          music: () => result.user.music,
         );
       }
     } finally {
@@ -1403,6 +1407,41 @@ class AppState extends ChangeNotifier {
 
   /// Removes the profile banner (back to the default cover).
   Future<void> clearBanner() => updateProfile(clearBanner: true);
+
+  /// Searches the music catalog (server-side, via yt-dlp). Returns at most
+  /// 3 cleaned results — the app never talks to YouTube directly.
+  Future<List<MusicSearchResult>> searchMusic(String query) {
+    final repo = _repos?.music ?? Services.instance.music;
+    return repo.search(query);
+  }
+
+  /// Pins a song to the profile, storing an excerpt of [durationMs] starting
+  /// at [startMs]. The server re-validates the 1-minute cap and downloads the
+  /// audio, so this can take a few seconds. Local state is updated from the
+  /// server response (authoritative).
+  Future<ProfileMusic> setProfileMusic({
+    required MusicSearchResult result,
+    required int startMs,
+    required int durationMs,
+  }) async {
+    final repo = _repos?.music ?? Services.instance.music;
+    final music = await repo.set(
+      result: result,
+      startMs: startMs,
+      durationMs: durationMs,
+    );
+    _currentUser = _currentUser?.copyWith(music: () => music);
+    notifyListeners();
+    return music;
+  }
+
+  /// Removes the pinned song from the profile.
+  Future<void> clearProfileMusic() async {
+    final repo = _repos?.music ?? Services.instance.music;
+    await repo.clear();
+    _currentUser = _currentUser?.copyWith(music: () => null);
+    notifyListeners();
+  }
 
   /// Searches users by name / nickname.
   Future<List<MatrixUser>> searchUsers(String query) async {

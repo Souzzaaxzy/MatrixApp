@@ -5,6 +5,7 @@ import '../../models/friend_request.dart';
 import '../../models/matrix_notification.dart';
 import '../../models/matrix_user.dart';
 import '../../models/post.dart';
+import '../../models/profile_music.dart';
 import '../../models/sticker.dart';
 import '../../models/story.dart';
 
@@ -231,6 +232,7 @@ class PublicUserDto {
   final String? nameColor;
   final String? frameId;
   final String? frameAsset;
+  final ProfileMusic? music;
 
   const PublicUserDto({
     required this.id,
@@ -246,6 +248,7 @@ class PublicUserDto {
     this.nameColor,
     this.frameId,
     this.frameAsset,
+    this.music,
   });
 
   MatrixUser toModel() => MatrixUser(
@@ -262,6 +265,7 @@ class PublicUserDto {
         nameColor: nameColor,
         frameId: frameId,
         frameAsset: frameAsset,
+        music: music,
       );
 
   factory PublicUserDto.fromJson(Map<String, dynamic> json) => PublicUserDto(
@@ -278,6 +282,9 @@ class PublicUserDto {
         nameColor: json['nameColor'] as String?,
         frameId: json['frameId'] as String?,
         frameAsset: json['frameAsset'] as String?,
+        // The pinned song is optional profile data: a payload without it
+        // (feed/search authors) simply has none.
+        music: ProfileMusic.fromJson(json['music']),
       );
 }
 

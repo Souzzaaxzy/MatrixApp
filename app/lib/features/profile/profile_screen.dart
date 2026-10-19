@@ -26,6 +26,7 @@ import '../chat/chat_navigation.dart';
 import '../feed/story_viewer.dart';
 import 'friends_sheet.dart';
 import 'friendship_button.dart';
+import 'profile_music_bar.dart';
 import 'settings_sheet.dart';
 
 /// Profile screen — the server is the single source of truth.
@@ -491,6 +492,17 @@ class _ProfileHeader extends StatelessWidget {
             ],
           ),
         ),
+        // Below the photo/#id: the pinned song (⏯️ button + song name).
+        if (user.music != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppDimensions.spaceXl,
+              AppDimensions.spaceMd,
+              AppDimensions.spaceXl,
+              0,
+            ),
+            child: ProfileMusicBar(music: user.music!),
+          ),
         // Below the photo AND the nickname: the bio.
         if (user.bio.isNotEmpty)
           Padding(

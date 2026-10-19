@@ -1,5 +1,6 @@
 import 'conversation.dart';
 import 'cosmetic_item.dart';
+import 'profile_music.dart';
 
 /// A MATRIX network user.
 class MatrixUser {
@@ -18,6 +19,7 @@ class MatrixUser {
     this.nameColor,
     this.frameId,
     this.frameAsset,
+    this.music,
   });
 
   final String id;
@@ -78,6 +80,11 @@ class MatrixUser {
   /// Maps to the bundled sprite via [frameAssetPath]. Null → no frame.
   final String? frameAsset;
 
+  /// The song pinned to this profile (Instagram-style), or null when the
+  /// user has none. Comes from the profile endpoint only — lighter author
+  /// payloads (feed, search) do not carry it.
+  final ProfileMusic? music;
+
   /// The equipped cosmetic for [slot], or null (default rendering).
   CosmeticItem? cosmetic(String slot) => customization[slot];
 
@@ -124,6 +131,7 @@ class MatrixUser {
     String? Function()? bannerUrl,
     int? Function()? publicId,
     String? Function()? publicIdLabel,
+    ProfileMusic? Function()? music,
   }) =>
       MatrixUser(
         id: id,
@@ -144,5 +152,8 @@ class MatrixUser {
         bannerUrl: bannerUrl != null ? bannerUrl() : this.bannerUrl,
         publicId: publicId != null ? publicId() : this.publicId,
         publicIdLabel: publicIdLabel != null ? publicIdLabel() : this.publicIdLabel,
+        // Resolver so the pinned song can be CLEARED (`music: () => null`),
+        // not just replaced.
+        music: music != null ? music() : this.music,
       );
 }

@@ -16,6 +16,9 @@ import '../../core/widgets/matrix_button.dart';
 import '../../core/widgets/matrix_text_field.dart';
 import '../../core/widgets/user_avatar.dart';
 import '../../data/api_config.dart';
+import '../../models/profile_music.dart';
+import 'music_search_service.dart';
+import 'profile_music_picker.dart';
 
 /// Edit profile screen.
 ///
@@ -36,6 +39,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   bool _saving = false;
   bool _uploadingAvatar = false;
   bool _uploadingBanner = false;
+  bool _savingMusic = false;
   bool _initialized = false;
 
   @override
@@ -160,6 +164,86 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       _showError('Não foi possível remover o banner. Tente novamente.');
     } finally {
       if (mounted) setState(() => _uploadingBanner = false);
+    }
+  }
+
+  /// Opens the music picker (search → choose excerpt → confirm) and, when the
+  /// user confirms, persists the excerpt. The server downloads the audio, so
+  /// this can take a few seconds — the button shows progress meanwhile.
+  Future<void> _pickMusic() async {
+    if (_savingMusic) return;
+    final state = AppStateScope.of(context);
+    final pending = await Navigator.of(context).push<PendingProfileMusic>(
+      MaterialPageRoute(
+        builder: (_) => ProfileMusicPicker(
+          initialQuery: state.currentUser?.nickname ?? '',
+        ),
+      ),
+    );
+    if (pending == null || !mounted) return;
+
+    setState(() => _savingMusic = true);
+    try {
+      await state.setProfileMusic(
+        result: pending.result,
+        startMs: pending.startMs,
+        durationMs: pending.durationMs,
+      );
+      if (!mounted) return;
+      setState(() {});
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Música do perfil atualizada.')),
+      );
+    } on ApiException catch (e) {
+      _showError(e.message);
+    } catch (_) {
+      _showError('Não foi possível salvar a música. Tente novamente.');
+    } finally {
+      if (mounted) setState(() => _savingMusic = false);
+    }
+  }
+
+  /// Removes the pinned song (the confirm step avoids losing it by a stray
+  /// tap, same as the banner).
+  Future<void> _removeMusic() async {
+    if (_savingMusic) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: AppColors.nightBlue,
+        title: Text('Remover música?', style: AppTextStyles.title),
+        content: Text(
+          'O perfil deixa de tocar a música.',
+          style: AppTextStyles.body,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('CANCELAR'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('REMOVER'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _savingMusic = true);
+    try {
+      await AppStateScope.of(context).clearProfileMusic();
+      if (!mounted) return;
+      setState(() {});
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Música removida.')),
+      );
+    } on ApiException catch (e) {
+      _showError(e.message);
+    } catch (_) {
+      _showError('Não foi possível remover a música. Tente novamente.');
+    } finally {
+      if (mounted) setState(() => _savingMusic = false);
     }
   }
 
@@ -389,6 +473,43 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   textCapitalization: TextCapitalization.sentences,
                 ),
                 const SizedBox(height: AppDimensions.spaceXxl),
+                // ── Música do perfil ──────────────────────────────────
+                // Search the catalog → pick one of up to 3 options → choose
+                // the excerpt (max 1:00) → confirm. The download happens on
+                // the server only on confirm.
+                const HudLabel(text: 'MÚSICA DO PERFIL'),
+                const SizedBox(height: AppDimensions.spaceSm),
+                _MusicPreview(music: user?.music, busy: _savingMusic),
+                const SizedBox(height: AppDimensions.spaceSm),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    TextButton.icon(
+                      onPressed: _savingMusic ? null : _pickMusic,
+                      icon: Icon(Icons.music_note_rounded,
+                          size: 18, color: AppColors.electricBlue),
+                      label: Text(
+                        _savingMusic
+                            ? 'SALVANDO...'
+                            : (user?.music == null
+                                ? 'ESCOLHER MÚSICA'
+                                : 'TROCAR MÚSICA'),
+                        style: AppTextStyles.hud.copyWith(fontSize: 11),
+                      ),
+                    ),
+                    if (user?.music != null)
+                      TextButton.icon(
+                        onPressed: _savingMusic ? null : _removeMusic,
+                        icon: Icon(Icons.delete_outline_rounded,
+                            size: 18, color: AppColors.error),
+                        label: Text(
+                          'REMOVER',
+                          style: AppTextStyles.hud.copyWith(fontSize: 11),
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: AppDimensions.spaceXxl),
                 MatrixButton(
                   label: _saving ? 'Salvando...' : 'Salvar',
                   icon: Icons.check_rounded,
@@ -401,6 +522,71 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Preview of the pinned song in the edit screen: the title/artist and the
+/// excerpt window, or a "no music yet" hint. Purely informational — the
+/// search/choose flow lives in [ProfileMusicPicker].
+class _MusicPreview extends StatelessWidget {
+  const _MusicPreview({required this.music, required this.busy});
+
+  final ProfileMusic? music;
+  final bool busy;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(AppDimensions.spaceMd),
+      decoration: BoxDecoration(
+        color: AppColors.nightBlue,
+        borderRadius: BorderRadius.circular(AppDimensions.radiusLg),
+        border: Border.all(
+          color: AppColors.electricBlue.withValues(alpha: 0.18),
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.music_note_rounded, color: AppColors.electricBlue, size: 20),
+          const SizedBox(width: AppDimensions.spaceSm),
+          Expanded(
+            child: busy
+                ? Text('Salvando...', style: AppTextStyles.bodyMuted)
+                : music == null
+                    ? Text(
+                        'Nenhuma música escolhida.',
+                        style: AppTextStyles.bodyMuted,
+                      )
+                    : Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            music!.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: AppTextStyles.body.copyWith(fontSize: 13),
+                          ),
+                          if (music!.artist.trim().isNotEmpty)
+                            Text(
+                              music!.artist,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: AppTextStyles.hud.copyWith(
+                                fontSize: 10,
+                                color: AppColors.holographicBlue,
+                              ),
+                            ),
+                          Text(
+                            'Trecho ${music!.excerptLabel}',
+                            style: AppTextStyles.hud.copyWith(fontSize: 10),
+                          ),
+                        ],
+                      ),
+          ),
+        ],
       ),
     );
   }

@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:matrix_app/data/api_config.dart';
 import 'package:matrix_app/data/dtos/dtos.dart';
 import 'package:matrix_app/data/repositories/repositories.dart';
+import 'package:matrix_app/data/repositories/music_repository.dart';
 import 'package:matrix_app/data/repositories/sticker_repository.dart';
 import 'package:matrix_app/data/repositories/story_repository.dart';
 import 'package:matrix_app/models/comment.dart';
@@ -12,6 +13,7 @@ import 'package:matrix_app/models/friend_request.dart';
 import 'package:matrix_app/models/matrix_notification.dart';
 import 'package:matrix_app/models/matrix_user.dart';
 import 'package:matrix_app/models/post.dart';
+import 'package:matrix_app/models/profile_music.dart';
 import 'package:matrix_app/models/sticker.dart';
 import 'package:matrix_app/models/story.dart';
 
@@ -36,6 +38,7 @@ class FakeRepositories extends Repositories {
     required super.chat,
     required super.stickers,
     required super.stories,
+    required super.music,
   }) : _store = store;
 
   factory FakeRepositories({
@@ -80,6 +83,7 @@ class FakeRepositories extends Repositories {
       chat: _FakeChatRepository(store),
       stickers: _FakeStickerRepository(store),
       stories: _FakeStoryRepository(store),
+      music: _FakeMusicRepository(store),
     );
   }
 
@@ -125,6 +129,22 @@ class FakeStore {
   /// Active stories grouped by author (fake server state).
   final List<StoryGroup> storyGroups = [];
 
+  /// Music search queries the fake received (assertion aid).
+  final List<String> musicSearches = [];
+
+  /// Results the fake search returns (defaults to none).
+  List<MusicSearchResult> musicResults = const [];
+
+  /// Every `set` call, so tests can assert the chosen excerpt.
+  final List<({MusicSearchResult result, int startMs, int durationMs})>
+      musicSetCalls = [];
+
+  /// How many times `clear` was called.
+  int musicClearCalls = 0;
+
+  /// The currently pinned song, or null.
+  ProfileMusic? pinnedMusic;
+
   /// Story ids the session user liked (fake server state).
   final Set<String> storyLikes = {};
 
@@ -169,11 +189,20 @@ class FakeStore {
         publicIdLabel: '#00000002',
       ),
       // A third full user — needed for multi-mention / independence tests.
+      // Has a pinned song so the profile's music bar can be asserted.
       'u3': MatrixUser(
         id: 'u3',
         nickname: 'carla',
         bio: '',
         avatarSeed: 'carla',
+        music: const ProfileMusic(
+          title: 'Musica da Carla',
+          artist: 'Artista Teste',
+          audioUrl: '/static/music/carla.m4a',
+          durationMs: 40000,
+          startMs: 10000,
+          sourceId: 'carla00001',
+        ),
       ),
     };
     currentUserId = 'u0';
@@ -1951,5 +1980,48 @@ class _FakeStoryRepository implements StoryRepository {
         );
       }
     }
+  }
+}
+
+/// In-memory music: mirrors the server contract (at most 3 cleaned results,
+/// then a pinned excerpt). The excerpt download happens server-side, so the
+/// fake simply records what it was asked for and returns the pinned song.
+class _FakeMusicRepository implements MusicRepository {
+  _FakeMusicRepository(this._store);
+
+  final FakeStore _store;
+
+  @override
+  Future<List<MusicSearchResult>> search(String query) async {
+    _store.musicSearches.add(query);
+    return _store.musicResults;
+  }
+
+  @override
+  Future<ProfileMusic> set({
+    required MusicSearchResult result,
+    required int startMs,
+    required int durationMs,
+  }) async {
+    _store.musicSetCalls
+        .add((result: result, startMs: startMs, durationMs: durationMs));
+    final music = ProfileMusic(
+      title: result.title,
+      artist: result.artist,
+      coverUrl: result.coverUrl,
+      audioUrl: '/static/music/fake.m4a',
+      durationMs: durationMs,
+      startMs: startMs,
+      sourceId: result.sourceId,
+      sourceUrl: 'https://www.youtube.com/watch?v=${result.sourceId}',
+    );
+    _store.pinnedMusic = music;
+    return music;
+  }
+
+  @override
+  Future<void> clear() async {
+    _store.musicClearCalls++;
+    _store.pinnedMusic = null;
   }
 }
