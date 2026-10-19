@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../models/comment.dart';
 import '../../models/conversation.dart';
+import '../local/chat_history_service.dart';
 import '../../models/cosmetic_item.dart';
 import '../../models/friend_request.dart';
 import '../../models/matrix_notification.dart';
@@ -391,7 +392,7 @@ class NotificationRepository {
 /// Private chat repository — conversations, messages and unread badge.
 /// All authorization is enforced by the server (friend-only messaging,
 /// membership on every load); the client never sends a senderId.
-class ChatRepository {
+class ChatRepository implements ChatApi {
   ChatRepository(this._api);
 
   final ApiClient _api;
@@ -554,6 +555,7 @@ class ChatRepository {
 
   /// Latest messages of a group (same paginated, chronological shape as
   /// private messages — with the real sender embedded in every bubble).
+  @override
   Future<({List<ChatMessage> messages, bool hasMore})> groupMessages(
     String groupId, {
     String? before,
@@ -739,6 +741,7 @@ class ChatRepository {
 
   /// Latest messages of a conversation. Pass [before] (the id of the oldest
   /// currently-loaded message) to fetch the OLDER page.
+  @override
   Future<({List<ChatMessage> messages, bool hasMore})> messages(
     String conversationId, {
     String? before,

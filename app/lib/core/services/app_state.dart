@@ -5,6 +5,8 @@ import 'package:flutter/foundation.dart';
 
 import '../../data/api_config.dart';
 import '../../data/dtos/dtos.dart';
+import '../../data/local/chat_history_service.dart';
+import '../../data/local/local_chat_store.dart';
 import '../../data/repositories/repositories.dart';
 import '../../data/repositories/sticker_repository.dart';
 import '../../data/repositories/story_repository.dart';
@@ -391,6 +393,50 @@ class AppState extends ChangeNotifier {
   CustomizationRepository get _customizationRepo =>
       _repos?.customization ?? Services.instance.customization;
   ChatRepository get _chat => _repos?.chat ?? Services.instance.chat;
+
+  /// Local-first chat history (the phone owns the message history).
+  ///
+  /// Lazily opened ONCE and cached. When the local database cannot be opened
+  /// (a platform without sqflite, or the unit-test VM before the ffi factory is
+  /// registered) it stays null and every read/write falls back to the network —
+  /// the app keeps working exactly as before, just without the local cache.
+  /// That fallback is deliberate: a missing cache must never break chat.
+  ChatHistoryService? _chatHistory;
+  Future<ChatHistoryService?>? _chatHistoryOpen;
+
+  ChatHistoryService? get chatHistory {
+    if (_chatHistory != null) return _chatHistory;
+    _chatHistoryOpen ??= _openChatHistory();
+    return _chatHistory;
+  }
+
+  /// Completes once the local history store has been opened (or has failed to
+  /// open). Awaiting the SAME future is what makes this safe under concurrency:
+  /// two callers racing can never spin (an earlier polling version could hang
+  /// the chat screen forever).
+  Future<ChatHistoryService?> get chatHistoryReady {
+    if (_chatHistory != null) return Future.value(_chatHistory);
+    _chatHistoryOpen ??= _openChatHistory();
+    return _chatHistoryOpen!;
+  }
+
+  Future<ChatHistoryService?> _openChatHistory() async {
+    try {
+      final store = await LocalChatStore.open();
+      _chatHistory = ChatHistoryService(
+        store: store,
+        api: _chat,
+        onChanged: () {
+          if (!_disposed) notifyListeners();
+        },
+      );
+      // Ready — repaint so the chat screens pick the local history up.
+      notifyListeners();
+    } catch (_) {
+      // No local database → stay on the network path (null signals that).
+    }
+    return _chatHistory;
+  }
   StickerRepository get _stickersRepo =>
       _repos?.stickers ?? Services.instance.stickers;
   StoryRepository get _storiesRepo =>
@@ -489,6 +535,9 @@ class AppState extends ChangeNotifier {
 
   void _clearSessionCaches() {
     _clearSearchHistory();
+    // Wipe the local chat history: the next account on this device must never
+    // see the previous user's conversations.
+    unawaited(chatHistory?.clearAll());
     _currentUser = null;
     _posts.clear();
     _profiles.clear();
@@ -1675,21 +1724,36 @@ class AppState extends ChangeNotifier {
   }
 
   /// Latest messages of a conversation (newest batch, chronological).
+  ///
+  /// LOCAL-FIRST: the history is served from the phone's own database (instant,
+  /// works offline) and refreshed from the server in the background. The
+  /// network path is used only when the local store is unavailable.
   Future<({List<ChatMessage> messages, bool hasMore})> loadMessages(
     String conversationId, {
     String? before,
     int limit = 30,
   }) {
+    final history = chatHistory;
+    if (history != null) {
+      return history.loadConversation(conversationId,
+          before: before, limit: limit);
+    }
     return _chat.messages(conversationId, before: before, limit: limit);
   }
 
   /// Latest messages of a group (same paginated, chronological shape as
   /// private chat — with the real sender embedded in each bubble).
+  ///
+  /// LOCAL-FIRST, exactly like [loadMessages].
   Future<({List<ChatMessage> messages, bool hasMore})> loadGroupMessages(
     String groupId, {
     String? before,
     int limit = 30,
   }) {
+    final history = chatHistory;
+    if (history != null) {
+      return history.loadGroup(groupId, before: before, limit: limit);
+    }
     return _chat.groupMessages(groupId, before: before, limit: limit);
   }
 
@@ -2382,6 +2446,9 @@ class AppState extends ChangeNotifier {
   /// bumps its unread badge when the message isn't ours (realtime frames are
   /// never ours but self-sends arrive through [sendGroupChatMessage] already).
   void _applyGroupMessage(ChatMessage message) {
+    // Same single funnel as DMs: every group message (sent or realtime) lands
+    // in the local history.
+    unawaited(chatHistory?.recordConfirmed(message));
     for (var i = 0; i < _groups.length; i++) {
       if (_groups[i].id != message.groupId) continue;
       final g = _groups[i];
@@ -2425,6 +2492,10 @@ class AppState extends ChangeNotifier {
     ChatUser? otherUser,
     bool selfMade = true,
   }) {
+    // Persist locally: this is the SINGLE funnel for both a message we just
+    // sent and one that arrived in realtime, so the phone's history stays
+    // complete without extra bookkeeping at each call site.
+    unawaited(chatHistory?.recordConfirmed(message));
     for (var i = 0; i < _conversations.length; i++) {
       final c = _conversations[i];
       if (c.id != message.conversationId) continue;

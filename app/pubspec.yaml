@@ -27,12 +27,20 @@ dependencies:
   permission_handler: 11.3.1
   path_provider: ^2.1.5
   crypto: ^3.0.3
+  # Local message store: the phone is the source of truth for chat history
+  # (the server keeps only an in-flight delivery queue). sqflite is the
+  # standard SQLite binding for Flutter and needs no extra setup on Android.
+  sqflite: ^2.3.3
+  path: ^1.9.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^5.0.0
   image_picker_platform_interface: ^2.10.0
+  # Lets the local message store run in unit tests (sqflite itself is
+  # Android/iOS only; the ffi implementation backs it in the test VM).
+  sqflite_common_ffi: ^2.3.3
   just_audio_platform_interface: 4.6.0
 
 flutter:
