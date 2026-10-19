@@ -365,10 +365,10 @@ class _ProfileHeader extends StatelessWidget {
   /// no active story (never opens an empty viewer).
   final VoidCallback onOpenStory;
 
-  /// Banner height. The avatar box is 108px, so half of it (54) hangs below
-  /// the banner — enough for the nickname to sit beside the avatar's lower
-  /// half without colliding with the banner itself.
-  static const double _bannerHeight = 132;
+  /// Banner height (157px). The avatar box is 108px, so half of it (54)
+  /// hangs below the banner — enough for the nickname to sit beside the
+  /// avatar's lower half without colliding with the banner itself.
+  static const double _bannerHeight = 157;
 
   /// Outer box of the avatar (the FramedAvatar frame is drawn inside it).
   /// The photo itself is [_avatarSize].
@@ -377,26 +377,23 @@ class _ProfileHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final avatar = GlowContainer(
-      glow: Glow.medium,
-      color: AppColors.glowSmall,
-      background: Colors.transparent,
-      borderRadius: BorderRadius.circular(999),
-      child: FramedAvatar(
-        frame: user.frame,
-        size: _avatarBox,
-        child: _StoryRingAvatar(
-          unseen: hasUnseenStory,
-          child: UserAvatar(
-            name: user.nickname,
-            seed: user.avatarSeed ?? user.nickname,
-            imageUrl: user.avatarUrl,
-            // The avatar's own decorative ring is DISABLED here: the photo
-            // border now communicates the STORY state (white = unseen, none =
-            // seen/no story) instead of a fixed accent ring.
-            size: _avatarSize,
-            ring: false,
-          ),
+    // The photo is rendered BARE: no glow/halo container around it. An
+    // equipped frame (a cosmetic the user chose) still draws inside
+    // FramedAvatar, but there is no decorative blue ring for everyone.
+    final avatar = FramedAvatar(
+      frame: user.frame,
+      size: _avatarBox,
+      child: _StoryRingAvatar(
+        unseen: hasUnseenStory,
+        child: UserAvatar(
+          name: user.nickname,
+          seed: user.avatarSeed ?? user.nickname,
+          imageUrl: user.avatarUrl,
+          // The avatar's own decorative ring is DISABLED here: the photo
+          // border now communicates the STORY state (white = unseen, none =
+          // seen/no story) instead of a fixed accent ring.
+          size: _avatarSize,
+          ring: false,
         ),
       ),
     );

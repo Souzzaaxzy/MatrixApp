@@ -108,4 +108,48 @@ void main() {
     expect(headerAvatar(), findsOneWidget);
     expect(find.textContaining('leonardo', findRichText: true), findsOneWidget);
   });
+
+  testWidgets('banner is 157px tall', (tester) async {
+    await pumpMatrixApp(tester, const ProfileScreen());
+    await tester.pump(const Duration(milliseconds: 400));
+
+    // The banner occupies the top of the header. Its height is asserted via
+    // the first painted cover box (banner image or gradient fallback), whose
+    // width spans the screen.
+    final banner = tester.getRect(
+      find.descendant(
+        of: find.byType(ProfileScreen),
+        matching: find.byType(DecoratedBox),
+      ).first,
+    );
+    expect(banner.height, 157);
+  });
+
+  testWidgets('the photo has NO decorative blue ring/glow around it',
+      (tester) async {
+    await pumpMatrixApp(tester, const ProfileScreen());
+    await tester.pump(const Duration(milliseconds: 400));
+
+    // The avatar is rendered bare. Previously a GlowContainer (blue halo)
+    // wrapped it; assert no ancestor of the photo paints that glow.
+    final avatarElement = tester.element(headerAvatar());
+    var hasGlowAncestor = false;
+    avatarElement.visitAncestorElements((el) {
+      final w = el.widget;
+      if (w is Container) {
+        final deco = w.decoration;
+        if (deco is BoxDecoration && deco.boxShadow != null) {
+          hasGlowAncestor = true;
+          return false;
+        }
+      }
+      return true;
+    });
+    expect(hasGlowAncestor, isFalse,
+        reason: 'the profile photo must be bare (no blue glow container)');
+
+    // And the photo itself does not draw a border ring.
+    final avatarWidget = tester.widget<UserAvatar>(headerAvatar());
+    expect(avatarWidget.ring, isFalse);
+  });
 }

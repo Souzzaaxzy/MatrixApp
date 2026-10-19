@@ -323,7 +323,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                             seed: user?.avatarSeed ?? user?.nickname,
                             imageUrl: user?.avatarUrl,
                             size: 84,
-                            ring: true,
+                            // No decorative blue ring — the preview shows the
+                            // bare photo, matching the profile screen.
+                            ring: false,
                           ),
                         ),
                         if (_uploadingAvatar)
