@@ -327,8 +327,16 @@ class _StoryRingAvatar extends StatelessWidget {
   }
 }
 
-/// The centered header: big avatar, @nickname with a subtle glow on the @,
-/// and either the edit CTA (own profile) or the friendship button.
+/// Profile header — banner on top, avatar overlapping its lower edge.
+///
+/// Layout (top → bottom):
+///   • wide BANNER (cover) — the user's own image, or a default gradient;
+///   • the round avatar straddling the banner's bottom edge, pushed to the
+///     LEFT: its upper half sits over the banner, the lower half below it;
+///   • the nickname to the RIGHT of the avatar (aligned with its lower half);
+///   • the bio under the nickname;
+///   • the real counters (Amigos / Posts) under all of it;
+///   • then the edit CTA (own profile) or the friendship button.
 class _ProfileHeader extends StatelessWidget {
   const _ProfileHeader({
     required this.user,
@@ -357,6 +365,16 @@ class _ProfileHeader extends StatelessWidget {
   /// no active story (never opens an empty viewer).
   final VoidCallback onOpenStory;
 
+  /// Banner height. The avatar box is 108px, so half of it (54) hangs below
+  /// the banner — enough for the nickname to sit beside the avatar's lower
+  /// half without colliding with the banner itself.
+  static const double _bannerHeight = 132;
+
+  /// Outer box of the avatar (the FramedAvatar frame is drawn inside it).
+  /// The photo itself is [_avatarSize].
+  static const double _avatarBox = 108;
+  static const double _avatarSize = 96;
+
   @override
   Widget build(BuildContext context) {
     final avatar = GlowContainer(
@@ -366,7 +384,7 @@ class _ProfileHeader extends StatelessWidget {
       borderRadius: BorderRadius.circular(999),
       child: FramedAvatar(
         frame: user.frame,
-        size: 110,
+        size: _avatarBox,
         child: _StoryRingAvatar(
           unseen: hasUnseenStory,
           child: UserAvatar(
@@ -376,94 +394,193 @@ class _ProfileHeader extends StatelessWidget {
             // The avatar's own decorative ring is DISABLED here: the photo
             // border now communicates the STORY state (white = unseen, none =
             // seen/no story) instead of a fixed accent ring.
-            size: 98,
+            size: _avatarSize,
             ring: false,
           ),
         ),
       ),
     );
 
-    return Padding(
-      padding: const EdgeInsets.all(AppDimensions.spaceXl),
-      child: Column(
-        children: [
-          // Gesto duplo na foto (outro usuário):
-          //   * CLIQUE  → abre o Story ativo (se houver);
-          //   * PRESSÃO (long press) → amplia a foto de perfil.
-          // O GestureDetector diferencia os dois: um long press cancela o tap
-          // (nunca dispara as duas ações).
-          GestureDetector(
-            onTap: isOwn ? null : onOpenStory,
-            onLongPress: isOwn
-                ? null
-                : () => _showProfilePhotoZoom(
-                      context,
-                      user: user,
-                      enabled: true,
-                    ),
-            behavior: HitTestBehavior.opaque,
-            child: avatar,
+    // Gesto duplo na foto (outro usuário):
+    //   * CLIQUE  → abre o Story ativo (se houver);
+    //   * PRESSÃO (long press) → amplia a foto de perfil.
+    // O GestureDetector diferencia os dois: um long press cancela o tap
+    // (nunca dispara as duas ações).
+    final tappableAvatar = GestureDetector(
+      onTap: isOwn ? null : onOpenStory,
+      onLongPress: isOwn
+          ? null
+          : () => _showProfilePhotoZoom(
+                context,
+                user: user,
+                enabled: true,
+              ),
+      behavior: HitTestBehavior.opaque,
+      child: avatar,
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Banner + avatar + nickname in ONE Stack.
+        //
+        // The Stack must CONTAIN every child: a child rendered outside its
+        // parent's bounds is not hit-testable, so a photo hanging past the
+        // bottom would stop responding to tap/long-press. Its height is
+        // therefore banner + the avatar's lower half.
+        //
+        // The nickname is positioned INSIDE this Stack (not in a following
+        // row) so it sits beside the photo's lower half — in the strip that
+        // the avatar straddles — instead of being pushed below the photo.
+        SizedBox(
+          height: _bannerHeight + _avatarBox / 2,
+          child: Stack(
+            children: [
+              Positioned(
+                left: 0,
+                right: 0,
+                top: 0,
+                height: _bannerHeight,
+                child: _ProfileBanner(user: user, height: _bannerHeight),
+              ),
+              // Straddles the banner's lower edge: half above, half below.
+              Positioned(
+                left: AppDimensions.spaceXl,
+                top: _bannerHeight - (_avatarBox / 2),
+                child: tappableAvatar,
+              ),
+              // Right of the photo, vertically aligned with its lower half.
+              Positioned(
+                left: AppDimensions.spaceXl + _avatarBox + AppDimensions.spaceLg,
+                right: AppDimensions.spaceXl,
+                top: _bannerHeight + AppDimensions.spaceSm,
+                child: NicknameRenderer(
+                  user.nickname,
+                  baseStyle: AppTextStyles.h2.copyWith(fontSize: 22),
+                  background: AppColors.absoluteBlack,
+                  nameColor: user.nameColor,
+                  textAlign: TextAlign.start,
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: AppDimensions.spaceLg),
-          // The nickname rendered plain (never '@') — the single visual
-          // identity of the account.
-          NicknameRenderer(
-            user.nickname,
-            baseStyle: AppTextStyles.h2.copyWith(fontSize: 22),
-            background: AppColors.absoluteBlack,
-            nameColor: user.nameColor,
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: AppDimensions.spaceLg),
-          // Real counters (server): Amigos opens the friends bottom sheet.
-          _ProfileStats(user: user, onFriendsTap: onFriendsTap),
-          if (user.bio.isNotEmpty) ...[
-            const SizedBox(height: AppDimensions.spaceMd),
-            Text(
+        ),
+        // Below the photo AND the nickname: the bio.
+        if (user.bio.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppDimensions.spaceXl,
+              AppDimensions.spaceSm,
+              AppDimensions.spaceXl,
+              0,
+            ),
+            child: Text(
               user.bio,
-              textAlign: TextAlign.center,
+              textAlign: TextAlign.start,
               style: AppTextStyles.bodyMuted,
             ),
+          ),
+        // Then the real counters (server): Amigos opens the friends sheet.
+        const SizedBox(height: AppDimensions.spaceXl),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: AppDimensions.spaceXl),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _ProfileStats(user: user, onFriendsTap: onFriendsTap),
+              const SizedBox(height: AppDimensions.spaceXl),
+              if (isOwn)
+                MatrixButton(
+                  label: 'Editar perfil',
+                  icon: Icons.edit_rounded,
+                  variant: MatrixButtonVariant.outline,
+                  expanded: true,
+                  onPressed: onEdit,
+                )
+              else if (friendship == Friendship.friends)
+                // Friends → two equal buttons side by side: Amigos (tappable —
+                // opens the "deixar de ser amigo?" confirmation) + Mensagem.
+                Row(
+                  children: [
+                    Expanded(
+                      child: FriendshipButton(
+                        userId: user.id,
+                        nickname: user.nickname,
+                        friendship: Friendship.friends,
+                      ),
+                    ),
+                    const SizedBox(width: AppDimensions.spaceMd),
+                    Expanded(
+                      child: MatrixButton(
+                        label: 'Mensagem',
+                        icon: Icons.chat_bubble_rounded,
+                        onPressed: onMessage,
+                      ),
+                    ),
+                  ],
+                )
+              else
+                FriendshipButton(
+                  userId: user.id,
+                  nickname: user.nickname,
+                  friendship: friendship,
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// The wide profile cover.
+///
+/// Renders the user's banner image when set; otherwise a deterministic
+/// gradient derived from the nickname (same seed idea as the fallback
+/// avatar), so every profile looks intentional even without a banner.
+/// The image is clipped and always `BoxFit.cover` — never distorted.
+class _ProfileBanner extends StatelessWidget {
+  const _ProfileBanner({required this.user, required this.height});
+
+  final MatrixUser user;
+  final double height;
+
+  @override
+  Widget build(BuildContext context) {
+    final bannerUrl = user.bannerUrl;
+    return SizedBox(
+      height: height,
+      width: double.infinity,
+      child: bannerUrl != null && bannerUrl.isNotEmpty
+          ? CachedNetworkImage(
+              imageUrl: ApiConfig.resolveUrl(bannerUrl),
+              fit: BoxFit.cover,
+              width: double.infinity,
+              height: height,
+              placeholder: (_, __) => _fallback(context),
+              errorWidget: (_, __, ___) => _fallback(context),
+            )
+          : _fallback(context),
+    );
+  }
+
+  Widget _fallback(BuildContext context) {
+    // Deterministic hue per user so the default cover is stable across
+    // rebuilds and unique-ish per profile.
+    final seed = user.avatarSeed ?? user.nickname;
+    final hue = (seed.codeUnits.fold<int>(0, (a, b) => a + b) * 7) % 360;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            HSLColor.fromAHSL(1, hue.toDouble(), 0.55, 0.28).toColor(),
+            HSLColor.fromAHSL(1, (hue + 40) % 360, 0.6, 0.12).toColor(),
           ],
-          const SizedBox(height: AppDimensions.spaceXl),
-          if (isOwn)
-            MatrixButton(
-              label: 'Editar perfil',
-              icon: Icons.edit_rounded,
-              variant: MatrixButtonVariant.outline,
-              expanded: true,
-              onPressed: onEdit,
-            )
-          else if (friendship == Friendship.friends)
-            // Friends → two equal buttons side by side: Amigos (tappable —
-            // opens the "deixar de ser amigo?" confirmation) + Mensagem.
-            Row(
-              children: [
-                Expanded(
-                  child: FriendshipButton(
-                    userId: user.id,
-                    nickname: user.nickname,
-                    friendship: Friendship.friends,
-                  ),
-                ),
-                const SizedBox(width: AppDimensions.spaceMd),
-                Expanded(
-                  child: MatrixButton(
-                    label: 'Mensagem',
-                    icon: Icons.chat_bubble_rounded,
-                    onPressed: onMessage,
-                  ),
-                ),
-              ],
-            )
-          else
-            FriendshipButton(
-              userId: user.id,
-              nickname: user.nickname,
-              friendship: friendship,
-            ),
-        ],
+        ),
       ),
+      child: const SizedBox.expand(),
     );
   }
 }
@@ -541,8 +658,10 @@ class _ProfileStats extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Left-aligned (matches the banner/avatar/bio column) instead of the old
+    // centered layout, which only made sense with a centered avatar.
     return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
+      mainAxisAlignment: MainAxisAlignment.start,
       children: [
         _StatColumn(
           count: user.friendsCount,

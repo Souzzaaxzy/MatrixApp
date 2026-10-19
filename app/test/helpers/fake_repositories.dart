@@ -160,6 +160,9 @@ class FakeStore {
         nickname: 'joao',
         bio: '',
         avatarSeed: 'joao',
+        // Has a banner so tests can assert the cover renders for a viewed
+        // profile (u0 deliberately has none → default gradient).
+        bannerUrl: '/static/banner-joao.png',
       ),
       // A third full user — needed for multi-mention / independence tests.
       'u3': MatrixUser(
@@ -539,6 +542,8 @@ class _FakeUserRepository implements UserRepository {
     String? nickname,
     String? bio,
     String? avatarUrl,
+    String? bannerUrl,
+    bool clearBanner = false,
   }) async {
     final old = _store.currentUser;
     final updated = MatrixUser(
@@ -547,6 +552,8 @@ class _FakeUserRepository implements UserRepository {
       bio: bio ?? old.bio,
       avatarSeed: old.avatarSeed,
       avatarUrl: avatarUrl ?? old.avatarUrl,
+      // Mirrors the server: `null` clears, omitting leaves it untouched.
+      bannerUrl: clearBanner ? null : (bannerUrl ?? old.bannerUrl),
     );
     _store.users[old.id] = updated;
     return updated;

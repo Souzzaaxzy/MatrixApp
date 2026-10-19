@@ -987,6 +987,9 @@ class AppState extends ChangeNotifier {
           avatarUrl: result.user.avatarUrl,
           customization: result.user.customization,
           nameColor: () => result.user.nameColor,
+          // Resolver so a banner REMOVED elsewhere also clears locally
+          // (a plain nullable copyWith would keep the stale value).
+          bannerUrl: () => result.user.bannerUrl,
         );
       }
     } finally {
@@ -1325,11 +1328,15 @@ class AppState extends ChangeNotifier {
     String? nickname,
     String? bio,
     String? avatarUrl,
+    String? bannerUrl,
+    bool clearBanner = false,
   }) async {
     final updated = await _users.updateProfile(
       nickname: nickname,
       bio: bio,
       avatarUrl: avatarUrl,
+      bannerUrl: bannerUrl,
+      clearBanner: clearBanner,
     );
     _currentUser = updated;
     notifyListeners();
@@ -1345,6 +1352,18 @@ class AppState extends ChangeNotifier {
     await updateProfile(avatarUrl: url);
     return url;
   }
+
+  /// Uploads a new profile banner (cover image) and persists it.
+  /// Mirrors [changeAvatar]: pick → upload → persist the returned URL.
+  Future<String> changeBanner(File image) async {
+    final uploads = _repos?.uploads ?? Services.instance.uploads;
+    final url = await uploads.upload(image);
+    await updateProfile(bannerUrl: url);
+    return url;
+  }
+
+  /// Removes the profile banner (back to the default cover).
+  Future<void> clearBanner() => updateProfile(clearBanner: true);
 
   /// Searches users by name / nickname.
   Future<List<MatrixUser>> searchUsers(String query) async {

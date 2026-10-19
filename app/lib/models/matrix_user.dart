@@ -9,6 +9,7 @@ class MatrixUser {
     this.bio = '',
     this.avatarSeed,
     this.avatarUrl,
+    this.bannerUrl,
     this.friendsCount = 0,
     this.postsCount = 0,
     this.customization = const {},
@@ -31,6 +32,10 @@ class MatrixUser {
   /// Remote profile photo URL (served by the API). When null, the
   /// fallback initials avatar is shown.
   final String? avatarUrl;
+
+  /// Wide profile banner (cover image) URL, served by the API. When null the
+  /// profile screen draws its default gradient cover instead.
+  final String? bannerUrl;
 
   /// Real server-side counters (profile endpoint only): accepted
   /// friendships and posts owned by this user. Zero when the endpoint did
@@ -101,6 +106,7 @@ class MatrixUser {
     String? Function()? nameColor,
     String? Function()? frameId,
     String? Function()? frameAsset,
+    String? Function()? bannerUrl,
   }) =>
       MatrixUser(
         id: id,
@@ -116,5 +122,8 @@ class MatrixUser {
         nameColor: nameColor != null ? nameColor() : this.nameColor,
         frameId: frameId != null ? frameId() : this.frameId,
         frameAsset: frameAsset != null ? frameAsset() : this.frameAsset,
+        // Same nullable-resolver pattern so the banner can be cleared
+        // (`bannerUrl: () => null`) as well as replaced.
+        bannerUrl: bannerUrl != null ? bannerUrl() : this.bannerUrl,
       );
 }

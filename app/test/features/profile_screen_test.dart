@@ -202,6 +202,9 @@ void main() {
       // Clear the nickname field.
       await tester.enterText(find.byType(TextField).at(0), '');
 
+      // The form now also contains the banner section, so the save button can
+      // sit below the (short) test viewport — scroll it into view first.
+      await tester.ensureVisible(find.text('SALVAR'));
       await tester.tap(find.text('SALVAR'));
       await tester.pump();
 
@@ -214,11 +217,37 @@ void main() {
 
       await tester.enterText(find.byType(TextField).at(0), 'Neo');
       await tester.enterText(find.byType(TextField).at(1), 'The one');
+      await tester.ensureVisible(find.text('SALVAR'));
       await tester.tap(find.text('SALVAR'));
       await tester.pumpAndSettle();
 
       expect(state.currentUser!.nickname, 'Neo');
       expect(state.currentUser!.bio, 'The one');
+    });
+
+    testWidgets('shows the banner section and the current cover state',
+        (tester) async {
+      await pumpMatrixApp(tester, const EditProfileScreen());
+
+      // The new banner control is present…
+      expect(find.text('ALTERAR BANNER'), findsOneWidget);
+      // …and, with no banner set, it offers the default look (no REMOVER).
+      expect(find.text('SEM BANNER'), findsOneWidget);
+      expect(find.text('REMOVER'), findsNothing);
+    });
+
+    testWidgets('offers REMOVER only when a banner is set', (tester) async {
+      final state = await seededAppState();
+      await pumpMatrixApp(tester, const EditProfileScreen(), state: state);
+
+      // Set the banner AFTER pumping: pumpMatrixApp restores the session,
+      // which would overwrite a banner set beforehand.
+      await state.updateProfile(bannerUrl: '/static/banner-x.png');
+      await tester.pumpAndSettle();
+      expect(state.currentUser!.bannerUrl, '/static/banner-x.png');
+
+      expect(find.text('ALTERAR BANNER'), findsOneWidget);
+      expect(find.text('REMOVER'), findsOneWidget);
     });
   });
 

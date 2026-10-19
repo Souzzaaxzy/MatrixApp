@@ -262,6 +262,8 @@ class UserRepository {
     String? nickname,
     String? bio,
     String? avatarUrl,
+    String? bannerUrl,
+    bool clearBanner = false,
   }) async {
     final json = await _api.patch<Map<String, dynamic>>(
       '/api/users/me',
@@ -269,6 +271,9 @@ class UserRepository {
         if (nickname != null) 'nickname': nickname,
         if (bio != null) 'bio': bio,
         if (avatarUrl != null) 'avatarUrl': avatarUrl,
+        // `null` clears the banner server-side; omitting the key leaves it
+        // untouched — hence the explicit flag instead of a nullable value.
+        if (clearBanner) 'bannerUrl': null else if (bannerUrl != null) 'bannerUrl': bannerUrl,
       },
     );
     return AuthUserDto.fromJson(json['user'] as Map<String, dynamic>).toModel();

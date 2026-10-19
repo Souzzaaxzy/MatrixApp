@@ -38,12 +38,14 @@ class AuthUserDto {
   final String id;
   final String nickname;
   final String? avatarUrl;
+  final String? bannerUrl;
   final String bio;
 
   const AuthUserDto({
     required this.id,
     required this.nickname,
     this.avatarUrl,
+    this.bannerUrl,
     required this.bio,
   });
 
@@ -52,12 +54,14 @@ class AuthUserDto {
         nickname: nickname,
         bio: bio,
         avatarUrl: avatarUrl,
+        bannerUrl: bannerUrl,
       );
 
   factory AuthUserDto.fromJson(Map<String, dynamic> json) => AuthUserDto(
         id: json['id'] as String,
         nickname: json['nickname'] as String,
         avatarUrl: json['avatarUrl'] as String?,
+        bannerUrl: json['bannerUrl'] as String?,
         bio: (json['bio'] as String?) ?? '',
       );
 }
@@ -209,6 +213,7 @@ class PublicUserDto {
   final String id;
   final String nickname;
   final String? avatarUrl;
+  final String? bannerUrl;
   final String bio;
   final int friendsCount;
   final int postsCount;
@@ -221,6 +226,7 @@ class PublicUserDto {
     required this.id,
     required this.nickname,
     this.avatarUrl,
+    this.bannerUrl,
     required this.bio,
     this.friendsCount = 0,
     this.postsCount = 0,
@@ -235,6 +241,7 @@ class PublicUserDto {
         nickname: nickname,
         bio: bio,
         avatarUrl: avatarUrl,
+        bannerUrl: bannerUrl,
         friendsCount: friendsCount,
         postsCount: postsCount,
         customization: customization,
@@ -247,6 +254,7 @@ class PublicUserDto {
         id: json['id'] as String,
         nickname: json['nickname'] as String,
         avatarUrl: json['avatarUrl'] as String?,
+        bannerUrl: json['bannerUrl'] as String?,
         bio: (json['bio'] as String?) ?? '',
         friendsCount: (json['friendsCount'] as num?)?.toInt() ?? 0,
         postsCount: (json['postsCount'] as num?)?.toInt() ?? 0,

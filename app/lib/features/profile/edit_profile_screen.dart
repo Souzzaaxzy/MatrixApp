@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
@@ -34,6 +35,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   late final TextEditingController _bioController;
   bool _saving = false;
   bool _uploadingAvatar = false;
+  bool _uploadingBanner = false;
   bool _initialized = false;
 
   @override
@@ -62,6 +64,113 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
   Future<void> _pickAvatar() async {
     if (_uploadingAvatar) return;
+    final picked = await _pickImage(
+      title: 'SELECIONAR FOTO',
+      imageQuality: 85,
+      maxWidth: 1024,
+      maxHeight: 1024,
+    );
+    if (picked == null || !mounted) return;
+
+    setState(() => _uploadingAvatar = true);
+    try {
+      await AppStateScope.of(context).changeAvatar(File(picked.path));
+      if (!mounted) return;
+      setState(() {});
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Foto de perfil atualizada.')),
+      );
+    } on ApiException catch (e) {
+      _showError(e.message);
+    } catch (_) {
+      _showError('Não foi possível enviar a foto. Tente novamente.');
+    } finally {
+      if (mounted) setState(() => _uploadingAvatar = false);
+    }
+  }
+
+  /// Picks the banner (cover) image and persists it — same pick → upload →
+  /// persist pipeline as the avatar. Banners are wide, so a larger max width
+  /// is allowed while still capping the payload.
+  Future<void> _pickBanner() async {
+    if (_uploadingBanner) return;
+    final picked = await _pickImage(
+      title: 'SELECIONAR BANNER',
+      imageQuality: 85,
+      maxWidth: 1600,
+      maxHeight: 1600,
+    );
+    if (picked == null || !mounted) return;
+
+    setState(() => _uploadingBanner = true);
+    try {
+      await AppStateScope.of(context).changeBanner(File(picked.path));
+      if (!mounted) return;
+      setState(() {});
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Banner atualizado.')),
+      );
+    } on ApiException catch (e) {
+      _showError(e.message);
+    } catch (_) {
+      _showError('Não foi possível enviar o banner. Tente novamente.');
+    } finally {
+      if (mounted) setState(() => _uploadingBanner = false);
+    }
+  }
+
+  /// Removes the banner (back to the default cover). The confirm step avoids
+  /// destroying a custom cover with a single accidental tap.
+  Future<void> _removeBanner() async {
+    if (_uploadingBanner) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: AppColors.nightBlue,
+        title: Text('Remover banner?', style: AppTextStyles.title),
+        content: Text(
+          'O perfil volta a usar a capa padrão do MATRIX.',
+          style: AppTextStyles.body,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('CANCELAR'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('REMOVER'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _uploadingBanner = true);
+    try {
+      await AppStateScope.of(context).clearBanner();
+      if (!mounted) return;
+      setState(() {});
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Banner removido.')),
+      );
+    } on ApiException catch (e) {
+      _showError(e.message);
+    } catch (_) {
+      _showError('Não foi possível remover o banner. Tente novamente.');
+    } finally {
+      if (mounted) setState(() => _uploadingBanner = false);
+    }
+  }
+
+  /// Shared image source sheet + picker. Returns the chosen file or null when
+  /// the user cancels (or an error was already surfaced).
+  Future<XFile?> _pickImage({
+    required String title,
+    required int imageQuality,
+    required double maxWidth,
+    required double maxHeight,
+  }) async {
     final source = await showModalBottomSheet<ImageSource>(
       context: context,
       backgroundColor: AppColors.nightBlue,
@@ -74,7 +183,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             const SizedBox(height: AppDimensions.spaceMd),
-            const HudLabel(text: 'SELECIONAR FOTO'),
+            HudLabel(text: title),
             const SizedBox(height: AppDimensions.spaceMd),
             ListTile(
               leading: const Icon(Icons.photo_library_rounded,
@@ -93,48 +202,32 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
         ),
       ),
     );
-    if (source == null || !mounted) return;
+    if (source == null || !mounted) return null;
 
     XFile? picked;
     if (source == ImageSource.gallery) {
       final result = await pickGalleryImage(
-        imageQuality: 85,
-        maxWidth: 1024,
-        maxHeight: 1024,
+        imageQuality: imageQuality,
+        maxWidth: maxWidth,
+        maxHeight: maxHeight,
       );
-      if (!mounted) return;
+      if (!mounted) return null;
       if (!result.isSuccess) {
         if (!result.cancelled && result.error != null && result.error!.isNotEmpty) {
           _showError(result.error!);
         }
-        return;
+        return null;
       }
       picked = result.file;
     } else {
       picked = await ImagePicker().pickImage(
         source: source,
-        imageQuality: 85,
-        maxWidth: 1024,
-        maxHeight: 1024,
+        imageQuality: imageQuality,
+        maxWidth: maxWidth,
+        maxHeight: maxHeight,
       );
     }
-    if (picked == null || !mounted) return;
-
-    setState(() => _uploadingAvatar = true);
-    try {
-      await AppStateScope.of(context).changeAvatar(File(picked.path));
-      if (!mounted) return;
-      setState(() {});
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Foto de perfil atualizada.')),
-      );
-    } on ApiException catch (e) {
-      _showError(e.message);
-    } catch (_) {
-      _showError('Não foi possível enviar a foto. Tente novamente.');
-    } finally {
-      if (mounted) setState(() => _uploadingAvatar = false);
-    }
+    return picked;
   }
 
   Future<void> _save() async {
@@ -179,6 +272,41 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                const SizedBox(height: AppDimensions.spaceXl),
+                // ── Banner (cover) ─────────────────────────────────────
+                // Same pick → upload → persist pipeline as the avatar; the
+                // preview mirrors the profile layout (wide cover with the
+                // photo overlapping its lower edge).
+                _BannerPreview(
+                  bannerUrl: user?.bannerUrl,
+                  uploading: _uploadingBanner,
+                  onPick: _pickBanner,
+                ),
+                const SizedBox(height: AppDimensions.spaceSm),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    TextButton.icon(
+                      onPressed: _uploadingBanner ? null : _pickBanner,
+                      icon: Icon(Icons.wallpaper_rounded,
+                          size: 18, color: AppColors.electricBlue),
+                      label: Text(
+                        _uploadingBanner ? 'ENVIANDO...' : 'ALTERAR BANNER',
+                        style: AppTextStyles.hud.copyWith(fontSize: 11),
+                      ),
+                    ),
+                    if (user?.bannerUrl != null)
+                      TextButton.icon(
+                        onPressed: _uploadingBanner ? null : _removeBanner,
+                        icon: Icon(Icons.delete_outline_rounded,
+                            size: 18, color: AppColors.error),
+                        label: Text(
+                          'REMOVER',
+                          style: AppTextStyles.hud.copyWith(fontSize: 11),
+                        ),
+                      ),
+                  ],
+                ),
                 const SizedBox(height: AppDimensions.spaceXl),
                 Center(
                   child: GestureDetector(
@@ -272,6 +400,93 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Banner preview in the edit screen: a wide, rounded cover showing the
+/// current banner (or the default gradient when none is set) with a tap
+/// target to replace it and a loading overlay while uploading.
+class _BannerPreview extends StatelessWidget {
+  const _BannerPreview({
+    required this.bannerUrl,
+    required this.uploading,
+    required this.onPick,
+  });
+
+  final String? bannerUrl;
+  final bool uploading;
+  final VoidCallback onPick;
+
+  static const double _height = 120;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasBanner = bannerUrl != null && bannerUrl!.isNotEmpty;
+    return GestureDetector(
+      onTap: uploading ? null : onPick,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(AppDimensions.radiusLg),
+        child: SizedBox(
+          height: _height,
+          width: double.infinity,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              if (hasBanner)
+                CachedNetworkImage(
+                  imageUrl: ApiConfig.resolveUrl(bannerUrl!),
+                  fit: BoxFit.cover,
+                  placeholder: (_, __) => const _BannerPlaceholder(),
+                  errorWidget: (_, __, ___) => const _BannerPlaceholder(),
+                )
+              else
+                const _BannerPlaceholder(),
+              if (uploading)
+                const DecoratedBox(
+                  decoration: BoxDecoration(color: Colors.black54),
+                  child: Center(
+                    child: SizedBox(
+                      width: 26,
+                      height: 26,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: AppColors.electricBlue,
+                      ),
+                    ),
+                  ),
+                )
+              else
+                Positioned(
+                  right: AppDimensions.spaceSm,
+                  bottom: AppDimensions.spaceSm,
+                  child: Container(
+                    decoration: const BoxDecoration(
+                      color: AppColors.primaryBlue,
+                      shape: BoxShape.circle,
+                    ),
+                    padding: const EdgeInsets.all(AppDimensions.spaceSm),
+                    child: Icon(Icons.camera_alt_rounded,
+                        color: AppColors.techWhite, size: 16),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Default cover look (no banner set): the MATRIX gradient + a HUD hint.
+class _BannerPlaceholder extends StatelessWidget {
+  const _BannerPlaceholder();
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: const BoxDecoration(gradient: AppColors.primaryGradient),
+      child: const Center(child: HudLabel(text: 'SEM BANNER')),
     );
   }
 }
