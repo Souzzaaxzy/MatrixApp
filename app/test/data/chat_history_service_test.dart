@@ -15,6 +15,17 @@ class FakeChatApi implements ChatApi {
   int dmCalls = 0;
   int groupCalls = 0;
 
+  /// Every delivery receipt this fake received, in order — lets the tests
+  /// assert the phone confirmed holding the message.
+  final List<String> deliveredIds = [];
+  bool failDelivered = false;
+
+  @override
+  Future<void> confirmDelivered(List<String> messageIds) async {
+    if (failDelivered) throw Exception('offline');
+    deliveredIds.addAll(messageIds);
+  }
+
   @override
   Future<({List<ChatMessage> messages, bool hasMore})> messages(
     String conversationId, {
@@ -189,6 +200,63 @@ void main() {
       final before = notified;
       await svc.recordConfirmed(m('x', conv: 'c1'));
       expect(notified, greaterThan(before));
+    });
+  });
+
+  group('confirmação de entrega (delivery ack)', () {
+    test('mensagem RECEBIDA confirma entrega ao servidor', () async {
+      await svc.recordConfirmed(m('in1', conv: 'c1'));
+      await Future<void>.delayed(Duration.zero);
+      expect(api.deliveredIds, contains('in1'));
+    });
+
+    test('mensagem ENVIADA por mim NÃO confirma entrega', () async {
+      final mine = ChatMessage(
+        id: 'out1',
+        conversationId: 'c1',
+        senderId: 'me',
+        content: 'oi',
+        createdAt: DateTime(2026, 1, 1),
+        mine: true,
+      );
+      await svc.recordConfirmed(mine);
+      await Future<void>.delayed(Duration.zero);
+      // O remetente não "entrega" para si mesmo.
+      expect(api.deliveredIds, isNot(contains('out1')));
+    });
+
+    test('lote confirma só as recebidas, em UMA chamada', () async {
+      final mine = ChatMessage(
+        id: 'mine',
+        conversationId: 'c1',
+        senderId: 'me',
+        content: 'x',
+        createdAt: DateTime(2026, 1, 1),
+        mine: true,
+      );
+      await svc.recordConfirmedAll([
+        m('a', conv: 'c1'),
+        m('b', conv: 'c1'),
+        mine,
+      ]);
+      await Future<void>.delayed(Duration.zero);
+      expect(api.deliveredIds..sort(), ['a', 'b']);
+    });
+
+    test('falha ao confirmar não quebra o chat (best-effort)', () async {
+      api.failDelivered = true;
+      await svc.recordConfirmed(m('x', conv: 'c1'));
+      await Future<void>.delayed(Duration.zero);
+      // A mensagem continua no histórico local mesmo sem o recibo.
+      expect((await svc.loadConversation('c1')).messages.single.id, 'x');
+    });
+
+    test('mensagens vindas do servidor na sincronização são confirmadas',
+        () async {
+      api.dmPage = [m('from_server', conv: 'c1')];
+      await svc.loadConversation('c1'); // dispara o sync em segundo plano
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      expect(api.deliveredIds, contains('from_server'));
     });
   });
 }

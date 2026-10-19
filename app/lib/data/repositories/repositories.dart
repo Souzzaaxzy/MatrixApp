@@ -894,6 +894,24 @@ class ChatRepository implements ChatApi {
     await _api.post('/api/conversations/$conversationId/read');
   }
 
+  /// Tells the server this device HOLDS these messages (delivery receipt).
+  ///
+  /// Distinct from [markRead]: a receipt is sent as soon as the message is
+  /// stored locally, even if the user never opens the chat. It is what lets
+  /// the server drop its copy — chat history lives on the phone. Idempotent
+  /// server-side, so retrying after being offline is safe.
+  @override
+  Future<void> confirmDelivered(List<String> messageIds) async {
+    if (messageIds.isEmpty) return;
+    await _api.post<Map<String, dynamic>>(
+      '/api/messages/delivered',
+      data: {
+        'messageIds':
+            messageIds.map((id) => {'messageId': id}).toList(growable: false),
+      },
+    );
+  }
+
   /// "Excluir mensagem para mim" — the message disappears for the CURRENT
   /// user only (the peer keeps seeing it). Server-persisted (MessageHide
   /// row), so it survives app restarts and re-logins. Idempotent.

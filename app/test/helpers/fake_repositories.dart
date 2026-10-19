@@ -783,6 +783,14 @@ class _FakeChatRepository implements ChatRepository {
 
   final FakeStore _store;
 
+  /// Delivery receipts received by this fake (asserted by tests).
+  final List<String> deliveredIds = [];
+
+  @override
+  Future<void> confirmDelivered(List<String> messageIds) async {
+    deliveredIds.addAll(messageIds);
+  }
+
   String _pairKey(String a, String b) => a.compareTo(b) < 0 ? '$a|$b' : '$b|$a';
 
   List<ChatMessage> _messagesOf(String pair) =>

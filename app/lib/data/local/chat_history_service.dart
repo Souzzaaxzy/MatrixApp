@@ -97,6 +97,12 @@ class ChatHistoryService {
       if (page.messages.isEmpty) return;
       await _store.upsertAll(page.messages);
       _notify();
+      // The messages just landed on this device, so confirm delivery — this is
+      // exactly the case a live socket can never cover (they were fetched
+      // later, e.g. after being offline).
+      final incoming =
+          page.messages.where((m) => !m.mine).map((m) => m.id).toList();
+      if (incoming.isNotEmpty) unawaited(_confirmDelivered(incoming));
     } catch (_) {
       // Offline / server hiccup: keep serving the local history.
     }
@@ -115,16 +121,48 @@ class ChatHistoryService {
   /// Records the server's authoritative version of a message (after a send is
   /// confirmed, or when a page/realtime frame carries it). Replaces the pending
   /// local echo — same id, so the bubble is updated, never duplicated.
+  ///
+  /// A message from SOMEONE ELSE is also confirmed to the server here: storing
+  /// it on this device is exactly the "I have it" signal the server needs to
+  /// drop its copy (see [ChatApi.confirmDelivered]). The call is fire-and-forget
+  /// and safe to repeat, so a failure simply means the server keeps it longer.
   Future<void> recordConfirmed(ChatMessage message) async {
     await _store.upsert(message);
     _notify();
+    if (!message.mine) {
+      unawaited(_confirmDelivered([message.id]));
+    }
   }
 
-  /// Records several confirmed messages at once (a realtime burst or a page).
+  /// Records several confirmed messages at once (a realtime burst or a page)
+  /// and confirms the incoming ones to the server in ONE request.
   Future<void> recordConfirmedAll(Iterable<ChatMessage> messages) async {
-    if (messages.isEmpty) return;
-    await _store.upsertAll(messages);
+    final list = messages.toList();
+    if (list.isEmpty) return;
+    await _store.upsertAll(list);
     _notify();
+    final incoming =
+        list.where((m) => !m.mine).map((m) => m.id).toList(growable: false);
+    if (incoming.isNotEmpty) {
+      unawaited(_confirmDelivered(incoming));
+    }
+  }
+
+  /// Sends delivery receipts, chunked to respect the server's per-request cap.
+  /// Best-effort: a failure is ignored because the next load/sync re-confirms.
+  Future<void> _confirmDelivered(List<String> ids) async {
+    const chunkSize = 200; // mirrors the server's MAX_ACK_BATCH
+    for (var i = 0; i < ids.length; i += chunkSize) {
+      final chunk = ids.sublist(
+        i,
+        (i + chunkSize > ids.length) ? ids.length : i + chunkSize,
+      );
+      try {
+        await _api.confirmDelivered(chunk);
+      } catch (_) {
+        // Offline / server hiccup: the receipt is retried on the next sync.
+      }
+    }
   }
 
   // ── Local removals ────────────────────────────────────────────
@@ -182,4 +220,15 @@ abstract class ChatApi {
     String? before,
     int limit,
   });
+
+  /// Tells the server this device now HOLDS these messages.
+  ///
+  /// This is what lets the server drop its copy: chat history lives here, so
+  /// the server only needs a message until every participant has confirmed
+  /// receiving it. Distinct from marking read — a receipt is sent as soon as
+  /// the message is stored, even if the user never opens the chat.
+  ///
+  /// Must be idempotent server-side (the app retries freely after being
+  /// offline), so implementations may simply re-send the ids.
+  Future<void> confirmDelivered(List<String> messageIds);
 }
