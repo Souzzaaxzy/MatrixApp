@@ -12,6 +12,7 @@ class ProfileMusic {
     required this.audioUrl,
     required this.durationMs,
     this.startMs = 0,
+    this.playWindowOnly = false,
     this.sourceUrl = '',
     this.sourceId = '',
   });
@@ -26,6 +27,15 @@ class ProfileMusic {
 
   /// Offset of the excerpt inside the source track, in milliseconds.
   final int startMs;
+
+  /// True when the stored FILE is the WHOLE track and the player must play
+  /// only the [startMs, startMs+durationMs) window.
+  ///
+  /// This happens on the server's no-ffmpeg path: cutting audio requires
+  /// ffmpeg (the most fragile package on Termux), so instead of cutting the
+  /// server keeps the full m4a and the APP starts at the offset and stops at
+  /// the end of the excerpt — the listener hears exactly the same excerpt.
+  final bool playWindowOnly;
 
   /// Public page of the source track, used to credit the author.
   final String sourceUrl;
@@ -63,6 +73,7 @@ class ProfileMusic {
       audioUrl: audioUrl,
       durationMs: (raw['durationMs'] as num?)?.toInt() ?? 0,
       startMs: (raw['startMs'] as num?)?.toInt() ?? 0,
+      playWindowOnly: raw['playWindowOnly'] == true,
       sourceUrl: (raw['sourceUrl'] as String?) ?? '',
       sourceId: (raw['sourceId'] as String?) ?? '',
     );

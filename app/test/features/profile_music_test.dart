@@ -120,6 +120,23 @@ void main() {
       expect(parsed, isNotNull);
       expect(parsed!.title, 'Song');
       expect(parsed.startMs, 5000);
+      // Sem a flag o padrão é false: o arquivo JÁ é o trecho (caminho ffmpeg).
+      expect(parsed.playWindowOnly, isFalse);
+    });
+
+    test('fromJson reads playWindowOnly (the no-ffmpeg path)', () {
+      // Sem ffmpeg o servidor guarda a faixa inteira e o app toca a janela.
+      final parsed = ProfileMusic.fromJson(<String, dynamic>{
+        'title': 'Song',
+        'artist': 'Artist',
+        'audioUrl': '/static/music/full.m4a',
+        'durationMs': 45000,
+        'startMs': 12000,
+        'playWindowOnly': true,
+      });
+      expect(parsed!.playWindowOnly, isTrue);
+      expect(parsed.startMs, 12000);
+      expect(parsed.durationMs, 45000);
     });
 
     test('MusicSearchResult.fromJson requires a sourceId', () {

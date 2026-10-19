@@ -36,9 +36,30 @@ class _ProfileMusicBarState extends State<ProfileMusicBar> {
   StreamSubscription<PlayerState>? _stateSub;
   StreamSubscription<Duration?>? _durSub;
   Duration _position = Duration.zero;
-  Duration _duration = Duration.zero;
   bool _loading = false;
   bool _playing = false;
+
+  /// Início da janela tocada dentro do arquivo. É o offset escolhido quando o
+  /// arquivo é a faixa inteira (sem ffmpeg) e ZERO quando o arquivo já é o
+  /// trecho (com ffmpeg).
+  Duration get _windowStart => widget.music.playWindowOnly
+      ? Duration(milliseconds: widget.music.startMs.clamp(0, 1 << 31))
+      : Duration.zero;
+
+  /// Fim da janela: quanto do ARQUIVO deve tocar. Com o trecho já cortado, é
+  /// a duração do trecho; com a faixa inteira, é o offset + a duração.
+  Duration get _windowEnd => widget.music.playWindowOnly
+      ? Duration(
+          milliseconds: (widget.music.startMs + widget.music.durationMs)
+              .clamp(0, 1 << 31),
+        )
+      : Duration(milliseconds: widget.music.durationMs.clamp(0, 1 << 31));
+
+  /// Quanto tempo a música toca de fato (a barra mede ISTO, não o arquivo).
+  Duration get _windowLength =>
+      _windowEnd - _windowStart > Duration.zero
+          ? _windowEnd - _windowStart
+          : Duration(milliseconds: widget.music.durationMs.clamp(0, 1 << 31));
 
   /// Um único player ativo no app inteiro — tocar uma música para a outra.
   static AudioPlayer? _activePlayer;
@@ -46,10 +67,8 @@ class _ProfileMusicBarState extends State<ProfileMusicBar> {
   @override
   void initState() {
     super.initState();
-    // A duração conhecida (o trecho) já desenha a barra antes de tocar.
-    _duration = Duration(
-      milliseconds: widget.music.durationMs.clamp(0, 1 << 31),
-    );
+    // A janela já vem do modelo (startMs/durationMs), então a barra desenha
+    // certo antes mesmo de o áudio carregar.
   }
 
   @override
@@ -58,9 +77,6 @@ class _ProfileMusicBarState extends State<ProfileMusicBar> {
     // Trocou a música → o player antigo não representa mais esta barra.
     if (old.music.audioUrl != widget.music.audioUrl) {
       _teardown();
-      _duration = Duration(
-        milliseconds: widget.music.durationMs.clamp(0, 1 << 31),
-      );
       _position = Duration.zero;
     }
   }
@@ -93,26 +109,35 @@ class _ProfileMusicBarState extends State<ProfileMusicBar> {
   Future<void> _ensureSubs() async {
     final player = _player!;
     _posSub ??= player.positionStream.listen((p) {
-      if (mounted) setState(() => _position = p);
+      if (!mounted) return;
+      // Sem ffmpeg o arquivo é a faixa inteira: ao chegar no fim da JANELA,
+      // para (senão tocaria o resto da música, que não é o que foi escolhido).
+      if (widget.music.playWindowOnly && p >= _windowEnd) {
+        player.pause();
+        player.seek(_windowStart);
+        setState(() {
+          _position = _windowStart;
+          _playing = false;
+        });
+        return;
+      }
+      setState(() => _position = p);
     });
     _stateSub ??= player.playerStateStream.listen((state) {
       if (!mounted) return;
       setState(() => _playing = state.playing);
       if (state.processingState == ProcessingState.completed) {
-        // Fim do trecho: volta ao início e para (um trecho curto reiniciando
-        // sozinho em loop seria irritante).
+        // Fim do arquivo: volta ao início da JANELA e para (um trecho curto
+        // reiniciando sozinho em loop seria irritante).
         player.pause();
-        player.seek(Duration.zero);
+        player.seek(_windowStart);
         if (mounted) {
           setState(() {
-            _position = Duration.zero;
+            _position = _windowStart;
             _playing = false;
           });
         }
       }
-    });
-    _durSub ??= player.durationStream.listen((d) {
-      if (mounted && d != null) setState(() => _duration = d);
     });
   }
 
@@ -147,6 +172,11 @@ class _ProfileMusicBarState extends State<ProfileMusicBar> {
       if (_player!.audioSource == null) {
         setState(() => _loading = true);
         await _player!.setUrl(url);
+        // Sem ffmpeg no servidor, o arquivo é a FAIXA INTEIRA: começa no
+        // offset escolhido. Com ffmpeg, o arquivo já É o trecho (start 0).
+        if (_windowStart > Duration.zero) {
+          await _player!.seek(_windowStart);
+        }
       }
       // Outro player ativo cede o lugar.
       if (_activePlayer != null && _activePlayer != _player) {
@@ -166,9 +196,12 @@ class _ProfileMusicBarState extends State<ProfileMusicBar> {
 
   @override
   Widget build(BuildContext context) {
-    final progress = _duration.inMilliseconds > 0
-        ? (_position.inMilliseconds / _duration.inMilliseconds).clamp(0.0, 1.0)
-        : 0.0;
+    // A barra mede a JANELA tocada, não o arquivo: com o trecho já cortado os
+    // dois coincidem; com a faixa inteira (sem ffmpeg) usar o arquivo faria a
+    // barra parecer quase vazia durante o trecho.
+    final windowMs = _windowLength.inMilliseconds;
+    final elapsed = (_position - _windowStart).inMilliseconds.clamp(0, windowMs);
+    final progress = windowMs > 0 ? elapsed / windowMs : 0.0;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

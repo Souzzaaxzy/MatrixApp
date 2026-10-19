@@ -291,9 +291,15 @@ Or just `docker compose up -d --build`.
   fingir que o trecho é a música inteira.
 - Um player por vez no app (mesmo cuidado do player de voz): abrir outro
   perfil, ou sair da tela, para a música anterior.
+- **Janela de reprodução** (`playWindowOnly`): quando o servidor NÃO tem
+  ffmpeg ele guarda a FAIXA INTEIRA e marca a flag; o app então começa em
+  `startMs` e para em `startMs + durationMs` (o ouvinte ouve o mesmo trecho).
+  Com ffmpeg o arquivo já É o trecho e a flag vem `false`. A barra de
+  progresso mede a JANELA, não o arquivo — senão pareceria quase vazia.
 - `test/features/profile_music_test.dart` trava o essencial: o botão à
   ESQUERDA do nome, a barra abaixo do `#id`, o teto de 1:00, o clamp do
-  início, e o estado do `AppState` ao definir/limpar.
+  início, a leitura de `playWindowOnly`, e o estado do `AppState` ao
+  definir/limpar.
 
 ## Architecture — Server
 The backend lives in the separate repo `Souzzaaxzy/ServidorMtx`. Key points
