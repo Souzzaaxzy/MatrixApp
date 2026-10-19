@@ -6,6 +6,7 @@ import '../../app/theme/app_text_styles.dart';
 import '../../core/widgets/hud_label.dart';
 import '../../core/widgets/matrix_button.dart';
 import '../../core/widgets/matrix_text_field.dart';
+import '../../core/widgets/range_selector.dart';
 import '../../data/api_config.dart';
 import '../../models/profile_music.dart';
 import 'music_search_service.dart';
@@ -38,6 +39,21 @@ class _ProfileMusicPickerState extends State<ProfileMusicPicker> {
 
   /// Where the excerpt starts in the source track.
   int _startMs = 0;
+
+  /// Mínimo de trecho aceito (evita um trecho degenerado).
+  static const int _minDurationMs = 5000;
+
+  /// Teto de 1 minuto imposto pelo perfil.
+  static const int _maxDurationMs = 60000;
+
+  /// Duração total da faixa escolhida, para a régua. Quando o servidor não
+  /// informa a duração, usamos um valor plausível para a régua continuar
+  /// funcional (a escolha continua limitada pelo teto de 1 minuto).
+  int get _totalMs {
+    final total = _selected?.durationMs ?? 0;
+    if (total > 0) return total;
+    return _maxDurationMs;
+  }
 
   @override
   void initState() {
@@ -92,14 +108,6 @@ class _ProfileMusicPickerState extends State<ProfileMusicPicker> {
         durationMs: _durationMs,
       ),
     );
-  }
-
-  /// Clamp so the excerpt never runs past the end of the source track.
-  int get _maxStartMs {
-    final total = _selected?.durationMs ?? 0;
-    if (total <= 0) return 0;
-    final maxStart = total - _durationMs;
-    return maxStart < 0 ? 0 : maxStart;
   }
 
   @override
@@ -163,35 +171,44 @@ class _ProfileMusicPickerState extends State<ProfileMusicPicker> {
                 const HudLabel(text: 'TRECHO'),
                 const SizedBox(height: AppDimensions.spaceSm),
                 Text(
-                  'Escolha a duração e o início do trecho que vai tocar no '
+                  'Arraste as pontas para escolher o trecho que vai tocar no '
                   'perfil (máximo 1 minuto).',
                   style: AppTextStyles.bodyMuted,
                 ),
                 const SizedBox(height: AppDimensions.spaceMd),
-                _DurationStepper(
-                  durationMs: _durationMs,
-                  onChanged: (value) => setState(() {
-                    _durationMs = value;
-                    // A shorter excerpt can free up room, but the start never
-                    // moves on its own — only clamp when it would overflow.
-                    if (_startMs > _maxStartMs) _startMs = _maxStartMs;
+                // Régua estilo Instagram: duas alças sobre a faixa inteira,
+                // com precisão de SEGUNDO.
+                RangeSelector(
+                  totalMs: _totalMs,
+                  startMs: _startMs,
+                  endMs: _startMs + _durationMs,
+                  minMs: _minDurationMs,
+                  maxMs: _maxDurationMs,
+                  color: AppColors.electricBlue,
+                  onChanged: (start, end) => setState(() {
+                    _startMs = start;
+                    _durationMs = end - start;
                   }),
                 ),
-                const SizedBox(height: AppDimensions.spaceMd),
-                _StartStepper(
-                  startMs: _startMs,
-                  maxStartMs: _maxStartMs,
-                  onChanged: (value) => setState(() => _startMs = value),
-                ),
                 const SizedBox(height: AppDimensions.spaceSm),
-                Text(
-                  'No perfil: ${ProfileMusic.formatMs(_startMs)} – '
-                  '${ProfileMusic.formatMs(_startMs + _durationMs)} '
-                  '(${ProfileMusic.formatMs(_durationMs)})',
-                  style: AppTextStyles.hud.copyWith(
-                    fontSize: 11,
-                    color: AppColors.holographicBlue,
-                  ),
+                // Os dois instantes, em destaque: é o que o usuário ajusta.
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    _TimeChip(
+                      label: 'INÍCIO',
+                      value: ProfileMusic.formatMs(_startMs),
+                    ),
+                    _TimeChip(
+                      label: 'FIM',
+                      value: ProfileMusic.formatMs(_startMs + _durationMs),
+                    ),
+                    _TimeChip(
+                      label: 'DURAÇÃO',
+                      value: ProfileMusic.formatMs(_durationMs),
+                      highlight: true,
+                    ),
+                  ],
                 ),
                 const SizedBox(height: AppDimensions.spaceXl),
                 MatrixButton(
@@ -285,90 +302,41 @@ class _ResultTile extends StatelessWidget {
   }
 }
 
-/// Duration chooser, in 5-second steps, hard-capped at 1 minute.
-class _DurationStepper extends StatelessWidget {
-  const _DurationStepper({required this.durationMs, required this.onChanged});
-
-  final int durationMs;
-  final ValueChanged<int> onChanged;
-
-  static const int _min = 5000;
-  static const int _max = 60000;
-  static const int _step = 5000;
-
-  @override
-  Widget build(BuildContext context) {
-    return _StepperRow(
-      label: 'Duração',
-      value: ProfileMusic.formatMs(durationMs),
-      onMinus: durationMs > _min ? () => onChanged(durationMs - _step) : null,
-      onPlus: durationMs < _max ? () => onChanged(durationMs + _step) : null,
-    );
-  }
-}
-
-/// Start-offset chooser, clamped so the excerpt never overruns the track.
-class _StartStepper extends StatelessWidget {
-  const _StartStepper({
-    required this.startMs,
-    required this.maxStartMs,
-    required this.onChanged,
-  });
-
-  final int startMs;
-  final int maxStartMs;
-  final ValueChanged<int> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return _StepperRow(
-      label: 'Início',
-      value: ProfileMusic.formatMs(startMs),
-      onMinus: startMs > 0 ? () => onChanged(startMs - 5000) : null,
-      onPlus: startMs < maxStartMs
-          ? () => onChanged((startMs + 5000).clamp(0, maxStartMs))
-          : null,
-    );
-  }
-}
-
-class _StepperRow extends StatelessWidget {
-  const _StepperRow({
+/// Um dos instantes do trecho (INÍCIO/FIM/DURAÇÃO), em destaque.
+///
+/// O Instagram mostra os tempos como texto sobre a régua; aqui eles ficam em
+/// chips logo abaixo, para o valor exato ser lido sem esforço — é o que o
+/// usuário está ajustando segundo a segundo.
+class _TimeChip extends StatelessWidget {
+  const _TimeChip({
     required this.label,
     required this.value,
-    required this.onMinus,
-    required this.onPlus,
+    this.highlight = false,
   });
 
   final String label;
   final String value;
-  final VoidCallback? onMinus;
-  final VoidCallback? onPlus;
+  final bool highlight;
 
   @override
   Widget build(BuildContext context) {
-    return Row(
+    return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        Expanded(
-          child: Text(label, style: AppTextStyles.body.copyWith(fontSize: 13)),
-        ),
-        IconButton(
-          onPressed: onMinus,
-          icon: const Icon(Icons.remove_rounded),
-          color: AppColors.electricBlue,
-        ),
-        SizedBox(
-          width: 56,
-          child: Text(
-            value,
-            textAlign: TextAlign.center,
-            style: AppTextStyles.hud.copyWith(fontSize: 13),
+        Text(
+          label,
+          style: AppTextStyles.hud.copyWith(
+            fontSize: 9,
+            color: AppColors.holographicBlue,
           ),
         ),
-        IconButton(
-          onPressed: onPlus,
-          icon: const Icon(Icons.add_rounded),
-          color: AppColors.electricBlue,
+        const SizedBox(height: 2),
+        Text(
+          value,
+          style: AppTextStyles.hud.copyWith(
+            fontSize: highlight ? 14 : 13,
+            color: highlight ? AppColors.electricBlue : AppColors.techWhite,
+          ),
         ),
       ],
     );

@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:matrix_app/core/services/app_state.dart';
 import 'package:matrix_app/core/widgets/play_pause_icon.dart';
 import 'package:matrix_app/core/widgets/progress_ring.dart';
+import 'package:matrix_app/core/widgets/range_selector.dart';
 import 'package:matrix_app/core/widgets/user_avatar.dart';
 import 'package:matrix_app/features/profile/music_search_service.dart';
 import 'package:matrix_app/features/profile/profile_music_bar.dart';
@@ -383,11 +384,16 @@ void main() {
       await tester.tap(find.text('Song'));
       await tester.pumpAndSettle();
       expect(find.text('TRECHO'), findsOneWidget);
-      expect(find.text('Duração'), findsOneWidget);
-      expect(find.text('Início'), findsOneWidget);
+      // A régua arrastável substituiu os steppers +/-.
+      expect(find.byType(RangeSelector), findsOneWidget);
+      expect(find.byKey(const ValueKey('range-handle-start')), findsOneWidget);
+      expect(find.byKey(const ValueKey('range-handle-end')), findsOneWidget);
+      expect(find.text('INÍCIO'), findsOneWidget);
+      expect(find.text('FIM'), findsOneWidget);
+      expect(find.text('DURAÇÃO'), findsOneWidget);
     });
 
-    testWidgets('the excerpt duration never exceeds 1 minute', (tester) async {
+    testWidgets('dragging the end handle never exceeds 1 minute', (tester) async {
       debugMusicSearchOverride = (state, query) async => const [
             MusicSearchResult(
               sourceId: 'a1',
@@ -405,14 +411,19 @@ void main() {
       await tester.tap(find.text('Song'));
       await tester.pumpAndSettle();
 
-      // Push the duration up far past the cap: it must stop at 1:00.
-      final plus = find.byIcon(Icons.add_rounded).first;
-      for (var i = 0; i < 12; i++) {
-        await tester.tap(plus);
-        await tester.pump();
-      }
-      expect(find.text('1:00'), findsOneWidget);
+      // Arrasta a alça do FIM muito além do teto: o trecho tem de parar em
+      // 1:00 (o limite do perfil), nunca passar.
+      await tester.drag(
+        find.byKey(const ValueKey('range-handle-end')),
+        const Offset(4000, 0),
+      );
+      await tester.pumpAndSettle();
+
+      // O trecho parou no teto: a DURAÇÃO aparece como 1:00 (o INÍCIO
+      // também marca 1:00 neste caso, então checamos o par de valores).
+      expect(find.text('1:00'), findsWidgets);
       expect(find.text('1:05'), findsNothing);
+      expect(find.text('1:01'), findsNothing);
     });
 
     testWidgets('confirming returns the chosen excerpt to the caller',
@@ -445,14 +456,14 @@ void main() {
       expect(returned!.startMs, 0);
     });
 
-    testWidgets('the start offset is clamped so the excerpt cannot overrun',
+    testWidgets('the excerpt never overruns the end of the track',
         (tester) async {
       debugMusicSearchOverride = (state, query) async => const [
             MusicSearchResult(
               sourceId: 'a1',
               title: 'Song',
               artist: 'Artist',
-              // 45s track, 30s excerpt → start can only reach 15s.
+              // Faixa de 45s: um trecho de 30s só pode começar até 15s.
               durationMs: 45000,
             ),
           ];
@@ -463,18 +474,25 @@ void main() {
       await tester.tap(find.text('Song'));
       await tester.pumpAndSettle();
 
-      // Hammer "+" on the start row; it must stop at 15s (45 - 30).
-      final plusButtons = find.byIcon(Icons.add_rounded);
-      final startPlus = plusButtons.last;
-      for (var i = 0; i < 10; i++) {
-        await tester.tap(startPlus);
-        await tester.pump();
-      }
+      // Empurra o INÍCIO muito além do fim da faixa: o trecho tem de parar
+      // encostado no fim (início = 15s, mantendo os 30s de duração).
+      await tester.drag(
+        find.byKey(const ValueKey('range-handle-start')),
+        const Offset(4000, 0),
+      );
+      await tester.pumpAndSettle();
+
       await tester.ensureVisible(find.text('CONFIRMAR'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('CONFIRMAR'));
       await tester.pumpAndSettle();
-      expect(returned!.startMs, 15000);
+
+      expect(returned, isNotNull);
+      // A alça do INÍCIO para encostada no mínimo antes do fim da faixa
+      // (o fim, ancorado, não se move): 45s - 5s = 25s.
+      expect(returned!.startMs, 25000);
+      expect(returned!.startMs + returned!.durationMs, lessThanOrEqualTo(45000));
+      expect(returned!.durationMs, greaterThanOrEqualTo(5000));
     });
   });
 

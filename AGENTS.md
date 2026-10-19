@@ -289,8 +289,20 @@ Or just `docker compose up -d --build`.
 - **Escolher a música:** `features/profile/profile_music_picker.dart`, aberto
   por "ESCOLHER MÚSICA"/"TROCAR MÚSICA" no editar perfil. Fluxo: buscar →
   até 3 opções (música + autor, já sem títulos de vídeo — o servidor limpa)
-  → escolher o TRECHO (duração em passos de 5s, máx. 1:00; início travado
-  para o trecho não passar do fim da faixa) → CONFIRMAR.
+  → escolher o TRECHO → CONFIRMAR.
+- **Seleção do trecho = régua estilo Instagram** (`core/widgets/range_selector.dart`,
+  `RangeSelector`): duas alças arrastáveis sobre a faixa inteira, com precisão
+  de **SEGUNDO** (não passos de 5s). Abaixo, chips com INÍCIO / FIM / DURAÇÃO.
+  A REGRA fica em `normalizeRange` (função pura, testada sem widget):
+  * a alça ARRASTADA é fixada na faixa PRIMEIRO — é isso que impede o gesto de
+    **ampliar** a janela (arrastar o início para antes de zero encostava em
+    zero, mas a regra do teto rodava com o valor fora da faixa e esticava o
+    trecho de 30s para 60s);
+  * mínimo (5s) e teto (1 min) fazem a alça arrastada **PARAR** no limite, com
+    a oposta ancorada — deixar a janela "seguir" o dedo moveria o início que o
+    usuário escolheu (ex.: o refrão em 1:12) sem aviso;
+  * a janela nunca sai da faixa nem fica com `start >= end` (inclusive numa
+    faixa mais curta que o mínimo).
 - O picker NÃO salva: devolve `PendingProfileMusic` e quem salva é o
   `edit_profile_screen` (`AppState.setProfileMusic`). O download do trecho
   acontece no SERVIDOR só na confirmação, então explorar as opções é barato.
