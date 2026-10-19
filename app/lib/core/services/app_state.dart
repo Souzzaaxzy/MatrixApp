@@ -694,23 +694,10 @@ class AppState extends ChangeNotifier {
     final groups = _storyGroups.map((g) {
       final updated = g.stories
           .map((s) => s.id == storyId && !s.viewed
-              ? Story(
-                  id: s.id,
-                  authorId: s.authorId,
-                  authorNickname: s.authorNickname,
-                  authorAvatarUrl: s.authorAvatarUrl,
-                  authorNicknameColor: s.authorNicknameColor,
-                  authorFrameId: s.authorFrameId,
-                  authorFrameAsset: s.authorFrameAsset,
-                  mediaUrl: s.mediaUrl,
-                  mediaType: s.mediaType,
-                  thumbnailUrl: s.thumbnailUrl,
-                  caption: s.caption,
-                  createdAt: s.createdAt,
-                  expiresAt: s.expiresAt,
-                  viewed: true,
-                  mine: s.mine,
-                )
+              // copyWith (not a hand-written Story(...)) — a manual rebuild
+              // used to forget `type`/`text`, turning a TEXT story into an
+              // empty IMAGE (the broken-picture bug).
+              ? s.copyWith(viewed: true)
               : s)
           .toList();
       if (updated.any((s) => s.id == storyId)) changed = true;
@@ -990,6 +977,9 @@ class AppState extends ChangeNotifier {
           // Resolver so a banner REMOVED elsewhere also clears locally
           // (a plain nullable copyWith would keep the stale value).
           bannerUrl: () => result.user.bannerUrl,
+          // The public `#id` comes from the server and is authoritative.
+          publicId: () => result.user.publicId,
+          publicIdLabel: () => result.user.publicIdLabel,
         );
       }
     } finally {
@@ -1612,30 +1602,10 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  /// A copy of [story] with the like fields replaced (Stories have no
-  /// copyWith — this keeps the model immutable and the update explicit).
+  /// A copy of [story] with the like fields replaced. Uses the model's
+  /// [Story.copyWith] so no other field can be silently dropped.
   Story _copyStory(Story story, {required bool liked, required int likeCount}) =>
-      Story(
-        id: story.id,
-        authorId: story.authorId,
-        authorNickname: story.authorNickname,
-        authorAvatarUrl: story.authorAvatarUrl,
-        authorNicknameColor: story.authorNicknameColor,
-        authorFrameId: story.authorFrameId,
-        authorFrameAsset: story.authorFrameAsset,
-        mediaUrl: story.mediaUrl,
-        mediaType: story.mediaType,
-        type: story.type,
-        text: story.text,
-        thumbnailUrl: story.thumbnailUrl,
-        caption: story.caption,
-        createdAt: story.createdAt,
-        expiresAt: story.expiresAt,
-        viewed: story.viewed,
-        mine: story.mine,
-        liked: liked,
-        likeCount: likeCount,
-      );
+      story.copyWith(liked: liked, likeCount: likeCount);
 
   /// Whether [stickerId] currently appears in the session user's recents.
   /// Drives the contextual "Remover das recentes" action in the picker.

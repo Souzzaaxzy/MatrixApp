@@ -39,6 +39,8 @@ class AuthUserDto {
   final String nickname;
   final String? avatarUrl;
   final String? bannerUrl;
+  final int? publicId;
+  final String? publicIdLabel;
   final String bio;
 
   const AuthUserDto({
@@ -46,6 +48,8 @@ class AuthUserDto {
     required this.nickname,
     this.avatarUrl,
     this.bannerUrl,
+    this.publicId,
+    this.publicIdLabel,
     required this.bio,
   });
 
@@ -55,6 +59,8 @@ class AuthUserDto {
         bio: bio,
         avatarUrl: avatarUrl,
         bannerUrl: bannerUrl,
+        publicId: publicId,
+        publicIdLabel: publicIdLabel,
       );
 
   factory AuthUserDto.fromJson(Map<String, dynamic> json) => AuthUserDto(
@@ -62,6 +68,8 @@ class AuthUserDto {
         nickname: json['nickname'] as String,
         avatarUrl: json['avatarUrl'] as String?,
         bannerUrl: json['bannerUrl'] as String?,
+        publicId: (json['publicId'] as num?)?.toInt(),
+        publicIdLabel: json['publicIdLabel'] as String?,
         bio: (json['bio'] as String?) ?? '',
       );
 }
@@ -214,6 +222,8 @@ class PublicUserDto {
   final String nickname;
   final String? avatarUrl;
   final String? bannerUrl;
+  final int? publicId;
+  final String? publicIdLabel;
   final String bio;
   final int friendsCount;
   final int postsCount;
@@ -227,6 +237,8 @@ class PublicUserDto {
     required this.nickname,
     this.avatarUrl,
     this.bannerUrl,
+    this.publicId,
+    this.publicIdLabel,
     required this.bio,
     this.friendsCount = 0,
     this.postsCount = 0,
@@ -242,6 +254,8 @@ class PublicUserDto {
         bio: bio,
         avatarUrl: avatarUrl,
         bannerUrl: bannerUrl,
+        publicId: publicId,
+        publicIdLabel: publicIdLabel,
         friendsCount: friendsCount,
         postsCount: postsCount,
         customization: customization,
@@ -255,6 +269,8 @@ class PublicUserDto {
         nickname: json['nickname'] as String,
         avatarUrl: json['avatarUrl'] as String?,
         bannerUrl: json['bannerUrl'] as String?,
+        publicId: (json['publicId'] as num?)?.toInt(),
+        publicIdLabel: json['publicIdLabel'] as String?,
         bio: (json['bio'] as String?) ?? '',
         friendsCount: (json['friendsCount'] as num?)?.toInt() ?? 0,
         postsCount: (json['postsCount'] as num?)?.toInt() ?? 0,

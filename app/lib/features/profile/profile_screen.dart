@@ -373,6 +373,10 @@ class _ProfileHeader extends StatelessWidget {
   /// Outer box of the avatar (the FramedAvatar frame is drawn inside it).
   /// The photo itself is [_avatarSize].
   static const double _avatarBox = 108;
+
+  /// Extra height the strip needs when the small `#id` line is rendered
+  /// under the nickname (it must not be clipped by the Stack).
+  static const double _publicIdExtra = 16;
   static const double _avatarSize = 96;
 
   @override
@@ -430,7 +434,12 @@ class _ProfileHeader extends StatelessWidget {
         // row) so it sits beside the photo's lower half — in the strip that
         // the avatar straddles — instead of being pushed below the photo.
         SizedBox(
-          height: _bannerHeight + _avatarBox / 2,
+          // The strip below the banner must fit the avatar's lower half AND
+          // the nickname + the small `#id` that sit beside it — hence the
+          // extra room when the id is present.
+          height: _bannerHeight +
+              _avatarBox / 2 +
+              (user.publicIdText != null ? _publicIdExtra : 0),
           child: Stack(
             children: [
               Positioned(
@@ -446,17 +455,37 @@ class _ProfileHeader extends StatelessWidget {
                 top: _bannerHeight - (_avatarBox / 2),
                 child: tappableAvatar,
               ),
-              // Right of the photo, vertically aligned with its lower half.
+              // Right of the photo, vertically aligned with its lower half:
+              // the nickname, with the small public `#id` right below it.
               Positioned(
                 left: AppDimensions.spaceXl + _avatarBox + AppDimensions.spaceLg,
                 right: AppDimensions.spaceXl,
                 top: _bannerHeight + AppDimensions.spaceSm,
-                child: NicknameRenderer(
-                  user.nickname,
-                  baseStyle: AppTextStyles.h2.copyWith(fontSize: 22),
-                  background: AppColors.absoluteBlack,
-                  nameColor: user.nameColor,
-                  textAlign: TextAlign.start,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    NicknameRenderer(
+                      user.nickname,
+                      baseStyle: AppTextStyles.h2.copyWith(fontSize: 22),
+                      background: AppColors.absoluteBlack,
+                      nameColor: user.nameColor,
+                      textAlign: TextAlign.start,
+                    ),
+                    // The public `#id`, deliberately much smaller than the
+                    // nickname — an identifier, not a second title.
+                    if (user.publicIdText != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Text(
+                          user.publicIdText!,
+                          style: AppTextStyles.hud.copyWith(
+                            fontSize: 11,
+                            color: AppColors.holographicBlue,
+                          ),
+                        ),
+                      ),
+                  ],
                 ),
               ),
             ],

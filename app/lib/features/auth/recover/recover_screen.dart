@@ -117,11 +117,12 @@ class _RecoverScreenState extends State<RecoverScreen> {
           FadeSlideTransition(
             delay: const Duration(milliseconds: 120),
             child: MatrixTextField(
-              label: 'Nickname',
-              hint: 'user',
+              label: 'Nickname ou #id',
+              hint: 'user ou #00000001',
               controller: _identifierController,
               textInputAction: TextInputAction.next,
-              validator: (v) => Validators.required(v, label: 'Informe seu nickname'),
+              validator: (v) =>
+                  Validators.required(v, label: 'Informe seu usuário ou #id'),
               prefix: Icon(Icons.person_outline_rounded,
                   color: AppColors.holographicBlue, size: 20),
             ),

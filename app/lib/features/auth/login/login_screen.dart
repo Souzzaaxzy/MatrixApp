@@ -107,12 +107,12 @@ class _LoginScreenState extends State<LoginScreen> {
                 FadeSlideTransition(
                   delay: const Duration(milliseconds: 250),
                   child: MatrixTextField(
-                    label: 'Nickname',
-                    hint: 'user',
+                    label: 'Nickname ou #id',
+                    hint: 'user ou #00000001',
                     controller: _nicknameController,
                     keyboardType: TextInputType.text,
                     textInputAction: TextInputAction.next,
-                    validator: Validators.nickname,
+                    validator: Validators.loginIdentifier,
                     prefix: Icon(Icons.person_outline_rounded,
                         color: AppColors.holographicBlue, size: 20),
                   ),

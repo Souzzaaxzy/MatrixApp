@@ -153,6 +153,8 @@ class FakeStore {
         nickname: 'leonardo',
         bio: 'Construindo o futuro. ⚡',
         avatarSeed: 'leonardo',
+        publicId: 1,
+        publicIdLabel: '#00000001',
       ),
       // A second full user — needed for search/profile/friendship tests.
       'u2': MatrixUser(
@@ -163,6 +165,8 @@ class FakeStore {
         // Has a banner so tests can assert the cover renders for a viewed
         // profile (u0 deliberately has none → default gradient).
         bannerUrl: '/static/banner-joao.png',
+        publicId: 2,
+        publicIdLabel: '#00000002',
       ),
       // A third full user — needed for multi-mention / independence tests.
       'u3': MatrixUser(

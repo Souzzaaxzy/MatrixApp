@@ -10,7 +10,7 @@ void main() {
     await pumpMatrixApp(tester, const SearchScreen());
 
     expect(find.text('MATRIX SEARCH'), findsOneWidget);
-    expect(find.text('Pesquisar usuários...'), findsOneWidget);
+    expect(find.text('Pesquisar por nickname ou #id...'), findsOneWidget);
   });
 
   testWidgets('filters users by nickname', (tester) async {

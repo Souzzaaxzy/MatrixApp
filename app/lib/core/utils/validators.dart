@@ -48,6 +48,23 @@ class Validators {
     return false;
   }
 
+  /// Login identifier: the nickname OR the public `#id` (`#00000001`).
+  ///
+  /// An id is only digits (optionally prefixed with `#`), so it is validated
+  /// separately — the nickname rules (min 3 chars, no `#`) would reject it.
+  static String? loginIdentifier(String? value) {
+    final raw = (value ?? '').trim();
+    if (raw.isEmpty) return 'Informe seu usuário ou #id';
+    final idCandidate = raw.startsWith('#') ? raw.substring(1) : raw;
+    if (RegExp(r'^\d{1,9}$').hasMatch(idCandidate)) {
+      // It is an id — nothing else to validate here (the server checks it
+      // exists, and a wrong one just fails authentication).
+      return null;
+    }
+    // Not an id → it must be a valid nickname.
+    return nickname(raw.replaceAll(RegExp(r'^@+'), ''));
+  }
+
   /// The nickname is the single visual identity. Any leading '@' the user
   /// may type is tolerated and normalized away by the server (storage is
   /// canonical, display preserves exactly what the user typed).

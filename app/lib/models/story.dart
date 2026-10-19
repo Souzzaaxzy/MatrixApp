@@ -81,6 +81,56 @@ class Story {
   /// Whether the SESSION user liked this story (same semantics as the feed).
   final bool liked;
   final int likeCount;
+
+  /// Copies this story with a few fields replaced.
+  ///
+  /// Exists because rebuilding a [Story] field-by-field is error-prone: a
+  /// forgotten field silently degrades the story (a TEXT story rebuilt without
+  /// `type`/`text` renders as an empty IMAGE — the "broken picture" bug).
+  /// Always prefer this over hand-written constructors.
+  Story copyWith({
+    String? id,
+    String? authorId,
+    String? authorNickname,
+    String? authorAvatarUrl,
+    String? authorNicknameColor,
+    String? authorFrameId,
+    String? authorFrameAsset,
+    String? type,
+    String? text,
+    String? mediaType,
+    String? caption,
+    DateTime? createdAt,
+    DateTime? expiresAt,
+    bool? viewed,
+    bool? mine,
+    bool? liked,
+    int? likeCount,
+    // Nullable resolvers so these can be explicitly CLEARED too.
+    String? Function()? mediaUrl,
+    String? Function()? thumbnailUrl,
+  }) =>
+      Story(
+        id: id ?? this.id,
+        authorId: authorId ?? this.authorId,
+        authorNickname: authorNickname ?? this.authorNickname,
+        authorAvatarUrl: authorAvatarUrl ?? this.authorAvatarUrl,
+        authorNicknameColor: authorNicknameColor ?? this.authorNicknameColor,
+        authorFrameId: authorFrameId ?? this.authorFrameId,
+        authorFrameAsset: authorFrameAsset ?? this.authorFrameAsset,
+        type: type ?? this.type,
+        text: text ?? this.text,
+        mediaType: mediaType ?? this.mediaType,
+        mediaUrl: mediaUrl != null ? mediaUrl() : this.mediaUrl,
+        thumbnailUrl: thumbnailUrl != null ? thumbnailUrl() : this.thumbnailUrl,
+        caption: caption ?? this.caption,
+        createdAt: createdAt ?? this.createdAt,
+        expiresAt: expiresAt ?? this.expiresAt,
+        viewed: viewed ?? this.viewed,
+        mine: mine ?? this.mine,
+        liked: liked ?? this.liked,
+        likeCount: likeCount ?? this.likeCount,
+      );
 }
 
 /// Active stories of ONE author, as the horizontal header consumes them.

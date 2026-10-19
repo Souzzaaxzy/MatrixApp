@@ -202,7 +202,7 @@ class _SearchScreenState extends State<SearchScreen> {
                 AppDimensions.spaceLg,
               ),
               child: MatrixTextField(
-                hint: 'Pesquisar usuários...',
+                hint: 'Pesquisar por nickname ou #id...',
                 controller: _controller,
                 prefix: Icon(Icons.search_rounded,
                     color: AppColors.holographicBlue, size: 20),
