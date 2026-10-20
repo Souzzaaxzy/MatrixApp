@@ -316,6 +316,21 @@ Or just `docker compose up -d --build`.
   `startMs` e para em `startMs + durationMs` (o ouvinte ouve o mesmo trecho).
   Com ffmpeg o arquivo já É o trecho e a flag vem `false`. A barra de
   progresso mede a JANELA, não o arquivo — senão pareceria quase vazia.
+- **Ciclo de reprodução**: apertar play roda, apertar pause **volta ao
+  começo**, e play de novo recomeça (`stopAndReset()`). Não é "retomar de onde
+  parou". O mesmo vale para a prévia.
+- **A música só existe na aba de perfil**: o app usa `IndexedStack`, que
+  mantém as abas VIVAS (`Visibility.maintain` → `maintainAnimation: true`), ou
+  seja, o `dispose` NÃO roda ao trocar de aba e o áudio continuaria tocando. O
+  `HomeScreen` passa `ProfileScreen(active: _index == 4)` e a tela chama
+  `stopAndReset()` via `GlobalKey<ProfileMusicBarState>` quando perde a
+  visibilidade. Uma tela EMPURRADA (nickname != null) não usa isso: ela vive
+  numa rota própria e o dispose já para o áudio.
+- **Prévia ao escolher o trecho** (`features/profile/music_preview_player.dart`):
+  ouve a janela escolhida antes de confirmar. O servidor entrega a faixa
+  inteira (baixada uma vez, em cache) e o app usa `setClip(start, end)` — o
+  recorte é aplicado a cada play, então arrastar as alças não baixa de novo.
+  A URL vem de `MusicRepository.previewUrl(sourceId)`.
 - `test/features/profile_music_test.dart` trava o essencial: o botão à
   ESQUERDA do nome, a barra abaixo do `#id`, o teto de 1:00, o clamp do
   início, a leitura de `playWindowOnly`, e o estado do `AppState` ao

@@ -1,6 +1,7 @@
 import '../../models/profile_music.dart';
 import '../api_client.dart';
 import '../api_config.dart';
+import '../services.dart';
 
 /// Music repository — profile song search, selection and removal.
 ///
@@ -58,5 +59,25 @@ class MusicRepository {
   /// Removes the pinned song from the profile.
   Future<void> clear() async {
     await _api.delete('/api/music/profile');
+  }
+
+  /// URL do áudio de prévia de uma faixa (a faixa inteira, servida pelo
+  /// /static). O servidor baixa e mantém em cache; o app recorta a janela
+  /// com `setClip`. É `static` porque o player de prévia precisa dela sem
+  /// passar por uma instância de repositório.
+  static Future<String> previewUrl(String sourceId) async {
+    final api = Services.instance.apiClient;
+    final json = await api.get<Map<String, dynamic>>(
+      '/api/music/profile/preview',
+      queryParameters: {'sourceId': sourceId},
+    );
+    final url = json['url'];
+    if (url is! String || url.isEmpty) {
+      throw const ApiException(
+        statusCode: 500,
+        message: 'Prévia indisponível.',
+      );
+    }
+    return url;
   }
 }

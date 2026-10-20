@@ -36,9 +36,19 @@ import 'settings_sheet.dart';
 /// NEVER the friendship button. Another user's profile shows the big
 /// Seguir / Solicitado / Amigos friendship button (server-managed state).
 class ProfileScreen extends StatefulWidget {
-  const ProfileScreen({super.key, this.nickname});
+  const ProfileScreen({super.key, this.nickname, this.active = true});
 
   final String? nickname;
+
+  /// A aba de perfil está VISÍVEL? O app usa `IndexedStack`, que mantém as
+  /// abas vivas (`Visibility.maintain` → `maintainAnimation: true`), então a
+  /// música continuaria tocando ao trocar de aba. O `HomeScreen` informa a
+  /// visibilidade e a tela PARA a música quando ela sai de vista — que é o
+  /// pedido: "a música só fica na aba de perfil; se sair, ela para e reseta".
+  ///
+  /// Uma tela EMPURRADA (nickname != null) não passa por isso: ela vive numa
+  /// rota própria e o dispose já cuida do áudio.
+  final bool active;
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
@@ -47,6 +57,20 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   bool _requested = false;
   String? _error;
+
+  /// Acesso ao player da música do perfil para pará-lo quando a aba sai de
+  /// vista (o `IndexedStack` mantém a tela viva, então o dispose NÃO roda).
+  final GlobalKey<ProfileMusicBarState> _musicKey =
+      GlobalKey<ProfileMusicBarState>();
+
+  @override
+  void didUpdateWidget(covariant ProfileScreen old) {
+    super.didUpdateWidget(old);
+    // A aba deixou de estar visível → para a música e volta ao início.
+    if (old.active && !widget.active) {
+      _musicKey.currentState?.stopAndReset();
+    }
+  }
 
   /// The real user id this screen is presenting (once loaded). Used to
   /// register/un-register the profile in the navigation stack and to guard
@@ -227,6 +251,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   onEdit: _openEditProfile,
                   onFriendsTap: () => FriendsSheet.open(context, user),
                   onMessage: () => openChatWithUser(context, user),
+                  musicKey: _musicKey,
                 ),
               ),
               SliverToBoxAdapter(
@@ -348,7 +373,12 @@ class _ProfileHeader extends StatelessWidget {
     required this.onMessage,
     required this.hasUnseenStory,
     required this.onOpenStory,
+    this.musicKey,
   });
+
+  /// Key do player da música, para a TELA conseguir pará-lo quando a aba sai
+  /// de vista (o IndexedStack mantém a tela viva, então o dispose não roda).
+  final GlobalKey<ProfileMusicBarState>? musicKey;
 
   final MatrixUser user;
   final bool isOwn;
@@ -501,7 +531,7 @@ class _ProfileHeader extends StatelessWidget {
               AppDimensions.spaceXl,
               0,
             ),
-            child: ProfileMusicBar(music: user.music!),
+            child: ProfileMusicBar(key: musicKey, music: user.music!),
           ),
         // Below the photo AND the nickname: the bio.
         if (user.bio.isNotEmpty)

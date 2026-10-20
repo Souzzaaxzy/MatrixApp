@@ -300,6 +300,50 @@ void main() {
       expect(button.center.dy, closeTo(name.center.dy, 24));
     });
 
+    testWidgets('pausing resets to the start (play → pause → play restarts)',
+        (tester) async {
+      // O pedido: apertar play roda, apertar pause VOLTA AO COMEÇO, e play de
+      // novo recomeça — um ciclo, não um "retomar de onde parou".
+      final key = GlobalKey<ProfileMusicBarState>();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(body: ProfileMusicBar(key: key, music: music)),
+        ),
+      );
+      await tester.pump();
+
+      // Sem áudio carregável no teste, o estado interno é o que dá para
+      // verificar de forma determinística: stopAndReset() é o que o botão
+      // chama ao pausar, e ele zera a posição e o estado de reprodução.
+      final state = key.currentState!;
+      await state.stopAndReset();
+      await tester.pump();
+      expect(state.debugPlaying, isFalse);
+      expect(state.debugPosition, Duration.zero);
+
+      // Chamar de novo é idempotente (o ciclo pode repetir à vontade).
+      await state.stopAndReset();
+      await tester.pump();
+      expect(state.debugPlaying, isFalse);
+      expect(state.debugPosition, Duration.zero);
+    });
+
+    testWidgets('stopAndReset is safe before any audio was loaded',
+        (tester) async {
+      // O botão de pausa pode ser acionado antes do player existir (ex.: o
+      // usuário toca duas vezes rápido) — não pode lançar.
+      final key = GlobalKey<ProfileMusicBarState>();
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(body: ProfileMusicBar(key: key, music: music)),
+        ),
+      );
+      await tester.pump();
+      await key.currentState!.stopAndReset();
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('tapping play does not throw when the audio cannot load',
         (tester) async {
       await tester.pumpWidget(

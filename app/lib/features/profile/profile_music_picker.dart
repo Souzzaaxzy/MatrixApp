@@ -9,6 +9,7 @@ import '../../core/widgets/matrix_text_field.dart';
 import '../../core/widgets/range_selector.dart';
 import '../../data/api_config.dart';
 import '../../models/profile_music.dart';
+import 'music_preview_player.dart';
 import 'music_search_service.dart';
 
 /// Tela de escolher a música do perfil.
@@ -191,6 +192,29 @@ class _ProfileMusicPickerState extends State<ProfileMusicPicker> {
                   }),
                 ),
                 const SizedBox(height: AppDimensions.spaceSm),
+                // Ouvir o trecho ANTES de confirmar: sem isto a escolha era no
+                // escuro. O player recorta a janela atual (setClip), então
+                // arrastar a alça e apertar play de novo ouve a nova seleção.
+                Row(
+                  children: [
+                    MusicPreviewPlayer(
+                      sourceId: _selected!.sourceId,
+                      startMs: _startMs,
+                      durationMs: _durationMs,
+                    ),
+                    const SizedBox(width: AppDimensions.spaceSm),
+                    Expanded(
+                      child: Text(
+                        'Ouça o trecho antes de confirmar',
+                        style: AppTextStyles.hud.copyWith(
+                          fontSize: 10,
+                          color: AppColors.holographicBlue,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: AppDimensions.spaceMd),
                 // Os dois instantes, em destaque: é o que o usuário ajusta.
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,

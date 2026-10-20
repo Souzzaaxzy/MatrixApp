@@ -28,10 +28,12 @@ class ProfileMusicBar extends StatefulWidget {
   final ProfileMusic music;
 
   @override
-  State<ProfileMusicBar> createState() => _ProfileMusicBarState();
+  State<ProfileMusicBar> createState() => ProfileMusicBarState();
 }
 
-class _ProfileMusicBarState extends State<ProfileMusicBar> {
+/// Público para a tela poder parar a música quando a aba sai de vista
+/// (o IndexedStack mantém a tela viva, então o dispose não roda).
+class ProfileMusicBarState extends State<ProfileMusicBar> {
   AudioPlayer? _player;
   StreamSubscription<Duration>? _posSub;
   StreamSubscription<PlayerState>? _stateSub;
@@ -73,10 +75,10 @@ class _ProfileMusicBarState extends State<ProfileMusicBar> {
   }
 
   @override
-  void didUpdateWidget(covariant ProfileMusicBar old) {
-    super.didUpdateWidget(old);
+  void didUpdateWidget(covariant ProfileMusicBar oldWidget) {
+    super.didUpdateWidget(oldWidget);
     // Trocou a música → o player antigo não representa mais esta barra.
-    if (old.music.audioUrl != widget.music.audioUrl) {
+    if (oldWidget.music.audioUrl != widget.music.audioUrl) {
       _teardown();
       _position = Duration.zero;
     }
@@ -142,12 +144,42 @@ class _ProfileMusicBarState extends State<ProfileMusicBar> {
     });
   }
 
+  /// Para o áudio e volta ao INÍCIO da janela.
+  ///
+  /// Usado pelo próprio botão (pausar = resetar) e pela tela quando a aba de
+  /// perfil sai de vista: sair da aba para a música, como o usuário pediu.
+  Future<void> stopAndReset() async {
+    final player = _player;
+    if (player != null) {
+      await player.pause().catchError((_) {});
+      await player.seek(_windowStart).catchError((_) {});
+    }
+    if (!mounted) return;
+    setState(() {
+      _position = _windowStart;
+      _playing = false;
+    });
+  }
+
+  /// Estado de reprodução, para os testes (o áudio real não carrega num teste
+  /// de widget, então a asserção é sobre o estado que o botão controla).
+  bool get debugPlaying => _playing;
+
+  /// Posição atual, para os testes.
+  Duration get debugPosition => _position;
+
+  /// Início da janela tocada, para os testes.
+  Duration get debugWindowStart => _windowStart;
+
   Future<void> _toggle() async {
     final url = ApiConfig.resolveUrl(widget.music.audioUrl);
     if (url.isEmpty) return;
 
+    // PAUSAR = RESETAR. O pedido: apertar play roda, apertar pause volta para
+    // o começo, apertar play de novo recomeça do início — um ciclo. Não é um
+    // "retomar de onde parou".
     if (_playing) {
-      await _player?.pause();
+      await stopAndReset();
       return;
     }
 

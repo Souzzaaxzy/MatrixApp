@@ -158,12 +158,15 @@ class _HomeScreenState extends State<HomeScreen> {
     // Non-const on purpose: identical const instances are skipped by the
     // element tree on rebuild, which would freeze the previous theme's
     // colors on these tabs (AppColors resolves at build time).
+    // O `active` diz à aba de perfil se ela está VISÍVEL: o IndexedStack
+    // mantém as abas vivas, então a música do perfil precisa ser parada
+    // explicitamente ao sair (senão continuaria tocando em outra aba).
     final pages = <Widget>[
-      FeedScreen(),
+      const FeedScreen(),
       ChatScreen(onOpenAkame: _openAkame),
-      SearchScreen(),
-      NotificationsScreen(),
-      ProfileScreen(),
+      const SearchScreen(),
+      const NotificationsScreen(),
+      ProfileScreen(active: _index == 4),
     ];
 
     return PopScope(
