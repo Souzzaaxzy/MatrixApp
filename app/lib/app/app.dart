@@ -235,10 +235,6 @@ class _MatrixAppState extends State<MatrixApp> {
           id: (rawPeer['id'] as String?) ?? message.senderId,
           nickname: (rawPeer['nickname'] as String?) ?? 'desconhecido',
           avatarUrl: rawPeer['avatarUrl'] as String?,
-          nameColor: rawPeer['nameColor'] as String?,
-          frameId: (rawPeer['frameId'] as String?) ??
-              (rawPeer['frameAsset'] as String?),
-          frameAsset: rawPeer['frameAsset'] as String?,
         );
       }
       state.handleIncomingChatMessage(message, peer: peer);

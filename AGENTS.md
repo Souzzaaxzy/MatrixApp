@@ -336,6 +336,26 @@ Or just `docker compose up -d --build`.
   início, a leitura de `playWindowOnly`, e o estado do `AppState` ao
   definir/limpar.
 
+## Personalização (REMOVIDA) + GIF no avatar/banner
+- O sistema de PERSONALIZAÇÃO foi REMOVIDO do app: a tela
+  `features/customizations/`, os widgets `FramedAvatar`/`NicknameRenderer`/
+  `CosmeticBadge`, o modelo `CosmeticItem`, `frame_assets.dart`,
+  `name_colors.dart`, o `CustomizationRepository` e os campos
+  `customization`/`nameColor`/`frameId`/`frameAsset` de TODOS os modelos e
+  DTOs. A entrada "Personalizações" saiu do menu de configurações e a rota
+  `AppRoutes.customizations` não existe mais.
+- Avatar e banner agora são `UserAvatar` direto (sem moldura) e o nickname é
+  `Text` simples. Cuidado ao trocar `NicknameRenderer` por `Text`: manter
+  `maxLines: 1` + ellipsis, senão um nickname longo quebra linha e ESTOURA a
+  altura da faixa de Stories (regressão real, pega por teste).
+- **GIF no avatar e no banner**: `pickGalleryImage` escolhe o arquivo SEM
+  reencode primeiro (para detectar o tipo) e, quando é GIF, **para aí** — o
+  `image_picker` RECODIFICA ao receber `imageQuality`/dimensão, e recodificar
+  um GIF animado o transforma num quadro estático. Fotos seguem pelo caminho
+  de compressão. `isSupportedImagePath`/`isGifPath` em
+  `core/utils/gallery_picker.dart`. A exibição usa `CachedNetworkImage`, que
+  anima GIF; vídeo continua fora (o servidor rejeita).
+
 ## Architecture — Server
 The backend lives in the separate repo `Souzzaaxzy/ServidorMtx`. Key points
 for reference when working on the app's data layer:

@@ -6,10 +6,8 @@ import '../../app/theme/app_text_styles.dart';
 import '../../core/services/app_state.dart';
 import '../../core/utils/profile_navigation.dart';
 import '../../core/widgets/app_state_scope.dart';
-import '../../core/widgets/framed_avatar.dart';
 import '../../core/widgets/hud_label.dart';
 import '../../core/widgets/theme_watcher.dart';
-import '../../core/widgets/nickname_renderer.dart';
 import '../../core/widgets/user_avatar.dart';
 import '../../data/api_config.dart';
 import '../../models/matrix_user.dart';
@@ -246,10 +244,7 @@ class _FriendsSheetState extends State<FriendsSheet> {
             horizontal: AppDimensions.spaceLg,
             vertical: 2,
           ),
-          leading: FramedAvatar(
-            frame: friend.frame,
-            size: 44,
-            child: UserAvatar(
+          leading: UserAvatar(
               name: friend.nickname,
               seed: friend.avatarSeed ?? friend.nickname,
               imageUrl: friend.avatarUrl == null
@@ -257,13 +252,7 @@ class _FriendsSheetState extends State<FriendsSheet> {
                   : ApiConfig.resolveUrl(friend.avatarUrl!),
               size: 37,
             ),
-          ),
-          title: NicknameRenderer(
-            friend.nickname,
-            baseStyle: AppTextStyles.body,
-            background: AppColors.nightBlue,
-            nameColor: friend.nameColor,
-          ),
+          title: Text(friend.nickname, style: AppTextStyles.body),
           trailing: Icon(
             Icons.chevron_right_rounded,
             color: AppColors.holographicBlue,

@@ -8,14 +8,11 @@ import '../../app/theme/app_text_styles.dart';
 import '../../core/services/app_state.dart';
 import '../../core/utils/date_utils.dart';
 import '../../core/utils/profile_navigation.dart';
-import '../../core/widgets/nickname_renderer.dart';
 import '../../core/widgets/app_state_scope.dart';
 import '../../core/widgets/hud_label.dart';
-import '../../core/widgets/framed_avatar.dart';
 import '../../core/widgets/theme_watcher.dart';
 import '../../core/widgets/user_avatar.dart';
 import '../../models/comment.dart';
-import '../../models/cosmetic_item.dart';
 import '../../models/post.dart';
 
 /// Number of replies rendered under a comment before the collapsible
@@ -761,22 +758,11 @@ class _CommentRow extends StatelessWidget {
               nickname: comment.authorNickname,
             ),
             behavior: HitTestBehavior.opaque,
-            child: FramedAvatar(
-              frame: comment.authorFrameId == null
-                  ? null
-                  : CosmeticItem(
-                      id: comment.authorFrameId!,
-                      slot: CosmeticItem.avatarFrame,
-                      name: comment.authorFrameId!,
-                      assetUrl: comment.authorFrameAsset ?? '',
-                    ),
-              size: asReply ? 26 : 32,
-              child: UserAvatar(
-                name: comment.authorNickname,
-                imageUrl: comment.authorAvatarUrl,
-                size: asReply ? 22 : 27,
-              ),
-            ),
+            child: UserAvatar(
+  name: comment.authorNickname,
+  imageUrl: comment.authorAvatarUrl,
+  size: asReply ? 22 : 27,
+),
           ),
           const SizedBox(width: AppDimensions.spaceMd),
           Expanded(
@@ -798,12 +784,7 @@ class _CommentRow extends StatelessWidget {
                           nickname: comment.authorNickname,
                         ),
                         behavior: HitTestBehavior.opaque,
-                        child: NicknameRenderer(
-                          comment.authorNickname,
-                          baseStyle: AppTextStyles.label,
-                          background: AppColors.nightBlue,
-                          nameColor: comment.authorNicknameColor,
-                        ),
+                        child: Text(comment.authorNickname, style: AppTextStyles.label),
                       ),
                     ),
                     if (comment.authorId.isNotEmpty && isAuthor) ...[

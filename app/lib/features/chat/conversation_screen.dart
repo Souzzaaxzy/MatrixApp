@@ -15,7 +15,6 @@ import '../../core/widgets/hud_label.dart';
 import '../../core/widgets/matrix_button.dart';
 import '../../core/widgets/puzzle_icon.dart';
 import '../../core/widgets/matrix_text_field.dart';
-import '../../core/widgets/nickname_renderer.dart';
 import '../../core/widgets/user_avatar.dart';
 import '../../data/api_config.dart';
 import '../../data/services.dart';
@@ -904,14 +903,7 @@ class _ConversationScreenState extends State<ConversationScreen>
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              NicknameRenderer(
-                other.nickname,
-                baseStyle: AppTextStyles.h3.copyWith(fontSize: 19),
-                background: AppColors.absoluteBlack,
-                nameColor: other.nameColor,
-                textAlign: TextAlign.center,
-                maxLines: 1,
-              ),
+              Text(other.nickname, style: AppTextStyles.h3.copyWith(fontSize: 19)),
               // Realtime peer status directly below the nickname (only in
               // a live conversation with a peer). Centered. Voice recording
               // takes precedence over typing — the peer cannot do both,so

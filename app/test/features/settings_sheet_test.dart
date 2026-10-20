@@ -65,7 +65,9 @@ void main() {
     expect(find.text('Escuro'), findsOneWidget);
     expect(find.text('Claro'), findsOneWidget);
     expect(find.text('Sistema'), findsOneWidget);
-    expect(find.text('Personalizações'), findsOneWidget);
+    // O sistema de personalização foi removido do produto: a entrada não
+    // existe mais no menu.
+    expect(find.text('Personalizações'), findsNothing);
     expect(find.text('Sair da conta'), findsOneWidget);
     expect(find.text('Excluir conta'), findsOneWidget);
 
@@ -74,25 +76,6 @@ void main() {
     await tester.pump(const Duration(milliseconds: 300));
     await tester.pump(const Duration(milliseconds: 500));
     expect(find.text('CONFIGURAÇÕES'), findsNothing);
-  });
-
-  testWidgets('Personalizações entry opens the customizations screen',
-      (tester) async {
-    final state = AppState(repositories: FakeRepositories());
-    addTearDown(state.dispose);
-    await pumpProfile(tester, state);
-    await tester.tap(settingsButton());
-    await tester.pump(const Duration(milliseconds: 300));
-    await tester.pump(const Duration(milliseconds: 500));
-
-    await tester.tap(find.text('Personalizações'));
-    // Sheet closes (slide-out) then the route pushes (transition + load).
-    await tester.pump(const Duration(milliseconds: 300));
-    await tester.pump(const Duration(milliseconds: 500));
-    await tester.pump(const Duration(milliseconds: 100));
-
-    expect(find.text('PERSONALIZAÇÕES'), findsOneWidget);
-    expect(find.text('PRÉ-VISUALIZAÇÃO'), findsOneWidget);
   });
 
   testWidgets('selecting a theme updates the shared controller',

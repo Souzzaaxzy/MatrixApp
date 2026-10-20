@@ -6,7 +6,6 @@ import '../features/auth/recover/recover_screen.dart';
 import '../features/auth/register/register_screen.dart';
 import '../features/create_post/create_post_screen.dart';
 import '../features/create_post/create_story_screen.dart';
-import '../features/customizations/customizations_screen.dart';
 import '../features/home/home_screen.dart';
 import '../features/post/post_detail_screen.dart';
 import '../features/chat/chat_screen.dart';
@@ -35,9 +34,6 @@ class AppRoutes {
   /// Nova publicação OU novo Story — escolhido no mesmo botão "+" do perfil.
   static const String createStory = '/home/create-story';
   static const String editProfile = '/home/edit-profile';
-
-  /// Profile customizations (cosmetics) — session user only.
-  static const String customizations = '/home/customizations';
 
   /// Post detail. Argument: the post's server id (String).
   static const String postDetail = '/home/post';
@@ -118,7 +114,6 @@ Widget _buildPage(RouteSettings settings) {
     AppRoutes.createPost => CreatePostScreen(),
     AppRoutes.createStory => CreateStoryScreen(),
     AppRoutes.editProfile => EditProfileScreen(),
-    AppRoutes.customizations => CustomizationsScreen(),
     AppRoutes.postDetail => _postDetail(settings.arguments as String?),
     AppRoutes.profile =>
       ProfileScreen(nickname: _nicknameArg(settings.arguments)),

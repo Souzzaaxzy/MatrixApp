@@ -10,10 +10,8 @@ import '../../app/theme/app_text_styles.dart';
 import '../../core/services/app_state.dart';
 import '../../core/services/video_cover_service.dart';
 import '../../core/utils/profile_navigation.dart';
-import '../../core/widgets/nickname_renderer.dart';
 import '../../core/widgets/app_state_scope.dart';
 import '../../core/widgets/empty_state.dart';
-import '../../core/widgets/framed_avatar.dart';
 import '../../core/widgets/glow_container.dart';
 import '../../core/widgets/hud_label.dart';
 import '../../core/widgets/matrix_button.dart';
@@ -412,24 +410,19 @@ class _ProfileHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // The photo is rendered BARE: no glow/halo container around it. An
-    // equipped frame (a cosmetic the user chose) still draws inside
-    // FramedAvatar, but there is no decorative blue ring for everyone.
-    final avatar = FramedAvatar(
-      frame: user.frame,
-      size: _avatarBox,
-      child: _StoryRingAvatar(
-        unseen: hasUnseenStory,
-        child: UserAvatar(
-          name: user.nickname,
-          seed: user.avatarSeed ?? user.nickname,
-          imageUrl: user.avatarUrl,
-          // The avatar's own decorative ring is DISABLED here: the photo
-          // border now communicates the STORY state (white = unseen, none =
-          // seen/no story) instead of a fixed accent ring.
-          size: _avatarSize,
-          ring: false,
-        ),
+    // The photo is rendered BARE: no glow/halo container and no decorative
+    // ring for everyone — only the STORY state draws a border.
+    final avatar = _StoryRingAvatar(
+      unseen: hasUnseenStory,
+      child: UserAvatar(
+        name: user.nickname,
+        seed: user.avatarSeed ?? user.nickname,
+        imageUrl: user.avatarUrl,
+        // The avatar's own decorative ring is DISABLED here: the photo
+        // border now communicates the STORY state (white = unseen, none =
+        // seen/no story) instead of a fixed accent ring.
+        size: _avatarSize,
+        ring: false,
       ),
     );
 
@@ -496,13 +489,7 @@ class _ProfileHeader extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    NicknameRenderer(
-                      user.nickname,
-                      baseStyle: AppTextStyles.h2.copyWith(fontSize: 22),
-                      background: AppColors.absoluteBlack,
-                      nameColor: user.nameColor,
-                      textAlign: TextAlign.start,
-                    ),
+                    Text(user.nickname, style: AppTextStyles.h2.copyWith(fontSize: 22)),
                     // The public `#id`, deliberately much smaller than the
                     // nickname — an identifier, not a second title.
                     if (user.publicIdText != null)

@@ -35,7 +35,6 @@ class Services {
   FriendRepository get friends => repositories.friends;
   NotificationRepository get notifications => repositories.notifications;
   UploadRepository get uploads => repositories.uploads;
-  CustomizationRepository get customization => repositories.customization;
   ChatRepository get chat => repositories.chat;
   StickerRepository get stickers => repositories.stickers;
   StoryRepository get stories => repositories.stories;
@@ -53,7 +52,6 @@ class Services {
     final friends = FriendRepository(apiClient);
     final notifications = NotificationRepository(apiClient);
     final uploads = UploadRepository(apiClient);
-    final customization = CustomizationRepository(apiClient);
     final chat = ChatRepository(apiClient);
     final stickers = StickerRepository(apiClient);
     final stories = StoryRepository(apiClient);
@@ -70,7 +68,6 @@ class Services {
         friends: friends,
         notifications: notifications,
         uploads: uploads,
-        customization: customization,
         chat: chat,
         stickers: stickers,
         stories: stories,

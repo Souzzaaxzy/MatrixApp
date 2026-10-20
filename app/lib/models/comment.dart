@@ -7,9 +7,6 @@ class Comment {
     required this.authorId,
     required this.authorNickname,
     this.authorAvatarUrl,
-    this.authorNicknameColor,
-    this.authorFrameId,
-    this.authorFrameAsset,
     required this.text,
     required this.createdAt,
     this.parentCommentId,
@@ -26,9 +23,7 @@ class Comment {
         authorId = '',
         authorNickname = '',
         authorAvatarUrl = null,
-        authorNicknameColor = null,
-        authorFrameId = null,
-        authorFrameAsset = null,
+
         text = '',
         createdAt = null,
         parentCommentId = null,
@@ -52,12 +47,9 @@ class Comment {
 
   /// The comment AUTHOR's own nickname color (hex), embedded by the
   /// server. Null → default color.
-  final String? authorNicknameColor;
 
   /// The comment AUTHOR's own equipped profile frame (assets key), embedded
   /// by the server. Null → default. Never the viewer's frame.
-  final String? authorFrameId;
-  final String? authorFrameAsset;
 
   final String text;
   final DateTime? createdAt;
@@ -87,9 +79,6 @@ class Comment {
       authorId: authorId,
       authorNickname: authorNickname,
       authorAvatarUrl: authorAvatarUrl,
-      authorNicknameColor: authorNicknameColor,
-      authorFrameId: authorFrameId,
-      authorFrameAsset: authorFrameAsset,
       text: text ?? this.text,
       createdAt: createdAt,
       parentCommentId: parentCommentId,

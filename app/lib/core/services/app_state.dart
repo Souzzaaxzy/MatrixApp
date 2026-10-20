@@ -16,7 +16,6 @@ import '../../models/akame_message.dart';
 import '../../models/search_history_entry.dart';
 import '../../models/comment.dart';
 import '../../models/conversation.dart';
-import '../../models/cosmetic_item.dart';
 import '../../models/friend_request.dart';
 import '../../models/matrix_notification.dart';
 import '../../models/matrix_user.dart';
@@ -74,23 +73,6 @@ class AppState extends ChangeNotifier {
   /// Notifications of the session user (persistent server-side list).
   final List<MatrixNotification> _notifications = [];
   bool _loadingNotifications = false;
-
-  /// Cosmetics equipped by the SESSION user, keyed by slot. Server-owned:
-  /// loaded from `/api/customization/equipped` and refreshed after every
-  /// equip/unequip. Viewed users' cosmetics live in their [ProfileData].
-  CosmeticMap _myCosmetics = const {};
-  bool _loadingCosmetics = false;
-
-  /// Server-owned NAME_COLOR catalog (the official palette). Loaded once
-  /// per session — the app never hardcodes which colors exist.
-  List<CosmeticItem> _nameColorCatalog = const [];
-  bool _loadingNameColorCatalog = false;
-
-  /// Server-owned AVATAR_FRAME catalog (the official MOLDURAS list). Loaded
-  /// once per session — the app never hardcodes which frames exist (the
-  /// sprite for each comes bundled, keyed by the server's assetUrl).
-  List<CosmeticItem> _frameCatalog = const [];
-  bool _loadingFrameCatalog = false;
 
   // ── Stories (24h ephemeral media, feed header) ────────────
   /// Active stories grouped by author, already ordered (unviewed first) by
@@ -290,21 +272,6 @@ class AppState extends ChangeNotifier {
 
   int get unreadConversations => _unreadConversations;
 
-  /// Cosmetics equipped by the session user (slot → item). Empty means
-  /// "all defaults" — the spec's "Nenhuma" state.
-  CosmeticMap get myCosmetics => Map.unmodifiable(_myCosmetics);
-  bool get isLoadingCosmetics => _loadingCosmetics;
-
-  /// The official nickname color palette (server catalog), empty until
-  /// [loadNameColorCatalog] completes.
-  List<CosmeticItem> get nameColorCatalog =>
-      List.unmodifiable(_nameColorCatalog);
-
-  /// The official profile frame catalog (server), empty until
-  /// [loadFrameCatalog] completes.
-  List<CosmeticItem> get frameCatalog => List.unmodifiable(_frameCatalog);
-  bool get isLoadingFrameCatalog => _loadingFrameCatalog;
-
   /// Active stories grouped by author (server-ordered: unviewed first, then
   /// most recent). Empty until [loadStories] completes.
   List<StoryGroup> get storyGroups => List.unmodifiable(_storyGroups);
@@ -391,8 +358,6 @@ class AppState extends ChangeNotifier {
   FriendRepository get _friends => _repos?.friends ?? Services.instance.friends;
   NotificationRepository get _notificationRepo =>
       _repos?.notifications ?? Services.instance.notifications;
-  CustomizationRepository get _customizationRepo =>
-      _repos?.customization ?? Services.instance.customization;
   ChatRepository get _chat => _repos?.chat ?? Services.instance.chat;
 
   /// Local-first chat history (the phone owns the message history).
@@ -545,9 +510,6 @@ class AppState extends ChangeNotifier {
     _notifications.clear();
     _postCache.clear();
     _feedCursor = null;
-    _myCosmetics = const {};
-    _nameColorCatalog = const [];
-    _frameCatalog = const [];
     _akameMessages = MockDataService.initialAkameMessages();
     _clearConversations();
     _clearStickerState();
@@ -652,9 +614,7 @@ class AppState extends ChangeNotifier {
           authorId: g.authorId,
           authorNickname: g.authorNickname,
           authorAvatarUrl: g.authorAvatarUrl,
-          authorNicknameColor: g.authorNicknameColor,
-          authorFrameId: g.authorFrameId,
-          authorFrameAsset: g.authorFrameAsset,
+
           stories: [story, ...g.stories],
           allViewed: g.allViewed,
         );
@@ -709,9 +669,7 @@ class AppState extends ChangeNotifier {
         authorId: g.authorId,
         authorNickname: g.authorNickname,
         authorAvatarUrl: g.authorAvatarUrl,
-        authorNicknameColor: g.authorNicknameColor,
-        authorFrameId: g.authorFrameId,
-        authorFrameAsset: g.authorFrameAsset,
+
         stories: stories,
         allViewed: g.allViewed,
       );
@@ -755,9 +713,7 @@ class AppState extends ChangeNotifier {
         authorId: g.authorId,
         authorNickname: g.authorNickname,
         authorAvatarUrl: g.authorAvatarUrl,
-        authorNicknameColor: g.authorNicknameColor,
-        authorFrameId: g.authorFrameId,
-        authorFrameAsset: g.authorFrameAsset,
+
         stories: updated,
         allViewed: updated.every((s) => s.viewed),
       );
@@ -780,9 +736,7 @@ class AppState extends ChangeNotifier {
         authorId: g.authorId,
         authorNickname: g.authorNickname,
         authorAvatarUrl: g.authorAvatarUrl,
-        authorNicknameColor: g.authorNicknameColor,
-        authorFrameId: g.authorFrameId,
-        authorFrameAsset: g.authorFrameAsset,
+
         stories: remaining,
         allViewed: remaining.every((s) => s.viewed),
       ));
@@ -1022,8 +976,6 @@ class AppState extends ChangeNotifier {
           nickname: result.user.nickname,
           bio: result.user.bio,
           avatarUrl: result.user.avatarUrl,
-          customization: result.user.customization,
-          nameColor: () => result.user.nameColor,
           // Resolver so a banner REMOVED elsewhere also clears locally
           // (a plain nullable copyWith would keep the stale value).
           bannerUrl: () => result.user.bannerUrl,
@@ -1085,143 +1037,6 @@ class AppState extends ChangeNotifier {
       }
     }
     notifyListeners();
-  }
-
-  /// Loads the session user's equipped cosmetics from the server. The
-  /// server is the single source of truth — a fresh app start always
-  /// restores the exact same equipped state.
-  Future<void> loadMyCosmetics() async {
-    if (_loadingCosmetics) return;
-    _loadingCosmetics = true;
-    notifyListeners();
-    try {
-      _myCosmetics = await _customizationRepo.equipped();
-      _syncMyNameCosmetics();
-      _syncMyFrame();
-    } catch (_) {
-      // Non-blocking: the preview simply shows defaults until a retry.
-    } finally {
-      _loadingCosmetics = false;
-      notifyListeners();
-    }
-  }
-
-  /// Loads the server-owned nickname color palette once per session. The
-  /// catalog is cached: rendering a colored nickname NEVER hits the
-  /// network — only opening the picker does (and only the first time).
-  Future<void> loadNameColorCatalog() async {
-    if (_loadingNameColorCatalog || _nameColorCatalog.isNotEmpty) return;
-    _loadingNameColorCatalog = true;
-    try {
-      _nameColorCatalog =
-          await _customizationRepo.catalog(type: CosmeticItem.nameColor);
-    } catch (_) {
-      // Non-blocking: the picker retries on the next open.
-    } finally {
-      _loadingNameColorCatalog = false;
-      notifyListeners();
-    }
-  }
-
-  /// Loads the server-owned profile frame catalog once per session. The
-  /// server is the source of truth for WHICH frames exist and their display
-  /// names; the sprite for each rides along bundled in the APK.
-  Future<void> loadFrameCatalog() async {
-    if (_loadingFrameCatalog || _frameCatalog.isNotEmpty) return;
-    _loadingFrameCatalog = true;
-    try {
-      _frameCatalog =
-          await _customizationRepo.catalog(type: CosmeticItem.avatarFrame);
-    } catch (_) {
-      // Non-blocking: the picker retries on the next open.
-    } finally {
-      _loadingFrameCatalog = false;
-      notifyListeners();
-    }
-  }
-
-  /// Consolidated save of the pending nickname customization in ONE server
-  /// operation: `{nameColorId, frameId}` (null removes the slot). The server
-  /// validates each id against the active catalog and persists it; the
-  /// server-confirmed equipped map is then reloaded and propagated globally
-  /// so every nickname/avatar of the session user updates immediately.
-  Future<void> saveCosmetics({String? nameColorId, String? frameId}) async {
-    await _customizationRepo.saveCosmetics(
-      nameColorId: nameColorId,
-      frameId: frameId,
-    );
-    // The server is the source of truth: reload the equipped map so the
-    // whole app reflects the confirmed state (not a local guess).
-    _myCosmetics = await _customizationRepo.equipped();
-    _syncMyNameCosmetics();
-    _syncMyFrame();
-    notifyListeners();
-  }
-
-  /// Equips an owned item and refreshes the local equipped map from the
-  /// server response (ownership/expiry are validated server-side).
-  Future<void> equipCosmetic(String itemId) async {
-    final item = await _customizationRepo.equip(itemId);
-    _myCosmetics = {..._myCosmetics, item.slot: item};
-    if (item.slot == CosmeticItem.nameColor) {
-      _syncMyNameCosmetics();
-    }
-    notifyListeners();
-  }
-
-  /// Removes whatever is equipped in [slot].
-  Future<void> unequipCosmetic(String slot) async {
-    await _customizationRepo.unequip(slot);
-    _myCosmetics = {..._myCosmetics}..remove(slot);
-    if (slot == CosmeticItem.nameColor) {
-      _syncMyNameCosmetics();
-    }
-    notifyListeners();
-  }
-
-  /// Propagates the session user's equipped nickname color into the global
-  /// state (currentUser + the own-profile cache) so EVERY component that
-  /// renders the user's nickname reflects a change immediately — no
-  /// restart, no re-login, no screen refresh.
-  void _syncMyNameCosmetics() {
-    final hex = _myCosmetics[CosmeticItem.nameColor]?.hexColor;
-    final me = _currentUser;
-    if (me == null) return;
-    _currentUser = me.copyWith(nameColor: () => hex);
-    final key = me.nickname.toLowerCase();
-    final profile = _profiles[key];
-    if (profile != null) {
-      _profiles[key] = profile.copyWith(
-        user: profile.user.copyWith(nameColor: () => hex),
-      );
-    }
-  }
-
-  /// Propagates the session user's equipped frame into the global state
-  /// (currentUser + the own-profile cache) so every avatar reflects it
-  /// immediately after a save — no restart, no re-login.
-  void _syncMyFrame() {
-    final frame = _myCosmetics[CosmeticItem.avatarFrame];
-    final me = _currentUser;
-    if (me == null) return;
-    final id = frame?.id;
-    final asset = frame?.assetUrl;
-    _currentUser = me.copyWith(
-      customization: {..._myCosmetics},
-      frameId: () => id,
-      frameAsset: () => asset,
-    );
-    final key = me.nickname.toLowerCase();
-    final profile = _profiles[key];
-    if (profile != null) {
-      _profiles[key] = profile.copyWith(
-        user: profile.user.copyWith(
-          customization: {..._myCosmetics},
-          frameId: () => id,
-          frameAsset: () => asset,
-        ),
-      );
-    }
   }
 
   /// Sends a friend request to another user. On success the friendship

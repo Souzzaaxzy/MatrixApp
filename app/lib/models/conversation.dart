@@ -1,25 +1,17 @@
-import 'cosmetic_item.dart';
 
 /// A lightweight user reference embedded in chat payloads (the OTHER side of
-/// a conversation). Carries the owner's nickname cosmetics so chat renders
-/// each user's own color/frame, same as every other surface.
+/// a conversation).
 class ChatUser {
   const ChatUser({
     required this.id,
     required this.nickname,
     this.avatarUrl,
-    this.nameColor,
-    this.frameId,
-    this.frameAsset,
     this.banned = false,
   });
 
   final String id;
   final String nickname;
   final String? avatarUrl;
-  final String? nameColor;
-  final String? frameId;
-  final String? frameAsset;
 
   /// Group-scoped ban state (set only in group messages): true when this
   /// user is CURRENTLY banned from the group the message belongs to. Private
@@ -27,34 +19,16 @@ class ChatUser {
   /// group.
   final bool banned;
 
-  /// The equipped AVATAR_FRAME as a cosmetic (mirrors MatrixUser.frame).
-  CosmeticItem? get frame {
-    final id = frameId;
-    if (id == null) return null;
-    return CosmeticItem(
-      id: id,
-      slot: CosmeticItem.avatarFrame,
-      name: id,
-      assetUrl: frameAsset ?? '',
-    );
-  }
-
   ChatUser copyWith({
     String? id,
     String? nickname,
     String? avatarUrl,
-    String? nameColor,
-    String? frameId,
-    String? frameAsset,
     bool? banned,
   }) =>
       ChatUser(
         id: id ?? this.id,
         nickname: nickname ?? this.nickname,
         avatarUrl: avatarUrl ?? this.avatarUrl,
-        nameColor: nameColor ?? this.nameColor,
-        frameId: frameId ?? this.frameId,
-        frameAsset: frameAsset ?? this.frameAsset,
         banned: banned ?? this.banned,
       );
 }

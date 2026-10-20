@@ -8,7 +8,6 @@ import 'package:matrix_app/data/repositories/sticker_repository.dart';
 import 'package:matrix_app/data/repositories/story_repository.dart';
 import 'package:matrix_app/models/comment.dart';
 import 'package:matrix_app/models/conversation.dart';
-import 'package:matrix_app/models/cosmetic_item.dart';
 import 'package:matrix_app/models/friend_request.dart';
 import 'package:matrix_app/models/matrix_notification.dart';
 import 'package:matrix_app/models/matrix_user.dart';
@@ -34,7 +33,6 @@ class FakeRepositories extends Repositories {
     required super.friends,
     required super.notifications,
     required super.uploads,
-    required super.customization,
     required super.chat,
     required super.stickers,
     required super.stories,
@@ -47,8 +45,6 @@ class FakeRepositories extends Repositories {
     Map<String, List<Comment>> seedReplies = const {},
     Set<String> seedLikedCommentIds = const {},
     List<MatrixNotification> seedNotifications = const [],
-    Map<String, CosmeticItem> seedEquippedCosmetics = const {},
-    List<CosmeticItem> seedCatalog = const [],
     List<StickerPackage> seedStickerPackages = const [],
     List<Sticker> seedStickerFavorites = const [],
     List<Sticker> seedStickerRecents = const [],
@@ -63,8 +59,6 @@ class FakeRepositories extends Repositories {
     });
     store.likedCommentIds.addAll(seedLikedCommentIds);
     store.notifications.addAll(seedNotifications);
-    store.equippedCosmetics.addAll(seedEquippedCosmetics);
-    store.catalog.addAll(seedCatalog);
     store.stickerPackages.addAll(seedStickerPackages);
     store.stickerFavorites.addAll(seedStickerFavorites);
     store.stickerRecents.addAll(seedStickerRecents);
@@ -79,7 +73,6 @@ class FakeRepositories extends Repositories {
       friends: _FakeFriendRepository(store),
       notifications: _FakeNotificationRepository(store),
       uploads: const _FakeUploadRepository(),
-      customization: _FakeCustomizationRepository(store),
       chat: _FakeChatRepository(store),
       stickers: _FakeStickerRepository(store),
       stories: _FakeStoryRepository(store),
@@ -94,7 +87,6 @@ class FakeRepositories extends Repositories {
 
 class FakeStore {
   /// Server-owned cosmetic catalog (palette of colors, frames, ...).
-  final List<CosmeticItem> catalog = [];
 
   /// Conversations hidden FOR the current user (`pair|userId`) — mirrors the
   /// server's ConversationHidden rows ("Excluir conversa para mim").
@@ -269,7 +261,6 @@ class FakeStore {
   late final Map<String, List<ChatMessage>> chatMessagesByPair;
 
   /// Cosmetics equipped by the session user, keyed by slot.
-  final Map<String, CosmeticItem> equippedCosmetics = {};
 
   MatrixUser get currentUser => users[currentUserId]!;
 
@@ -611,66 +602,6 @@ class _FakeUploadRepository implements UploadRepository {
   @override
   Future<String> uploadVideo(File file, {int? durationMs}) async =>
       'https://fake.matrix.app/u/test.mp4';
-}
-
-/// In-memory cosmetics: the session user "owns" everything they equip —
-/// ownership validation is a server concern tested in ServidorMtx.
-class _FakeCustomizationRepository implements CustomizationRepository {
-  _FakeCustomizationRepository(this._store);
-
-  final FakeStore _store;
-
-  @override
-  Future<List<CosmeticItem>> catalog({String? type}) async =>
-      _store.catalog.where((i) => type == null || i.slot == type).toList();
-
-  @override
-  Future<List<CosmeticItem>> inventory() async =>
-      _store.equippedCosmetics.values.toList();
-
-  @override
-  Future<Map<String, CosmeticItem>> equipped() async =>
-      Map.of(_store.equippedCosmetics);
-
-  @override
-  Future<CosmeticItem> equip(String itemId) async {
-    // Mirror the server: the slot comes from the CATALOG item's own type;
-    // unknown ids are rejected. NAME_COLOR entries equip freely.
-    final item = _store.catalog.where((i) => i.id == itemId).firstOrNull;
-    if (item == null) {
-      throw const ApiException(
-          statusCode: 404, message: 'Item não encontrado.');
-    }
-    _store.equippedCosmetics[item.slot] = item;
-    return item;
-  }
-
-  @override
-  Future<void> unequip(String slot) async {
-    _store.equippedCosmetics.remove(slot);
-  }
-
-  /// Mirrors the server: each id is validated against the catalog (null
-  /// removes the slot, absent leaves it untouched) and persisted; the app
-  /// then reloads `equipped()`.
-  @override
-  Future<void> saveCosmetics({String? nameColorId, String? frameId}) async {
-    _applySlot(nameColorId, CosmeticItem.nameColor);
-    _applySlot(frameId, CosmeticItem.avatarFrame);
-  }
-
-  void _applySlot(String? id, String slot) {
-    if (id == null) {
-      _store.equippedCosmetics.remove(slot);
-      return;
-    }
-    final item =
-        _store.catalog.where((i) => i.id == id && i.slot == slot).firstOrNull;
-    if (item == null) {
-      throw const ApiException(statusCode: 400, message: 'Item inválido.');
-    }
-    _store.equippedCosmetics[slot] = item;
-  }
 }
 
 class _FakeFriendRepository implements FriendRepository {
@@ -1829,9 +1760,6 @@ class _FakeStoryRepository implements StoryRepository {
         authorId: g.authorId,
         authorNickname: g.authorNickname,
         authorAvatarUrl: g.authorAvatarUrl,
-        authorNicknameColor: g.authorNicknameColor,
-        authorFrameId: g.authorFrameId,
-        authorFrameAsset: g.authorFrameAsset,
         stories: stories,
         allViewed: stories.isNotEmpty && stories.every((s) => s.viewed),
       );

@@ -1,6 +1,5 @@
 import '../../models/comment.dart';
 import '../../models/conversation.dart';
-import '../../models/cosmetic_item.dart';
 import '../../models/friend_request.dart';
 import '../../models/matrix_notification.dart';
 import '../../models/matrix_user.dart';
@@ -85,9 +84,6 @@ class FeedPostDto {
   final String authorId;
   final String authorNickname;
   final String? authorAvatarUrl;
-  final String? authorNicknameColor;
-  final String? authorFrameId;
-  final String? authorFrameAsset;
   final int likeCount;
   final bool liked;
   final int commentCount;
@@ -102,9 +98,6 @@ class FeedPostDto {
     required this.authorId,
     required this.authorNickname,
     this.authorAvatarUrl,
-    this.authorNicknameColor,
-    this.authorFrameId,
-    this.authorFrameAsset,
     required this.likeCount,
     required this.liked,
     required this.commentCount,
@@ -118,9 +111,6 @@ class FeedPostDto {
         createdAt: createdAt,
         avatarSeed: authorNickname,
         authorAvatarUrl: authorAvatarUrl,
-        authorNicknameColor: authorNicknameColor,
-        authorFrameId: authorFrameId,
-        authorFrameAsset: authorFrameAsset,
         imageUrl: imageUrl,
         videoUrl: videoUrl,
         thumbnailUrl: thumbnailUrl,
@@ -141,9 +131,6 @@ class FeedPostDto {
       authorId: (author['id'] as String?) ?? '',
       authorNickname: author['nickname'] as String,
       authorAvatarUrl: author['avatarUrl'] as String?,
-      authorNicknameColor: author['nameColor'] as String?,
-      authorFrameId: author['frameId'] as String?,
-      authorFrameAsset: author['frameAsset'] as String?,
       likeCount: (json['likeCount'] as num?)?.toInt() ?? 0,
       liked: (json['liked'] as bool?) ?? false,
       commentCount: (json['commentCount'] as num?)?.toInt() ?? 0,
@@ -158,9 +145,6 @@ class CommentDto {
   final String authorId;
   final String authorNickname;
   final String? authorAvatarUrl;
-  final String? authorNicknameColor;
-  final String? authorFrameId;
-  final String? authorFrameAsset;
   final String? parentCommentId;
   final int likeCount;
   final bool liked;
@@ -173,9 +157,6 @@ class CommentDto {
     required this.authorId,
     required this.authorNickname,
     this.authorAvatarUrl,
-    this.authorNicknameColor,
-    this.authorFrameId,
-    this.authorFrameAsset,
     this.parentCommentId,
     this.likeCount = 0,
     this.liked = false,
@@ -187,9 +168,6 @@ class CommentDto {
         authorId: authorId,
         authorNickname: authorNickname,
         authorAvatarUrl: authorAvatarUrl,
-        authorNicknameColor: authorNicknameColor,
-        authorFrameId: authorFrameId,
-        authorFrameAsset: authorFrameAsset,
         text: text,
         createdAt: createdAt,
         parentCommentId: parentCommentId,
@@ -207,9 +185,6 @@ class CommentDto {
       authorId: author['id'] as String,
       authorNickname: author['nickname'] as String,
       authorAvatarUrl: author['avatarUrl'] as String?,
-      authorNicknameColor: author['nameColor'] as String?,
-      authorFrameId: author['frameId'] as String?,
-      authorFrameAsset: author['frameAsset'] as String?,
       parentCommentId: json['parentCommentId'] as String?,
       likeCount: (json['likeCount'] as num?)?.toInt() ?? 0,
       liked: (json['liked'] as bool?) ?? false,
@@ -228,10 +203,6 @@ class PublicUserDto {
   final String bio;
   final int friendsCount;
   final int postsCount;
-  final CosmeticMap customization;
-  final String? nameColor;
-  final String? frameId;
-  final String? frameAsset;
   final ProfileMusic? music;
 
   const PublicUserDto({
@@ -244,10 +215,6 @@ class PublicUserDto {
     required this.bio,
     this.friendsCount = 0,
     this.postsCount = 0,
-    this.customization = const {},
-    this.nameColor,
-    this.frameId,
-    this.frameAsset,
     this.music,
   });
 
@@ -261,10 +228,6 @@ class PublicUserDto {
         publicIdLabel: publicIdLabel,
         friendsCount: friendsCount,
         postsCount: postsCount,
-        customization: customization,
-        nameColor: nameColor,
-        frameId: frameId,
-        frameAsset: frameAsset,
         music: music,
       );
 
@@ -278,87 +241,9 @@ class PublicUserDto {
         bio: (json['bio'] as String?) ?? '',
         friendsCount: (json['friendsCount'] as num?)?.toInt() ?? 0,
         postsCount: (json['postsCount'] as num?)?.toInt() ?? 0,
-        customization: parseCustomization(json['customization']),
-        nameColor: json['nameColor'] as String?,
-        frameId: json['frameId'] as String?,
-        frameAsset: json['frameAsset'] as String?,
         // The pinned song is optional profile data: a payload without it
         // (feed/search authors) simply has none.
         music: ProfileMusic.fromJson(json['music']),
-      );
-}
-
-/// Parses the profile `customization` object: slot → equipped cosmetic.
-/// Absent/invalid payloads degrade to "nothing equipped" (all defaults).
-CosmeticMap parseCustomization(Object? raw) {
-  if (raw is! Map) return const {};
-  final map = <String, CosmeticItem>{};
-  raw.forEach((slot, value) {
-    if (slot is String && value is Map<String, dynamic>) {
-      final itemId = value['itemId'] as String?;
-      final name = value['name'] as String?;
-      if (itemId != null && name != null) {
-        map[slot] = CosmeticItem(
-          id: itemId,
-          slot: slot,
-          name: name,
-          assetUrl: (value['assetUrl'] as String?) ?? '',
-          rarity: (value['rarity'] as String?) ?? 'COMMON',
-          config:
-              (value['config'] as Map?)?.cast<String, dynamic>() ?? const {},
-        );
-      }
-    }
-  });
-  return map;
-}
-
-/// A cosmetic entry as returned by the customization endpoints
-/// (catalog / inventory / equipped).
-class CosmeticItemDto {
-  final String id;
-  final String slot;
-  final String name;
-  final String assetUrl;
-  final String rarity;
-  final String? category;
-  final int sortOrder;
-  final Map<String, dynamic> config;
-
-  const CosmeticItemDto({
-    required this.id,
-    required this.slot,
-    required this.name,
-    this.assetUrl = '',
-    this.rarity = 'COMMON',
-    this.category,
-    this.sortOrder = 0,
-    this.config = const {},
-  });
-
-  CosmeticItem toModel() => CosmeticItem(
-        id: id,
-        slot: slot,
-        name: name,
-        assetUrl: assetUrl,
-        rarity: rarity,
-        category: category,
-        sortOrder: sortOrder,
-        config: config,
-      );
-
-  /// Catalog/inventory entries carry `id` + `type`; equipped entries carry
-  /// `itemId` + `slot`. Both shapes map onto the same model.
-  factory CosmeticItemDto.fromJson(Map<String, dynamic> json) =>
-      CosmeticItemDto(
-        id: (json['id'] as String?) ?? (json['itemId'] as String),
-        slot: (json['type'] as String?) ?? (json['slot'] as String),
-        name: json['name'] as String,
-        assetUrl: (json['assetUrl'] as String?) ?? '',
-        rarity: (json['rarity'] as String?) ?? 'COMMON',
-        category: json['category'] as String?,
-        sortOrder: (json['sortOrder'] as num?)?.toInt() ?? 0,
-        config: (json['config'] as Map?)?.cast<String, dynamic>() ?? const {},
       );
 }
 
@@ -428,9 +313,6 @@ class NotificationDto {
         actorId: actor.id,
         actorNickname: actor.nickname,
         actorAvatarUrl: actor.avatarUrl,
-        actorNicknameColor: actor.nameColor,
-        actorFrameId: actor.frameId,
-        actorFrameAsset: actor.frameAsset,
         postId: postId,
         commentId: commentId,
         friendRequestId: friendRequestId,
@@ -460,18 +342,13 @@ class ChatUserDto {
   final String id;
   final String nickname;
   final String? avatarUrl;
-  final String? nameColor;
-  final String? frameId;
-  final String? frameAsset;
   final bool banned;
 
   const ChatUserDto({
     required this.id,
     required this.nickname,
     this.avatarUrl,
-    this.nameColor,
-    this.frameId,
-    this.frameAsset,
+
     this.banned = false,
   });
 
@@ -479,9 +356,7 @@ class ChatUserDto {
         id: id,
         nickname: nickname,
         avatarUrl: avatarUrl,
-        nameColor: nameColor,
-        frameId: frameId,
-        frameAsset: frameAsset,
+
         banned: banned,
       );
 
@@ -489,9 +364,7 @@ class ChatUserDto {
         id: json['id'] as String,
         nickname: json['nickname'] as String,
         avatarUrl: json['avatarUrl'] as String?,
-        nameColor: json['nameColor'] as String?,
-        frameId: json['frameId'] as String?,
-        frameAsset: json['frameAsset'] as String?,
+
         banned: (json['banned'] as bool?) ?? false,
       );
 }
@@ -1104,9 +977,6 @@ class StoryDto {
   final String authorId;
   final String authorNickname;
   final String? authorAvatarUrl;
-  final String? authorNicknameColor;
-  final String? authorFrameId;
-  final String? authorFrameAsset;
 
   const StoryDto({
     required this.id,
@@ -1125,9 +995,6 @@ class StoryDto {
     required this.authorId,
     required this.authorNickname,
     this.authorAvatarUrl,
-    this.authorNicknameColor,
-    this.authorFrameId,
-    this.authorFrameAsset,
   });
 
   Story toModel() => Story(
@@ -1135,9 +1002,6 @@ class StoryDto {
         authorId: authorId,
         authorNickname: authorNickname,
         authorAvatarUrl: authorAvatarUrl,
-        authorNicknameColor: authorNicknameColor,
-        authorFrameId: authorFrameId,
-        authorFrameAsset: authorFrameAsset,
         mediaUrl: mediaUrl,
         mediaType: mediaType,
         type: type,
@@ -1175,9 +1039,6 @@ class StoryDto {
       authorId: (author['id'] as String?) ?? '',
       authorNickname: (author['nickname'] as String?) ?? '',
       authorAvatarUrl: author['avatarUrl'] as String?,
-      authorNicknameColor: author['nameColor'] as String?,
-      authorFrameId: author['frameId'] as String?,
-      authorFrameAsset: author['frameAsset'] as String?,
     );
   }
 }
@@ -1205,9 +1066,6 @@ class StoryGroupsDto {
         authorId: first.authorId,
         authorNickname: first.authorNickname,
         authorAvatarUrl: first.authorAvatarUrl,
-        authorNicknameColor: first.authorNicknameColor,
-        authorFrameId: first.authorFrameId,
-        authorFrameAsset: first.authorFrameAsset,
         stories: rawStories,
         allViewed: (g['allViewed'] as bool?) ?? false,
       ));

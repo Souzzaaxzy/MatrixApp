@@ -9,12 +9,10 @@ import '../../app/theme/app_text_styles.dart';
 import '../../core/services/app_state.dart';
 import '../../core/widgets/app_state_scope.dart';
 import '../../core/widgets/empty_state.dart';
-import '../../core/widgets/framed_avatar.dart';
 import '../../core/widgets/glow_container.dart';
 import '../../core/widgets/hud_label.dart';
 import '../../core/widgets/matrix_card.dart';
 import '../../core/widgets/matrix_text_field.dart';
-import '../../core/widgets/nickname_renderer.dart';
 import '../../core/widgets/user_avatar.dart';
 import '../../models/conversation.dart';
 import '../../models/matrix_user.dart';
@@ -312,24 +310,15 @@ class _ChatScreenState extends State<ChatScreen> {
                       onTap: () => _openSearchResult(user),
                       child: Row(
                         children: [
-                          FramedAvatar(
-                            frame: user.frame,
-                            size: 42,
-                            child: UserAvatar(
+                          UserAvatar(
                               name: user.nickname,
                               seed: user.avatarSeed ?? user.nickname,
                               imageUrl: user.avatarUrl,
                               size: 36,
                             ),
-                          ),
                           const SizedBox(width: AppDimensions.spaceMd),
                           Expanded(
-                            child: NicknameRenderer(
-                              user.nickname,
-                              baseStyle: AppTextStyles.h3,
-                              background: AppColors.cardSurface,
-                              nameColor: user.nameColor,
-                            ),
+                            child: Text(user.nickname, style: AppTextStyles.h3),
                           ),
                         ],
                       ),
@@ -427,27 +416,16 @@ class _ChatScreenState extends State<ChatScreen> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  FramedAvatar(
-                    frame: friend.frame,
-                    size: 52,
-                    child: UserAvatar(
+                  UserAvatar(
                       name: friend.nickname,
                       seed: friend.avatarSeed ?? friend.nickname,
                       imageUrl: friend.avatarUrl,
                       size: 46,
                     ),
-                  ),
                   const SizedBox(height: AppDimensions.spaceXs),
                   SizedBox(
                     width: 64,
-                    child: NicknameRenderer(
-                      friend.nickname,
-                      baseStyle: AppTextStyles.caption.copyWith(fontSize: 11),
-                      background: AppColors.absoluteBlack,
-                      nameColor: friend.nameColor,
-                      textAlign: TextAlign.center,
-                      maxLines: 1,
-                    ),
+                    child: Text(friend.nickname, style: AppTextStyles.caption.copyWith(fontSize: 11)),
                   ),
                 ],
               ),
@@ -538,28 +516,19 @@ class _ConversationTile extends StatelessWidget {
       onLongPress: onLongPress,
       child: Row(
         children: [
-          FramedAvatar(
-            frame: other.frame,
-            size: 48,
-            child: UserAvatar(
+          UserAvatar(
               name: other.nickname,
               seed: other.nickname,
               imageUrl: other.avatarUrl,
               size: 42,
             ),
-          ),
           const SizedBox(width: AppDimensions.spaceMd),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                NicknameRenderer(
-                  other.nickname,
-                  baseStyle: AppTextStyles.h3.copyWith(fontSize: 15),
-                  background: AppColors.cardSurface,
-                  nameColor: other.nameColor,
-                ),
+                Text(other.nickname, style: AppTextStyles.h3.copyWith(fontSize: 15)),
                 const SizedBox(height: 2),
                 Text(
                   lastText,
@@ -786,28 +755,19 @@ class _GroupTile extends StatelessWidget {
       onTap: onTap,
       child: Row(
         children: [
-          FramedAvatar(
-            frame: null,
-            size: 48,
-            child: UserAvatar(
+          UserAvatar(
               name: group.group.name,
               seed: group.group.name,
               imageUrl: group.group.avatarUrl,
               size: 42,
             ),
-          ),
           const SizedBox(width: AppDimensions.spaceMd),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                NicknameRenderer(
-                  group.group.name,
-                  baseStyle: AppTextStyles.h3.copyWith(fontSize: 15),
-                  background: AppColors.cardSurface,
-                  nameColor: null,
-                ),
+                Text(group.group.name, style: AppTextStyles.h3.copyWith(fontSize: 15)),
                 const SizedBox(height: 2),
                 Text(
                   lastText,

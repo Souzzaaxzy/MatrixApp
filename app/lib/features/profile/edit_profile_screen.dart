@@ -10,7 +10,6 @@ import '../../app/theme/app_text_styles.dart';
 import '../../core/utils/gallery_picker.dart';
 import '../../core/utils/validators.dart';
 import '../../core/widgets/app_state_scope.dart';
-import '../../core/widgets/framed_avatar.dart';
 import '../../core/widgets/hud_label.dart';
 import '../../core/widgets/matrix_button.dart';
 import '../../core/widgets/matrix_text_field.dart';
@@ -397,10 +396,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                     onTap: _pickAvatar,
                     child: Stack(
                       children: [
-                        FramedAvatar(
-                          frame: user?.frame,
-                          size: 96,
-                          child: UserAvatar(
+                        UserAvatar(
                             name: _nicknameController.text.isEmpty
                                 ? (user?.nickname ?? '')
                                 : _nicknameController.text,
@@ -411,7 +407,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                             // bare photo, matching the profile screen.
                             ring: false,
                           ),
-                        ),
                         if (_uploadingAvatar)
                           const Positioned.fill(
                             child: DecoratedBox(

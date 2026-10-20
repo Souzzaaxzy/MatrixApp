@@ -1,5 +1,4 @@
 import 'conversation.dart';
-import 'cosmetic_item.dart';
 import 'profile_music.dart';
 
 /// A MATRIX network user.
@@ -15,10 +14,6 @@ class MatrixUser {
     this.publicIdLabel,
     this.friendsCount = 0,
     this.postsCount = 0,
-    this.customization = const {},
-    this.nameColor,
-    this.frameId,
-    this.frameAsset,
     this.music,
   });
 
@@ -61,60 +56,21 @@ class MatrixUser {
   final int friendsCount;
   final int postsCount;
 
-  /// Equipped cosmetics of THIS user, keyed by slot (AVATAR_FRAME, BADGE,
-  /// ...). Comes from the profile endpoint; empty when nothing is equipped
-  /// or when the endpoint did not include it (search results, friends).
-  final CosmeticMap customization;
 
-  /// Resolved nickname color (hex, e.g. "#0066FF") of THIS user, embedded
-  /// by the server in every payload that renders a user. Null → the
-  /// default MATRIX nickname color. The color belongs to the user, never
-  /// to the viewer: profiles/posts/comments carry the OWNER's value.
-  final String? nameColor;
 
-  /// The equipped AVATAR_FRAME catalog id (e.g. `frame_coroa`), embedded by
-  /// the server. Null → "Nenhuma" (default avatar look).
-  final String? frameId;
 
-  /// The equipped frame asset key (`frames/coroa`), embedded by the server.
-  /// Maps to the bundled sprite via [frameAssetPath]. Null → no frame.
-  final String? frameAsset;
 
   /// The song pinned to this profile (Instagram-style), or null when the
   /// user has none. Comes from the profile endpoint only — lighter author
   /// payloads (feed, search) do not carry it.
   final ProfileMusic? music;
 
-  /// The equipped cosmetic for [slot], or null (default rendering).
-  CosmeticItem? cosmetic(String slot) => customization[slot];
-
-  /// The equipped frame cosmetic, or null when nothing is equipped.
-  /// Prefers the rich `customization.AVATAR_FRAME` entry (profile photos
-  /// carry it); falls back to the flat `frameId`/`frameAsset` fragment that
-  /// lighter author payloads (feed, search) embed.
-  CosmeticItem? get frame =>
-      cosmetic(CosmeticItem.avatarFrame) ?? _frameFromFlat();
-
-  CosmeticItem? _frameFromFlat() {
-    final id = frameId;
-    if (id == null) return null;
-    return CosmeticItem(
-      id: id,
-      slot: CosmeticItem.avatarFrame,
-      name: id,
-      assetUrl: frameAsset ?? '',
-    );
-  }
-
-  /// A lightweight [ChatUser] reference (same identity, nickname cosmetics)
-  /// used to open conversations from search results/friends/profile.
+  /// A lightweight [ChatUser] reference (same identity) used to open
+  /// conversations from search results/friends/profile.
   ChatUser toChatUser() => ChatUser(
         id: id,
         nickname: nickname,
         avatarUrl: avatarUrl,
-        nameColor: nameColor,
-        frameId: frameId,
-        frameAsset: frameAsset,
       );
 
   MatrixUser copyWith({
@@ -124,10 +80,6 @@ class MatrixUser {
     String? avatarUrl,
     int? friendsCount,
     int? postsCount,
-    CosmeticMap? customization,
-    String? Function()? nameColor,
-    String? Function()? frameId,
-    String? Function()? frameAsset,
     String? Function()? bannerUrl,
     int? Function()? publicId,
     String? Function()? publicIdLabel,
@@ -141,12 +93,6 @@ class MatrixUser {
         avatarUrl: avatarUrl ?? this.avatarUrl,
         friendsCount: friendsCount ?? this.friendsCount,
         postsCount: postsCount ?? this.postsCount,
-        customization: customization ?? this.customization,
-        // Nullable resolver so a copy can explicitly CLEAR the color
-        // (back to default) — `nameColor: () => null`.
-        nameColor: nameColor != null ? nameColor() : this.nameColor,
-        frameId: frameId != null ? frameId() : this.frameId,
-        frameAsset: frameAsset != null ? frameAsset() : this.frameAsset,
         // Same nullable-resolver pattern so the banner can be cleared
         // (`bannerUrl: () => null`) as well as replaced.
         bannerUrl: bannerUrl != null ? bannerUrl() : this.bannerUrl,

@@ -17,9 +17,6 @@ class ConversationRouteArgs {
     required this.otherUserId,
     required this.otherNickname,
     this.otherAvatarUrl,
-    this.otherNameColor,
-    this.otherFrameId,
-    this.otherFrameAsset,
   });
 
   /// A conversation loaded from the list (already exists).
@@ -29,9 +26,6 @@ class ConversationRouteArgs {
         otherUserId: c.otherUser.id,
         otherNickname: c.otherUser.nickname,
         otherAvatarUrl: c.otherUser.avatarUrl,
-        otherNameColor: c.otherUser.nameColor,
-        otherFrameId: c.otherUser.frameId,
-        otherFrameAsset: c.otherUser.frameAsset,
       );
 
   /// Opens with another user (from a search result, a friend, a profile
@@ -42,18 +36,12 @@ class ConversationRouteArgs {
         otherUserId: user.id,
         otherNickname: user.nickname,
         otherAvatarUrl: user.avatarUrl,
-        otherNameColor: user.nameColor,
-        otherFrameId: user.frameId,
-        otherFrameAsset: user.frameAsset,
       );
 
   final String conversationId;
   final String otherUserId;
   final String otherNickname;
   final String? otherAvatarUrl;
-  final String? otherNameColor;
-  final String? otherFrameId;
-  final String? otherFrameAsset;
 
   /// A lightweight ChatUser matching the route payload (used to synthesize
   /// a cached conversation when a realtime message arrives for a
@@ -62,9 +50,6 @@ class ConversationRouteArgs {
         id: otherUserId,
         nickname: otherNickname,
         avatarUrl: otherAvatarUrl,
-        nameColor: otherNameColor,
-        frameId: otherFrameId,
-        frameAsset: otherFrameAsset,
       );
 }
 

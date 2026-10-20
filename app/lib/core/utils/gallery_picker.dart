@@ -79,20 +79,53 @@ Future<GalleryPickResult> pickGalleryImage({
   }
 
   try {
+    // Primeiro escolhe SEM reencode: assim um GIF chega intacto. O
+    // image_picker RECODIFICA quando pedimos qualidade/dimensão, e
+    // recodificar um GIF animado o transforma num quadro estático.
     final file = await ImagePicker().pickImage(
+      source: ImageSource.gallery,
+      imageQuality: null,
+      maxWidth: null,
+      maxHeight: null,
+    );
+    if (file == null) {
+      return const GalleryPickResult.cancelled();
+    }
+    if (isGifPath(file.path)) {
+      // GIF: mantém os BYTES originais (animação preservada).
+      return GalleryPickResult.success(file);
+    }
+    // Não-GIF: recomprime normalmente para não subir uma foto gigante.
+    final optimized = await ImagePicker().pickImage(
       source: ImageSource.gallery,
       imageQuality: imageQuality,
       maxWidth: maxWidth,
       maxHeight: maxHeight,
     );
-    if (file == null) {
-      return const GalleryPickResult.cancelled();
-    }
-    return GalleryPickResult.success(file);
+    return GalleryPickResult.success(optimized ?? file);
   } catch (_) {
     return const GalleryPickResult.failure('Não foi possível abrir a galeria.');
   }
 }
+
+/// Extensões de imagem aceitas no avatar/banner. GIF entra aqui: é uma
+/// IMAGEM ANIMADA — vídeo (.mp4 e afins) continua fora.
+const Set<String> supportedImageExtensions = {
+  '.png',
+  '.jpg',
+  '.jpeg',
+  '.webp',
+  '.gif',
+};
+
+/// True when [path] points at an accepted image type (GIF included).
+bool isSupportedImagePath(String path) {
+  final lower = path.toLowerCase();
+  return supportedImageExtensions.any(lower.endsWith);
+}
+
+/// True when [path] is a GIF (the one type we must NOT re-encode).
+bool isGifPath(String path) => path.toLowerCase().endsWith('.gif');
 
 /// Opens the device gallery and lets the user pick EITHER a photo or a
 /// video in a single step (image_picker's `pickMedia`). The caller detects

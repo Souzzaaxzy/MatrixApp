@@ -91,18 +91,6 @@ class SettingsSheet extends StatelessWidget {
             ),
             const Divider(height: AppDimensions.spaceXxl),
             _SettingsRow(
-              icon: Icons.auto_awesome_rounded,
-              accent: false,
-              label: 'Personalizações',
-              onTap: () {
-                // Capture the Navigator BEFORE popping the sheet — the
-                // sheet's context is deactivated by the pop.
-                final navigator = Navigator.of(context);
-                navigator.pop();
-                navigator.pushNamed(AppRoutes.customizations);
-              },
-            ),
-            _SettingsRow(
               icon: Icons.logout_rounded,
               accent: false,
               label: 'Sair da conta',

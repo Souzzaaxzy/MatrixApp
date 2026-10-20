@@ -4,12 +4,9 @@ import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_dimensions.dart';
 import '../../app/theme/app_text_styles.dart';
 import '../../core/services/app_state.dart';
-import '../../core/widgets/framed_avatar.dart';
 import '../../core/widgets/hud_label.dart';
-import '../../core/widgets/nickname_renderer.dart';
 import '../../core/widgets/user_avatar.dart';
 import '../../data/api_config.dart';
-import '../../models/cosmetic_item.dart';
 import '../../models/story.dart';
 import 'story_viewer.dart';
 
@@ -135,15 +132,13 @@ class _StoryCard extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           // 1) FOTO DE PERFIL — acima do preview, nunca sobre a mídia.
-          FramedAvatar(
-            frame: _frame(group),
-            size: avatarSize,
-            child: UserAvatar(
-              name: label,
-              seed: label,
-              imageUrl: group.authorAvatarUrl,
-              size: avatarSize * 0.86,
-            ),
+          // Mesmo TAMANHO que a foto tinha dentro da moldura (0.86), para a
+          // altura da faixa continuar válida agora que a moldura saiu.
+          UserAvatar(
+            name: label,
+            seed: label,
+            imageUrl: group.authorAvatarUrl,
+            size: avatarSize * 0.86,
           ),
           const SizedBox(height: AppDimensions.spaceXs),
           // 2) PREVIEW — quadrado do Story, totalmente preenchido pela mídia.
@@ -181,27 +176,18 @@ class _StoryCard extends StatelessWidget {
           // 3) NICKNAME — abaixo do preview, dentro dos limites do card.
           SizedBox(
             width: size,
-            child: NicknameRenderer(
+            // maxLines: 1 (como o renderer antigo fazia): um nickname longo
+            // NÃO pode quebrar linha e estourar a altura da faixa.
+            child: Text(
               label,
-              baseStyle: AppTextStyles.caption.copyWith(fontSize: 11),
-              background: AppColors.absoluteBlack,
-              nameColor: group.authorNicknameColor,
-              textAlign: TextAlign.center,
               maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: AppTextStyles.caption.copyWith(fontSize: 11),
             ),
           ),
         ],
       ),
-    );
-  }
-
-  CosmeticItem? _frame(StoryGroup g) {
-    if (g.authorFrameId == null) return null;
-    return CosmeticItem(
-      id: g.authorFrameId!,
-      slot: CosmeticItem.avatarFrame,
-      name: g.authorFrameId!,
-      assetUrl: g.authorFrameAsset ?? '',
     );
   }
 }

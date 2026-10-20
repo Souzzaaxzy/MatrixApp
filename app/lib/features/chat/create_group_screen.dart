@@ -11,10 +11,8 @@ import '../../core/widgets/matrix_card.dart';
 import '../../data/api_config.dart';
 import '../../data/services.dart';
 import '../../core/widgets/app_state_scope.dart';
-import '../../core/widgets/framed_avatar.dart';
 import '../../core/widgets/matrix_button.dart';
 import '../../core/widgets/matrix_text_field.dart';
-import '../../core/widgets/nickname_renderer.dart';
 import '../../core/widgets/user_avatar.dart';
 import '../../models/matrix_user.dart';
 import 'chat_navigation.dart';
@@ -329,27 +327,18 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
               onTap: () => _toggleFriend(u),
               child: Row(
                 children: [
-                  FramedAvatar(
-                    frame: u.frame,
-                    size: 42,
-                    child: UserAvatar(
+                  UserAvatar(
                       name: u.nickname,
                       seed: u.nickname,
                       imageUrl: u.avatarUrl,
                       size: 36,
                     ),
-                  ),
                   const SizedBox(width: AppDimensions.spaceMd),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        NicknameRenderer(
-                          displayNickname(u.nickname),
-                          baseStyle: AppTextStyles.h3.copyWith(fontSize: 14),
-                          background: AppColors.cardSurface,
-                          nameColor: u.nameColor,
-                        ),
+                        Text(displayNickname(u.nickname), style: AppTextStyles.h3.copyWith(fontSize: 14)),
                       ],
                     ),
                   ),

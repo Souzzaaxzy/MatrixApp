@@ -5,15 +5,12 @@ import '../../app/theme/app_dimensions.dart';
 import '../../app/theme/app_text_styles.dart';
 import '../../core/utils/date_utils.dart';
 import '../../core/utils/profile_navigation.dart';
-import '../../core/widgets/nickname_renderer.dart';
 import '../../core/widgets/app_state_scope.dart';
 import '../../core/widgets/empty_state.dart';
-import '../../core/widgets/framed_avatar.dart';
 import '../../core/widgets/hud_label.dart';
 import '../../core/widgets/matrix_button.dart';
 import '../../core/widgets/user_avatar.dart';
 import '../../data/api_config.dart';
-import '../../models/cosmetic_item.dart';
 import '../../models/post.dart';
 import '../feed/responsive_post_image.dart';
 import '../feed/comments_sheet.dart';
@@ -267,33 +264,17 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
             behavior: HitTestBehavior.opaque,
             child: Row(
               children: [
-                FramedAvatar(
-                  frame: post.authorFrameId == null
-                      ? null
-                      : CosmeticItem(
-                          id: post.authorFrameId!,
-                          slot: CosmeticItem.avatarFrame,
-                          name: post.authorFrameId!,
-                          assetUrl: post.authorFrameAsset ?? '',
-                        ),
-                  size: 44,
-                  child: UserAvatar(
-                    name: post.authorNickname,
-                    seed: post.avatarSeed,
-                    imageUrl: post.authorAvatarUrl,
-                  ),
-                ),
+                UserAvatar(
+  name: post.authorNickname,
+  seed: post.avatarSeed,
+  imageUrl: post.authorAvatarUrl,
+),
                 const SizedBox(width: AppDimensions.spaceMd),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      NicknameRenderer(
-                        post.authorNickname,
-                        baseStyle: AppTextStyles.h3,
-                        background: AppColors.cardSurface,
-                        nameColor: post.authorNicknameColor,
-                      ),
+                      Text(post.authorNickname, style: AppTextStyles.h3),
                       Text(
                         '${post.authorNickname} • ${relativeTime(post.createdAt)}',
                         style: AppTextStyles.caption,

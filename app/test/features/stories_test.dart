@@ -4,7 +4,6 @@ import 'package:matrix_app/core/services/app_state.dart';
 import 'package:matrix_app/features/feed/feed_screen.dart';
 import 'package:matrix_app/features/feed/stories_header.dart';
 import 'package:matrix_app/app/theme/app_theme.dart';
-import 'package:matrix_app/core/widgets/nickname_renderer.dart';
 import 'package:matrix_app/core/widgets/user_avatar.dart';
 import 'package:matrix_app/features/chat/story_reply_reference.dart';
 import 'package:matrix_app/features/feed/story_viewer.dart';
@@ -337,7 +336,9 @@ void main() {
       await tester.pumpAndSettle();
 
       final avatar = find.byType(UserAvatar).first;
-      final nick = find.byType(NicknameRenderer).first;
+      // O nickname é texto simples agora (os cosméticos saíram do produto).
+      // O primeiro grupo semeado é o 'joao'.
+      final nick = find.text('joao').first;
       final cover = find.byType(Image).first;
 
       // FOTO → PREVIEW → NICKNAME (verticalmente, nesta ordem).

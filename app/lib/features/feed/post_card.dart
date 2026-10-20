@@ -9,11 +9,8 @@ import '../../core/utils/profile_navigation.dart';
 import '../../data/api_config.dart';
 import '../../models/post.dart';
 import '../../core/widgets/app_state_scope.dart';
-import '../../core/widgets/framed_avatar.dart';
 import '../../core/widgets/matrix_card.dart';
-import '../../core/widgets/nickname_renderer.dart';
 import '../../core/widgets/user_avatar.dart';
-import '../../models/cosmetic_item.dart';
 import 'post_video_preview.dart';
 import 'responsive_post_image.dart';
 import '../post/video_player_screen.dart';
@@ -97,17 +94,6 @@ class _PostCardState extends State<PostCard>
         .pushNamed(AppRoutes.postDetail, arguments: widget.post.id);
   }
 
-  /// Builds the author's equipped frame cosmetic from the post's embedded
-  /// frame fragment (or null → default avatar look).
-  CosmeticItem? _authorFrame(Post post) {
-    if (post.authorFrameId == null) return null;
-    return CosmeticItem(
-      id: post.authorFrameId!,
-      slot: CosmeticItem.avatarFrame,
-      name: post.authorFrameId!,
-      assetUrl: post.authorFrameAsset ?? '',
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -135,26 +121,17 @@ class _PostCardState extends State<PostCard>
               behavior: HitTestBehavior.opaque,
               child: Row(
                 children: [
-                  FramedAvatar(
-                    frame: _authorFrame(post),
-                    size: 44,
-                    child: UserAvatar(
+                  UserAvatar(
                       name: post.authorNickname,
                       seed: post.avatarSeed,
                       imageUrl: post.authorAvatarUrl,
                     ),
-                  ),
                   const SizedBox(width: AppDimensions.spaceMd),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        NicknameRenderer(
-                          post.authorNickname,
-                          baseStyle: AppTextStyles.h3,
-                          background: AppColors.cardSurface,
-                          nameColor: post.authorNicknameColor,
-                        ),
+                        Text(post.authorNickname, style: AppTextStyles.h3),
                         Text(
                           '${post.authorNickname} • ${relativeTime(post.createdAt)}',
                           style: AppTextStyles.caption,

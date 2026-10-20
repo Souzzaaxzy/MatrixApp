@@ -6,13 +6,10 @@ import '../../app/theme/app_text_styles.dart';
 import '../../core/utils/profile_navigation.dart';
 import '../../core/widgets/app_state_scope.dart';
 import '../../core/widgets/empty_state.dart';
-import '../../core/widgets/framed_avatar.dart';
 import '../../core/widgets/hud_label.dart';
 import '../../core/widgets/matrix_card.dart';
 import '../../core/widgets/matrix_text_field.dart';
-import '../../core/widgets/nickname_renderer.dart';
 import '../../core/widgets/user_avatar.dart';
-import '../../models/cosmetic_item.dart';
 import '../../models/matrix_user.dart';
 import '../../models/search_history_entry.dart';
 
@@ -83,27 +80,18 @@ class _SearchScreenState extends State<SearchScreen> {
       onTap: () => _openUser(user),
       child: Row(
         children: [
-          FramedAvatar(
-            frame: user.frame,
-            size: 42,
-            child: UserAvatar(
+          UserAvatar(
               name: user.nickname,
               seed: user.avatarSeed ?? user.nickname,
               imageUrl: user.avatarUrl,
               size: 36,
             ),
-          ),
           const SizedBox(width: AppDimensions.spaceMd),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                NicknameRenderer(
-                  user.nickname,
-                  baseStyle: AppTextStyles.h3,
-                  background: AppColors.cardSurface,
-                  nameColor: user.nameColor,
-                ),
+                Text(user.nickname, style: AppTextStyles.h3),
               ],
             ),
           ),
@@ -128,31 +116,15 @@ class _SearchScreenState extends State<SearchScreen> {
             onTap: () => _openHistoryEntry(entry),
             child: Row(
               children: [
-                FramedAvatar(
-                  frame: entry.frameId == null
-                      ? null
-                      : CosmeticItem(
-                          id: entry.frameId!,
-                          slot: CosmeticItem.avatarFrame,
-                          name: entry.frameId!,
-                          assetUrl: entry.frameAsset ?? '',
-                        ),
-                  size: 42,
-                  child: UserAvatar(
-                    name: entry.nickname,
-                    seed: entry.avatarSeed ?? entry.nickname,
-                    imageUrl: entry.avatarUrl,
-                    size: 36,
-                  ),
-                ),
+                UserAvatar(
+  name: entry.nickname,
+  seed: entry.avatarSeed ?? entry.nickname,
+  imageUrl: entry.avatarUrl,
+  size: 36,
+),
                 const SizedBox(width: AppDimensions.spaceMd),
                 Expanded(
-                  child: NicknameRenderer(
-                    entry.nickname,
-                    baseStyle: AppTextStyles.h3,
-                    background: AppColors.cardSurface,
-                    nameColor: entry.nameColor,
-                  ),
+                  child: Text(entry.nickname, style: AppTextStyles.h3),
                 ),
                 IconButton(
                   onPressed: () => _removeHistory(entry),

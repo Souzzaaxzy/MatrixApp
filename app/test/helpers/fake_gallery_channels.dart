@@ -20,8 +20,12 @@ class FakeGalleryChannels {
   String? pickedImagePath ='/tmp/fake_gallery_pick.jpg';
 
   /// How many times the picker was invoked.
-
   int pickCount = 0;
+
+  /// Options of the LAST pick, so a test can prove a GIF skips re-encoding.
+  int? lastImageQuality;
+  double? lastMaxWidth;
+  double? lastMaxHeight;
 
   factory FakeGalleryChannels.install() {
     final fake = FakeGalleryChannels._();
@@ -80,6 +84,9 @@ class _FakeImagePickerPlatform extends ImagePickerPlatform {
       {required ImageSource source,
         ImagePickerOptions options = const ImagePickerOptions()}) async {
     _fake.pickCount++;
+    _fake.lastImageQuality = options.imageQuality;
+    _fake.lastMaxWidth = options.maxWidth;
+    _fake.lastMaxHeight = options.maxHeight;
     final path = _fake.pickedImagePath;
     if (path == null || path.isEmpty) return null;
     // materialize a tiny valid image file so File/Image.file don't crash..

@@ -5,10 +5,8 @@ import '../../app/theme/app_dimensions.dart';
 import '../../app/theme/app_text_styles.dart';
 import '../../core/utils/chat_format.dart';
 import '../../core/widgets/app_state_scope.dart';
-import '../../core/widgets/framed_avatar.dart';
 import '../../core/widgets/hud_label.dart';
 import '../../core/widgets/matrix_button.dart';
-import '../../core/widgets/nickname_renderer.dart';
 import '../../core/widgets/user_avatar.dart';
 import '../../models/matrix_user.dart';
 
@@ -150,23 +148,13 @@ class _AddMemberSheetState extends State<AddMemberSheet> {
                     children: [
                       for (final u in _friends)
                         ListTile(
-                          leading: FramedAvatar(
-                            frame: u.frame,
-                            size: 44,
-                            child: UserAvatar(
+                          leading: UserAvatar(
                               name: u.nickname,
                               seed: u.nickname,
                               imageUrl: u.avatarUrl,
                               size: 36,
                             ),
-                          ),
-                          title: NicknameRenderer(
-                            displayNickname(u.nickname),
-                            baseStyle:
-                                AppTextStyles.body.copyWith(fontSize: 15),
-                            background: AppColors.bluishBlack,
-                            nameColor: u.nameColor,
-                          ),
+                          title: Text(displayNickname(u.nickname), style: AppTextStyles.body.copyWith(fontSize: 15)),
                           trailing: Checkbox(
                             value: _selected.contains(u.id),
                             onChanged: (_) => _toggle(u),

@@ -16,9 +16,6 @@ class Story {
     required this.expiresAt,
     this.type = 'image',
     this.text = '',
-    this.authorNicknameColor,
-    this.authorFrameId,
-    this.authorFrameAsset,
     this.thumbnailUrl,
     this.caption = '',
     this.viewed = false,
@@ -37,11 +34,8 @@ class Story {
   final String? authorAvatarUrl;
 
   /// The AUTHOR's own nickname color (hex). Null → default.
-  final String? authorNicknameColor;
 
   /// The AUTHOR's equipped profile frame (asset key). Null → default.
-  final String? authorFrameId;
-  final String? authorFrameAsset;
 
   /// 'image' | 'video' | 'text' — ONE shape for every story kind.
   final String type;
@@ -115,9 +109,6 @@ class Story {
         authorId: authorId ?? this.authorId,
         authorNickname: authorNickname ?? this.authorNickname,
         authorAvatarUrl: authorAvatarUrl ?? this.authorAvatarUrl,
-        authorNicknameColor: authorNicknameColor ?? this.authorNicknameColor,
-        authorFrameId: authorFrameId ?? this.authorFrameId,
-        authorFrameAsset: authorFrameAsset ?? this.authorFrameAsset,
         type: type ?? this.type,
         text: text ?? this.text,
         mediaType: mediaType ?? this.mediaType,
@@ -141,17 +132,11 @@ class StoryGroup {
     required this.authorAvatarUrl,
     required this.stories,
     required this.allViewed,
-    this.authorNicknameColor,
-    this.authorFrameId,
-    this.authorFrameAsset,
   });
 
   final String authorId;
   final String authorNickname;
   final String? authorAvatarUrl;
-  final String? authorNicknameColor;
-  final String? authorFrameId;
-  final String? authorFrameAsset;
 
   /// Newest-first.
   final List<Story> stories;

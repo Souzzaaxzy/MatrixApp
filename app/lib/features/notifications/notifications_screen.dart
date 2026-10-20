@@ -6,16 +6,13 @@ import '../../app/theme/app_dimensions.dart';
 import '../../app/theme/app_text_styles.dart';
 import '../../core/utils/date_utils.dart' as matrix;
 import '../../core/utils/profile_navigation.dart';
-import '../../core/widgets/nickname_renderer.dart';
 import '../../core/widgets/app_state_scope.dart';
 import '../../core/widgets/empty_state.dart';
-import '../../core/widgets/framed_avatar.dart';
 import '../../core/widgets/hud_label.dart';
 import '../../core/widgets/matrix_button.dart';
 import '../../core/widgets/matrix_card.dart';
 import '../../core/widgets/user_avatar.dart';
 import '../../data/api_config.dart';
-import '../../models/cosmetic_item.dart';
 import '../../models/matrix_notification.dart';
 
 /// Notifications tab — persistent server-side notifications.
@@ -265,23 +262,12 @@ class _NotificationTile extends StatelessWidget {
           GestureDetector(
             onTap: onActorTap,
             behavior: HitTestBehavior.opaque,
-            child: FramedAvatar(
-              frame: n.actorFrameId == null
-                  ? null
-                  : CosmeticItem(
-                      id: n.actorFrameId!,
-                      slot: CosmeticItem.avatarFrame,
-                      name: n.actorFrameId!,
-                      assetUrl: n.actorFrameAsset ?? '',
-                    ),
-              size: 42,
-              child: UserAvatar(
-                name: n.actorNickname,
-                seed: n.actorNickname,
-                imageUrl: n.actorAvatarUrl,
-                size: 36,
-              ),
-            ),
+            child: UserAvatar(
+  name: n.actorNickname,
+  seed: n.actorNickname,
+  imageUrl: n.actorAvatarUrl,
+  size: 36,
+),
           ),
           const SizedBox(width: AppDimensions.spaceMd),
           Expanded(
@@ -304,13 +290,7 @@ class _NotificationTile extends StatelessWidget {
                         child: GestureDetector(
                           onTap: onActorTap,
                           behavior: HitTestBehavior.opaque,
-                          child: NicknameRenderer(
-                            n.actorNickname,
-                            baseStyle:
-                                AppTextStyles.h3.copyWith(fontSize: 14),
-                            background: AppColors.cardSurface,
-                            nameColor: n.actorNicknameColor,
-                          ),
+                          child: Text(n.actorNickname, style: AppTextStyles.h3.copyWith(fontSize: 14)),
                         ),
                       ),
                       TextSpan(
@@ -364,31 +344,15 @@ class _FriendRequestCard extends StatelessWidget {
       ),
       child: Column(
         children: [
-          FramedAvatar(
-            frame: n.actorFrameId == null
-                ? null
-                : CosmeticItem(
-                    id: n.actorFrameId!,
-                    slot: CosmeticItem.avatarFrame,
-                    name: n.actorFrameId!,
-                    assetUrl: n.actorFrameAsset ?? '',
-                  ),
-            size: 64,
-            child: UserAvatar(
-              name: n.actorNickname,
-              seed: n.actorNickname,
-              imageUrl: n.actorAvatarUrl,
-              size: 56,
-              ring: true,
-            ),
-          ),
+          UserAvatar(
+  name: n.actorNickname,
+  seed: n.actorNickname,
+  imageUrl: n.actorAvatarUrl,
+  size: 56,
+  ring: true,
+),
           const SizedBox(height: AppDimensions.spaceMd),
-          NicknameRenderer(
-            n.actorNickname,
-            baseStyle: AppTextStyles.h2.copyWith(fontSize: 16),
-            background: AppColors.cardSurface,
-            nameColor: n.actorNicknameColor,
-          ),
+          Text(n.actorNickname, style: AppTextStyles.h2.copyWith(fontSize: 16)),
           const SizedBox(height: AppDimensions.spaceXs),
           Text(
             'enviou uma solicitação de amizade.',

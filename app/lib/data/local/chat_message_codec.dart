@@ -91,18 +91,13 @@ class ChatMessageCodec {
         'id': u.id,
         'nickname': u.nickname,
         if (u.avatarUrl != null) 'avatarUrl': u.avatarUrl,
-        if (u.nameColor != null) 'nameColor': u.nameColor,
-        if (u.frameId != null) 'frameId': u.frameId,
-        if (u.frameAsset != null) 'frameAsset': u.frameAsset,
       };
 
   static ChatUser _decodeSender(Map<String, dynamic> j) => ChatUser(
         id: (j['id'] as String?) ?? '',
         nickname: (j['nickname'] as String?) ?? '',
         avatarUrl: j['avatarUrl'] as String?,
-        nameColor: j['nameColor'] as String?,
-        frameId: j['frameId'] as String?,
-        frameAsset: j['frameAsset'] as String?,
+
       );
 
   static Map<String, dynamic> _encodeReply(ReplyInfo r) => {

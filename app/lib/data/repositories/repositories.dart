@@ -6,7 +6,6 @@ import 'package:flutter/foundation.dart';
 import '../../models/comment.dart';
 import '../../models/conversation.dart';
 import '../local/chat_history_service.dart';
-import '../../models/cosmetic_item.dart';
 import '../../models/friend_request.dart';
 import '../../models/matrix_notification.dart';
 import '../../models/matrix_user.dart';
@@ -961,81 +960,6 @@ class ChatRepository implements ChatApi {
   }
 }
 
-/// Profile customization (cosmetics): catalog, inventory and equipped
-/// items. All state is server-owned — the server validates ownership on
-/// equip, so a crafted client request can never unlock an item.
-class CustomizationRepository {
-  CustomizationRepository(this._api);
-
-  final ApiClient _api;
-
-  /// The active server-owned catalog, optionally filtered by slot/type.
-  Future<List<CosmeticItem>> catalog({String? type}) async {
-    final json = await _api.get<Map<String, dynamic>>(
-      '/api/customization/catalog',
-      queryParameters: type != null ? {'type': type} : null,
-    );
-    return (json['items'] as List)
-        .cast<Map<String, dynamic>>()
-        .map(CosmeticItemDto.fromJson)
-        .map((d) => d.toModel())
-        .toList();
-  }
-
-  /// Items the session user owns (expired ones are filtered server-side).
-  Future<List<CosmeticItem>> inventory() async {
-    final json =
-        await _api.get<Map<String, dynamic>>('/api/customization/inventory');
-    return (json['items'] as List)
-        .cast<Map<String, dynamic>>()
-        .map(CosmeticItemDto.fromJson)
-        .map((d) => d.toModel())
-        .toList();
-  }
-
-  /// Currently equipped cosmetics of the session user, keyed by slot.
-  Future<CosmeticMap> equipped() async {
-    final json =
-        await _api.get<Map<String, dynamic>>('/api/customization/equipped');
-    final list = (json['equipped'] as List).cast<Map<String, dynamic>>();
-    final map = <String, CosmeticItem>{};
-    for (final entry in list) {
-      final item = CosmeticItemDto.fromJson(entry).toModel();
-      map[item.slot] = item;
-    }
-    return map;
-  }
-
-  /// Equips an OWNED item. Throws [ApiException] when the user does not
-  /// own it or it expired — the server is the source of truth.
-  Future<CosmeticItem> equip(String itemId) async {
-    final json = await _api
-        .post<Map<String, dynamic>>('/api/customization/equip/$itemId');
-    return CosmeticItemDto.fromJson(json['equipped'] as Map<String, dynamic>)
-        .toModel();
-  }
-
-  Future<void> unequip(String slot) async {
-    await _api.delete('/api/customization/equip/$slot');
-  }
-
-  /// Consolidated save: sends the WHOLE pending customization in ONE
-  /// operation — `{nameColorId, frameId}`. A string value equips the catalog
-  /// entry, null removes the slot, absent leaves it untouched. The server
-  /// validates each id against the active catalog and persists it. Callers
-  /// refresh the equipped map afterwards (`equipped()`) so the server stays
-  /// the source of truth.
-  Future<void> saveCosmetics({
-    String? nameColorId,
-    String? frameId,
-  }) async {
-    await _api.put<Map<String, dynamic>>(
-      '/api/customization/cosmetics',
-      data: {'nameColorId': nameColorId, 'frameId': frameId},
-    );
-  }
-}
-
 /// Uploads repository — image upload via multipart.
 class UploadRepository {
   UploadRepository(this._api);
@@ -1048,7 +972,7 @@ class UploadRepository {
   /// 'image/webp' + 'sticker.webp') — sticker imports may come from
   /// extensionless temp files (`stickers-1234.img`), which Dio would send as
   /// application/octet-stream and the server would reject (it only accepts
-  /// PNG/JPG/WebP by extension + magic bytes).
+  /// PNG/JPG/WebP/GIF by extension + magic bytes).
   Future<String> upload(
     File file, {
     String? contentType,
@@ -1099,7 +1023,6 @@ class Repositories {
     required this.friends,
     required this.notifications,
     required this.uploads,
-    required this.customization,
     required this.chat,
     required this.stickers,
     required this.stories,
@@ -1114,7 +1037,6 @@ class Repositories {
   final FriendRepository friends;
   final NotificationRepository notifications;
   final UploadRepository uploads;
-  final CustomizationRepository customization;
   final ChatRepository chat;
   final StickerRepository stickers;
   final StoryRepository stories;

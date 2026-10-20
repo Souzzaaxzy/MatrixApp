@@ -6,12 +6,9 @@ import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_dimensions.dart';
 import '../../app/theme/app_text_styles.dart';
 import '../../core/services/app_state.dart';
-import '../../core/widgets/framed_avatar.dart';
 import '../../core/widgets/hud_label.dart';
-import '../../core/widgets/nickname_renderer.dart';
 import '../../core/widgets/user_avatar.dart';
 import '../../data/api_config.dart';
-import '../../models/cosmetic_item.dart';
 import '../../models/story.dart';
 
 /// Visualizador de Story — tela cheia, mídia em `BoxFit.contain` (proporção
@@ -753,26 +750,15 @@ class _StoryIdentity extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 if (g != null)
-                  FramedAvatar(
-                    frame: _frameOf(g),
-                    size: 56,
-                    child: UserAvatar(
+                  UserAvatar(
                       name: g.authorNickname,
                       seed: g.authorNickname,
                       imageUrl: g.authorAvatarUrl,
                       size: 48,
                     ),
-                  ),
                 const SizedBox(height: AppDimensions.spaceXs),
                 if (g != null)
-                  NicknameRenderer(
-                    g.authorNickname,
-                    baseStyle: AppTextStyles.h3.copyWith(fontSize: 16),
-                    background: AppColors.absoluteBlack,
-                    nameColor: g.authorNicknameColor,
-                    textAlign: TextAlign.center,
-                    maxLines: 1,
-                  ),
+                  Text(g.authorNickname, style: AppTextStyles.h3.copyWith(fontSize: 16)),
               ],
             ),
           ),
@@ -794,13 +780,4 @@ class _StoryIdentity extends StatelessWidget {
     );
   }
 
-  CosmeticItem? _frameOf(StoryGroup g) {
-    if (g.authorFrameId == null) return null;
-    return CosmeticItem(
-      id: g.authorFrameId!,
-      slot: CosmeticItem.avatarFrame,
-      name: g.authorFrameId!,
-      assetUrl: g.authorFrameAsset ?? '',
-    );
-  }
 }
