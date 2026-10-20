@@ -77,6 +77,13 @@ class _StoryViewerState extends State<StoryViewer>
   final FocusNode _replyFocus = FocusNode();
   bool _sendingReply = false;
 
+  /// True while the reply field is focused — the Story is FROZEN.
+  ///
+  /// Sem isto, o Story avançava sozinho enquanto o usuário digitava: ao
+  /// terminar de escrever, ele já estava em outro Story (ou o viewer tinha
+  /// fechado). Congelar no foco é o comportamento esperado de stories.
+  bool get _replyFrozen => _replyFocus.hasFocus;
+
   @override
   void initState() {
     super.initState();
@@ -84,6 +91,7 @@ class _StoryViewerState extends State<StoryViewer>
       0,
       widget.state.storyGroups.isEmpty ? 0 : widget.state.storyGroups.length - 1,
     );
+    _replyFocus.addListener(_onReplyFocusChanged);
     _markCurrentViewed();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _syncVideo();
@@ -96,9 +104,26 @@ class _StoryViewerState extends State<StoryViewer>
     _progress.dispose();
     _video?.removeListener(_onVideoTick);
     _video?.dispose();
+    _replyFocus.removeListener(_onReplyFocusChanged);
     _replyCtrl.dispose();
     _replyFocus.dispose();
     super.dispose();
+  }
+
+  /// Congela o Story quando o campo de resposta ganha foco e o retoma quando
+  /// ele perde o foco. O envio chama `unfocus()`, então "voltar ao enviar" cai
+  /// naturalmente aqui — e fechar o teclado sem enviar também retoma, para o
+  /// Story nunca ficar congelado para sempre.
+  void _onReplyFocusChanged() {
+    if (!mounted) return;
+    if (_replyFrozen) {
+      _progress.stop();
+      _video?.pause();
+      return;
+    }
+    // Retoma de ONDE PAROU (nunca reinicia o Story).
+    if (!_advancedForStory) _progress.forward();
+    _video?.play();
   }
 
   /// Auto-avanço quando a linha de progresso completa (foto) — vídeos usam
@@ -124,6 +149,12 @@ class _StoryViewerState extends State<StoryViewer>
       if (d > Duration.zero) target = d;
     }
     _progress.duration = target;
+    // Com o campo de resposta focado o Story fica PARADO — a barra espera o
+    // usuário (o foco é quem retoma, ver _onReplyFocusChanged).
+    if (_replyFrozen) {
+      _progress.value = 0;
+      return;
+    }
     _progress.forward(from: 0);
   }
 
@@ -159,7 +190,9 @@ class _StoryViewerState extends State<StoryViewer>
       await controller.initialize();
       controller.setLooping(true);
       controller.setVolume(0); // stories começam mudos
-      await controller.play();
+      // Congelado: o vídeo é preparado mas fica PAUSADO (o Story não anda
+      // enquanto o usuário escreve a resposta).
+      if (!_replyFrozen) await controller.play();
       if (!mounted) {
         await controller.dispose();
         return;
@@ -199,6 +232,9 @@ class _StoryViewerState extends State<StoryViewer>
 
   void _next() {
     if (!mounted) return;
+    // Congelado: o toque nas laterais não troca de Story enquanto o usuário
+    // escreve uma resposta (senão o texto iria para o Story errado).
+    if (_replyFrozen) return;
     final g = _group;
     if (g == null) return;
     if (_storyIndex < g.stories.length - 1) {
@@ -224,6 +260,7 @@ class _StoryViewerState extends State<StoryViewer>
 
   void _previous() {
     if (!mounted) return;
+    if (_replyFrozen) return;
     if (_storyIndex > 0) {
       setState(() => _storyIndex--);
       _markCurrentViewed();
@@ -451,8 +488,11 @@ class _StoryViewerState extends State<StoryViewer>
   }
 }
 
-/// Barra inferior do visualizador: campo "Responda a esse stories" (bordas
-/// arredondadas) + botão de coração no MESMO padrão do feed (♡/♥).
+/// Barra inferior do visualizador: campo "Responda a esse stories" + botão de
+/// coração no MESMO padrão do feed (♡/♥).
+///
+/// A caixa é RETANGULAR (sem cantos arredondados) — só a moldura fina, para
+/// o campo não competir visualmente com a mídia do Story.
 class _StoryInteractionBar extends StatelessWidget {
   const _StoryInteractionBar({
     required this.controller,
@@ -487,7 +527,7 @@ class _StoryInteractionBar extends StatelessWidget {
             child: Container(
               decoration: BoxDecoration(
                 color: AppColors.absoluteBlack.withValues(alpha: 0.6),
-                borderRadius: BorderRadius.circular(AppDimensions.radiusPill),
+                // Sem cantos arredondados: a caixa é retangular.
                 border: Border.all(color: AppColors.deepBlue),
               ),
               padding: const EdgeInsets.symmetric(

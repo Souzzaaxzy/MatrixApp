@@ -7,6 +7,7 @@ class ChatUser {
     required this.nickname,
     this.avatarUrl,
     this.banned = false,
+    this.online = false,
   });
 
   final String id;
@@ -19,17 +20,25 @@ class ChatUser {
   /// group.
   final bool banned;
 
+  /// Whether this user has the app OPEN right now. The server is the
+  /// authority (it owns the live sockets) — the value arrives in every chat
+  /// payload and is kept fresh by the realtime `presence` frame. Never
+  /// inferred client-side, so a user who left the app shows as offline.
+  final bool online;
+
   ChatUser copyWith({
     String? id,
     String? nickname,
     String? avatarUrl,
     bool? banned,
+    bool? online,
   }) =>
       ChatUser(
         id: id ?? this.id,
         nickname: nickname ?? this.nickname,
         avatarUrl: avatarUrl ?? this.avatarUrl,
         banned: banned ?? this.banned,
+        online: online ?? this.online,
       );
 }
 
@@ -353,6 +362,7 @@ class GroupHeader {
     required this.description,
     required this.createdById,
     required this.memberCount,
+    this.onlineCount = 0,
   });
 
   final String id;
@@ -362,12 +372,18 @@ class GroupHeader {
   final String createdById;
   final int memberCount;
 
+  /// How many members have the app OPEN right now (server-computed). The
+  /// group header shows "N usuários online" from this — it is refreshed live
+  /// by the realtime `presence` frame, never estimated locally.
+  final int onlineCount;
+
   GroupHeader copyWith({
     String? name,
     String? avatarUrl,
     String? description,
     String? createdById,
     int? memberCount,
+    int? onlineCount,
   }) =>
       GroupHeader(
         id: id,
@@ -376,6 +392,7 @@ class GroupHeader {
         description: description ?? this.description,
         createdById: createdById ?? this.createdById,
         memberCount: memberCount ?? this.memberCount,
+        onlineCount: onlineCount ?? this.onlineCount,
       );
 }
 

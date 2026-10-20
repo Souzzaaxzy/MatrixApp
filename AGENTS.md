@@ -356,6 +356,35 @@ Or just `docker compose up -d --build`.
   `core/utils/gallery_picker.dart`. A exibição usa `CachedNetworkImage`, que
   anima GIF; vídeo continua fora (o servidor rejeita).
 
+## Presença (online/offline) e Story congelado ao responder
+- **Quem está online é decidido pelo SERVIDOR.** O app nunca deduz: ele abre o
+  socket em `/api/push/stream` e avisa o primeiro/segundo plano com
+  `{kind:'active'}`/`{kind:'away'}` (`PushService.setForeground`, ligado ao
+  `didChangeAppLifecycleState` no `app.dart`). O servidor relaya
+  `{kind:'presence', data:{userId, online, groups:[{groupId, onlineCount}]}}`
+  para quem conversa com o usuário. "Fora do aplicativo = offline" é literal.
+- `AppState.handleIncomingPresence` só ESPELHA o que chegou: atualiza
+  `ChatUser.online` no cache de conversas e `GroupHeader.onlineCount` no cache
+  de grupos. A contagem de grupo vem PRONTA do servidor (só ele conhece os
+  membros) — não recalcular no aparelho.
+- **DM** (`conversation_screen.dart`): `OnlineDot` à ESQUERDA do nickname +
+  `OnlineStatusLabel` na MESMA linha. A altura do cabeçalho NÃO pode crescer:
+  a linha de baixo já é usada por "digitando…"/"gravando áudio", e aumentar o
+  `toolbarHeight` desloca a thread e quebra testes de avatar (regressão real,
+  pega por `chat_feature_test.dart`). Com digitação/gravação ativa o rótulo
+  some (o indicador ocupa a linha).
+- **Grupo** (`group_conversation_screen.dart`): o subtítulo do cabeçalho é
+  `N usuários online` (antes era o total de membros).
+- `OnlineDot`/`OnlineStatusLabel` vivem em `core/widgets/online_status.dart`
+  (verde = `AppColors.success`; offline usa o token de texto secundário).
+- **Story**: ao FOCAR o campo "Responda a esse stories" o Story CONGELA
+  (`story_viewer.dart`: `_progress.stop()` + `_video.pause()`), e retoma no
+  `unfocus()` — que o envio já faz, então "volta ao enviar" sai de graça.
+  Fechar o teclado sem enviar também retoma (nunca fica congelado para sempre).
+  Enquanto congelado, `_next`/`_previous` não trocam de Story (o texto iria
+  para o Story errado). A caixinha de resposta é RETANGULAR — sem
+  `borderRadius`, só a moldura.
+
 ## Architecture — Server
 The backend lives in the separate repo `Souzzaaxzy/ServidorMtx`. Key points
 for reference when working on the app's data layer:

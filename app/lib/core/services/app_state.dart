@@ -155,6 +155,12 @@ class AppState extends ChangeNotifier {
   final _groupDeleted = StreamController<GroupDeletedEvent>.broadcast();
   Stream<GroupDeletedEvent> get onGroupDeleted => _groupDeleted.stream;
 
+  /// Real-time presence changes (someone came online/offline). Open
+  /// conversations repaint the dot; the group header updates its live
+  /// "N usuários online" from the server-computed count.
+  final _presence = StreamController<PresenceEvent>.broadcast();
+  Stream<PresenceEvent> get onPresence => _presence.stream;
+
   /// Emits when a message in a conversation is deleted FOR EVERYONE by the
   /// peer (realtime). Open conversation screens remove the bubble live.
   final _chatMessageDeleted =
@@ -2007,6 +2013,42 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// A real-time `presence` frame arrived → someone came online/offline.
+  ///
+  /// The app NEVER decides who is online: the server owns the live sockets,
+  /// so it computes the state and (for groups) the new count. This only
+  /// mirrors it into the caches so the open conversation and the chat list
+  /// repaint — including the DM peer's dot and the group header's number.
+  void handleIncomingPresence(PresenceEvent event) {
+    if (_disposed) return;
+    if (event.userId.isEmpty) return;
+
+    // The DM peer's dot (cached conversation row + any open screen).
+    final idx = _conversations.indexWhere((c) => c.otherUser.id == event.userId);
+    if (idx != -1) {
+      final c = _conversations[idx];
+      if (c.otherUser.online != event.online) {
+        _conversations[idx] = c.copyWith(
+          otherUser: c.otherUser.copyWith(online: event.online),
+        );
+      }
+    }
+
+    // Group headers: the server sent the RECOMPUTED count per shared group.
+    for (final g in event.groups) {
+      final gIdx = _groups.indexWhere((item) => item.id == g.groupId);
+      if (gIdx == -1) continue;
+      final item = _groups[gIdx];
+      if (item.group.onlineCount == g.onlineCount) continue;
+      _groups[gIdx] = item.copyWith(
+        group: item.group.copyWith(onlineCount: g.onlineCount),
+      );
+    }
+
+    if (!_presence.isClosed) _presence.add(event);
+    notifyListeners();
+  }
+
   /// A real-time `comment_deleted` frame arrived → a comment was removed
   /// (by its owner or the post author). Open comment surfaces subscribe to
   /// [onCommentDeleted] to remove it live.
@@ -2438,6 +2480,8 @@ class AppState extends ChangeNotifier {
     _chatMessageDeleted.close();
     _groupUpdated.close();
     _groupBanned.close();
+    _groupDeleted.close();
+    _presence.close();
     _commentDeleted.close();
     _friendsChanged.close();
     super.dispose();

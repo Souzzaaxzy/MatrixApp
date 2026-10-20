@@ -19,6 +19,7 @@ Future<AppState> seededGroup({
   String? groupName = 'Equipe MATRIX',
   String? avatarUrl,
   int memberCount = 3,
+  int onlineCount = 0,
   String? sessionUserId,
 }) async {
   final repos = FakeRepositories();
@@ -34,6 +35,7 @@ Future<AppState> seededGroup({
       description: 'Grupo de testes',
       createdById: 'u0',
       memberCount: memberCount,
+      onlineCount: onlineCount,
     ),
     lastMessage: null,
     lastMine: false,
@@ -119,7 +121,7 @@ void main() {
   group('GroupConversationScreen header', () {
     testWidgets('shows back arrow, group photo,name and member count',
         (tester) async {
-      final state = await seededGroup(avatarUrl: '/static/g1.png');
+      final state = await seededGroup(avatarUrl: '/static/g1.png', onlineCount: 2);
       await pumpMatrixApp(
         tester,
         _groupScreen('g1', 'Equipe MATRIX', '/static/g1.png'),
@@ -129,7 +131,9 @@ void main() {
 
       expect(find.byType(BackButton), findsOneWidget);
       expect(find.text('Equipe MATRIX'), findsOneWidget);
-      expect(find.textContaining('3 membros'), findsOneWidget);
+      // O cabeçalho do grupo mostra quantos estão ONLINE agora (não o total
+      // de membros): o número vem do servidor.
+      expect(find.textContaining('2 usuários online'), findsOneWidget);
       expect(find.byType(UserAvatar), findsWidgets);
     });
 

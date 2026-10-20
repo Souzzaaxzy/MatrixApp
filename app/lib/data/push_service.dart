@@ -77,6 +77,11 @@ class PushService {
   /// agora" hint in real time.
   void Function(Map<String, dynamic> data)? onChatRead;
 
+  /// Called when someone's online state changed (kind `presence`). Receives
+  /// `{ userId, online, groups: [{groupId, onlineCount}] }` — the server is
+  /// the authority on who is online, so the app only mirrors what arrives.
+  void Function(Map<String, dynamic> data)? onPresence;
+
   static const _channelId = 'matrix_notifications';
   static const _channelName = 'MATRIX';
   static const _chatChannelId = 'matrix_chat_messages';
@@ -94,6 +99,11 @@ class PushService {
   Timer? _reconnectTimer;
   bool _active = false;
   bool _initialized = false;
+
+  /// Whether the app is currently in the FOREGROUND. Assumed true when the
+  /// session starts (the app is open) and flipped by the lifecycle callback.
+  /// The server uses it to decide the online state.
+  bool _visible = true;
   final Set<String> _shown = <String>{};
 
   /// Initializes the local notification plugin + channel and requests the
@@ -161,6 +171,7 @@ class PushService {
     _sub = null;
     await _channel?.sink.close();
     _channel = null;
+    _visible = false;
     final token = _deviceToken;
     _deviceToken = null;
     if (token != null) {
@@ -169,6 +180,30 @@ class PushService {
       } catch (_) {
         // Token may already be gone server-side; unregister is idempotent.
       }
+    }
+  }
+
+  /// The app moved to/from the foreground.
+  ///
+  /// This is what makes the online state HONEST: a backgrounded app keeps its
+  /// socket (it must, to receive pushes) but is NOT online — the user is not
+  /// looking at MATRIX. The server flips the user offline until `active`
+  /// arrives again. Sent over the existing socket, so it costs no extra
+  /// connection.
+  void setForeground(bool foreground) {
+    if (!_active) return;
+    if (_visible == foreground) return;
+    _visible = foreground;
+    _sendLifecycle(foreground ? 'active' : 'away');
+  }
+
+  void _sendLifecycle(String kind) {
+    final channel = _channel;
+    if (channel == null) return;
+    try {
+      channel.sink.add(jsonEncode({'kind': kind}));
+    } catch (_) {
+      // Best-effort: if the socket is gone the reconnect re-announces.
     }
   }
 
@@ -192,6 +227,9 @@ class PushService {
         onDone: _scheduleReconnect,
         onError: (_) => _scheduleReconnect(),
       );
+      // Re-announce the CURRENT visibility on every (re)connect: a socket that
+      // dropped while the app was backgrounded must not come back "online".
+      _sendLifecycle(_visible ? 'active' : 'away');
     } catch (_) {
       _scheduleReconnect();
     }
@@ -268,6 +306,12 @@ class PushService {
       final data =
           (message['data'] as Map?)?.cast<String, dynamic>() ?? const {};
       onChatGroupDeleted?.call(data);
+      return;
+    }
+    if (message['kind'] == 'presence') {
+      final data =
+          (message['data'] as Map?)?.cast<String, dynamic>() ?? const {};
+      onPresence?.call(data);
       return;
     }
     if (message['kind'] == 'comment_deleted') {

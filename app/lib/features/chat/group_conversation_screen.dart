@@ -53,6 +53,11 @@ class _GroupConversationScreenState extends State<GroupConversationScreen>
   String _groupDescription = '';
   String? _groupOwnerId;
   int _groupMemberCount = 0;
+
+  /// Quantos membros estão com o app aberto AGORA (calculado pelo servidor).
+  /// O cabeçalho mostra "N usuários online" — um número VIVO, atualizado pelo
+  /// frame `presence`, nunca estimado no aparelho.
+  int _groupOnlineCount = 0;
   StreamSubscription<GroupUpdatedEvent>? _groupSub;
 
   /// Tracks the draft mentions of the CURRENT composer text. Each draft is
@@ -89,6 +94,7 @@ class _GroupConversationScreenState extends State<GroupConversationScreen>
   StreamSubscription<ChatMessageDeletedEvent>? _deletedSub;
   StreamSubscription<GroupBannedEvent>? _bannedSub;
   StreamSubscription<GroupDeletedEvent>? _groupDeletedSub;
+  StreamSubscription<PresenceEvent>? _presenceSub;
 
   bool _followBottom = true;
   final Set<String> _typingUsers = <String>{};
@@ -190,6 +196,8 @@ class _GroupConversationScreenState extends State<GroupConversationScreen>
       _bannedSub = state?.onGroupBanned.listen(_onGroupBanned);
       _groupDeletedSub?.cancel();
       _groupDeletedSub = state?.onGroupDeleted.listen(_onGroupDeleted);
+      _presenceSub?.cancel();
+      _presenceSub = state?.onPresence.listen(_onPresence);
     }
     if (!_loadRequested) {
       _loadRequested = true;
@@ -221,6 +229,7 @@ class _GroupConversationScreenState extends State<GroupConversationScreen>
     _groupSub?.cancel();
     _bannedSub?.cancel();
     _groupDeletedSub?.cancel();
+    _presenceSub?.cancel();
     if (_recListener != null) {
       _recorder.removeListener(_recListener!);
       _recListener = null;
@@ -306,6 +315,7 @@ class _GroupConversationScreenState extends State<GroupConversationScreen>
     _groupDescription = group.group.description;
     _groupOwnerId = group.group.createdById;
     _groupMemberCount = group.group.memberCount;
+    _groupOnlineCount = group.group.onlineCount;
   }
 
   /// An owner edited the group (name/avatar/description/membership). The
@@ -323,8 +333,24 @@ class _GroupConversationScreenState extends State<GroupConversationScreen>
       _groupDescription = event.group.description;
       _groupOwnerId = event.group.createdById;
       _groupMemberCount = event.group.memberCount;
+      _groupOnlineCount = event.group.onlineCount;
       _syncBannedSenders(event.bannedUserIds);
     });
+  }
+
+  /// Alguém ficou online/offline (realtime). O servidor manda, por grupo
+  /// compartilhado, a contagem JÁ RECALCULADA — aqui só atualizamos o
+  /// cabeçalho. Assim "N usuários online" é sempre o número real, e cai na
+  /// hora em que alguém sai do aplicativo.
+  void _onPresence(PresenceEvent event) {
+    if (!mounted) return;
+    if (_groupId.isEmpty) return;
+    for (final g in event.groups) {
+      if (g.groupId != _groupId) continue;
+      if (_groupOnlineCount == g.onlineCount) return;
+      setState(() => _groupOnlineCount = g.onlineCount);
+      return;
+    }
   }
 
   /// Syncs every loaded group message's sender to the CURRENT banned set
@@ -1280,8 +1306,12 @@ class _GroupConversationScreenState extends State<GroupConversationScreen>
                   ),
                 ),
                 if (_groupMemberCount > 0)
+                  // "N usuários online" — o número VIVO de quem está com o
+                  // app aberto agora (o servidor calcula; aqui só exibimos).
                   Text(
-                    '$_groupMemberCount membro${_groupMemberCount == 1 ? '' : 's'}',
+                    _groupOnlineCount == 1
+                        ? '1 usuário online'
+                        : '$_groupOnlineCount usuários online',
                     style: AppTextStyles.caption.copyWith(
                         fontSize: 11, color: AppColors.holographicBlue),
                   ),

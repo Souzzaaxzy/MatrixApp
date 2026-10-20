@@ -343,6 +343,7 @@ class ChatUserDto {
   final String nickname;
   final String? avatarUrl;
   final bool banned;
+  final bool online;
 
   const ChatUserDto({
     required this.id,
@@ -350,6 +351,7 @@ class ChatUserDto {
     this.avatarUrl,
 
     this.banned = false,
+    this.online = false,
   });
 
   ChatUser toModel() => ChatUser(
@@ -358,6 +360,7 @@ class ChatUserDto {
         avatarUrl: avatarUrl,
 
         banned: banned,
+        online: online,
       );
 
   factory ChatUserDto.fromJson(Map<String, dynamic> json) => ChatUserDto(
@@ -366,6 +369,7 @@ class ChatUserDto {
         avatarUrl: json['avatarUrl'] as String?,
 
         banned: (json['banned'] as bool?) ?? false,
+        online: (json['online'] as bool?) ?? false,
       );
 }
 
@@ -686,6 +690,23 @@ class GroupUpdatedEvent {
   }
 }
 
+/// A realtime presence change: [userId] is now online/offline, and — for the
+/// groups shared with the viewer — the RECOMPUTED number of online members.
+///
+/// The server computes the count because only it knows the full member list;
+/// the client just mirrors what arrived.
+class PresenceEvent {
+  const PresenceEvent({
+    required this.userId,
+    required this.online,
+    this.groups = const [],
+  });
+
+  final String userId;
+  final bool online;
+  final List<({String groupId, int onlineCount})> groups;
+}
+
 /// The group identity block embedded in group-list items. Mirrors the
 /// server's `GroupHeader` shape.
 class GroupHeaderDto {
@@ -695,6 +716,7 @@ class GroupHeaderDto {
   final String description;
   final String createdById;
   final int memberCount;
+  final int onlineCount;
 
   const GroupHeaderDto({
     required this.id,
@@ -703,6 +725,7 @@ class GroupHeaderDto {
     required this.description,
     required this.createdById,
     required this.memberCount,
+    this.onlineCount = 0,
   });
 
   GroupHeader toModel() => GroupHeader(
@@ -712,6 +735,7 @@ class GroupHeaderDto {
         description: description,
         createdById: createdById,
         memberCount: memberCount,
+        onlineCount: onlineCount,
       );
 
   factory GroupHeaderDto.fromJson(Map<String, dynamic> json) => GroupHeaderDto(
@@ -721,6 +745,7 @@ class GroupHeaderDto {
         description: (json['description'] as String?) ?? '',
         createdById: json['createdById'] as String,
         memberCount: (json['memberCount'] as num?)?.toInt() ?? 0,
+        onlineCount: (json['onlineCount'] as num?)?.toInt() ?? 0,
       );
 }
 

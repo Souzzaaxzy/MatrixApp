@@ -15,8 +15,10 @@ import '../../core/widgets/hud_label.dart';
 import '../../core/widgets/matrix_button.dart';
 import '../../core/widgets/puzzle_icon.dart';
 import '../../core/widgets/matrix_text_field.dart';
+import '../../core/widgets/online_status.dart';
 import '../../core/widgets/user_avatar.dart';
 import '../../data/api_config.dart';
+import '../../data/dtos/dtos.dart';
 import '../../data/services.dart';
 import '../../models/conversation.dart';
 import '../../models/sticker.dart';
@@ -90,6 +92,12 @@ class _ConversationScreenState extends State<ConversationScreen>
   StreamSubscription<ChatRecordingEvent>? _recordingSub;
   StreamSubscription<ChatReadEvent>? _readSub;
   StreamSubscription<ChatMessageDeletedEvent>? _deletedSub;
+  StreamSubscription<PresenceEvent>? _presenceSub;
+
+  /// The peer's live online state, as decided by the SERVER (it owns the
+  /// sockets). Seeded from the loaded conversation and kept fresh by the
+  /// realtime `presence` frame — never guessed locally.
+  bool _peerOnline = false;
 
   /// Whether the newest message is pinned to the bottom (auto-follow new).
   bool _followBottom = true;
@@ -185,6 +193,8 @@ class _ConversationScreenState extends State<ConversationScreen>
       _deletedSub?.cancel();
       _deletedSub =
           state?.onChatMessageDeleted.listen(_onMessageDeletedRealtime);
+      _presenceSub?.cancel();
+      _presenceSub = state?.onPresence.listen(_onPresence);
     }
     if (!_loadRequested) {
       // Defer the load: _load notifies listeners synchronously.
@@ -235,6 +245,7 @@ class _ConversationScreenState extends State<ConversationScreen>
     _recordingSub?.cancel();
     _readSub?.cancel();
     _deletedSub?.cancel();
+    _presenceSub?.cancel();
     if (_recListener != null) {
       _recorder.removeListener(_recListener!);
       _recListener = null;
@@ -315,6 +326,9 @@ class _ConversationScreenState extends State<ConversationScreen>
           ..addAll(page.messages);
         _hasMore = page.hasMore;
         _loading = false;
+        // Seed the dot from the freshly loaded conversation; the realtime
+        // `presence` frame keeps it current from here on.
+        _peerOnline = conversation!.otherUser.online;
       });
       // Open the DM → mark read (clears the unread badge server-side).
       unawaited(state.markConversationRead(conversation.id));
@@ -748,6 +762,18 @@ class _ConversationScreenState extends State<ConversationScreen>
     }
   }
 
+  // ── Realtime presence (online/offline do outro usuário) ────
+  // O servidor decide quem está online (é ele que tem os sockets); aqui só
+  // refletimos no cabeçalho. "Usuário fora do aplicativo = offline" chega
+  // pronto — o app nunca deduz o estado por conta própria.
+  void _onPresence(PresenceEvent event) {
+    if (!mounted) return;
+    final peerId = _conversation?.otherUser.id ?? widget.args.otherUserId;
+    if (peerId.isEmpty || event.userId != peerId) return;
+    if (_peerOnline == event.online) return;
+    setState(() => _peerOnline = event.online);
+  }
+
   // ── Realtime read receipt ("visto agora") ──────────────────
   void _onReadReceipt(ChatReadEvent event) {
     if (!mounted) return;
@@ -903,7 +929,37 @@ class _ConversationScreenState extends State<ConversationScreen>
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(other.nickname, style: AppTextStyles.h3.copyWith(fontSize: 19)),
+              // Nome com a BOLINHA de presença à ESQUERDA (o estado ao vivo
+              // fica embutido na mesma linha, então o cabeçalho NÃO cresce —
+              // só a linha de digitação/gravação abaixo é que o expande).
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  OnlineDot(
+                    online: _peerOnline,
+                    size: 9,
+                    semanticLabel: _peerOnline
+                        ? '${other.nickname} está online'
+                        : '${other.nickname} está offline',
+                  ),
+                  const SizedBox(width: AppDimensions.spaceSm),
+                  Flexible(
+                    child: Text(
+                      other.nickname,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: AppTextStyles.h3.copyWith(fontSize: 19),
+                    ),
+                  ),
+                  // O rótulo só aparece quando NÃO há digitação/gravação para
+                  // mostrar (essas mensagens já ocupam a linha de baixo).
+                  if (!_recorder.isRecording && !_peerRecording && !_peerTyping)
+                    Padding(
+                      padding: const EdgeInsets.only(left: AppDimensions.spaceSm),
+                      child: OnlineStatusLabel(online: _peerOnline),
+                    ),
+                ],
+              ),
               // Realtime peer status directly below the nickname (only in
               // a live conversation with a peer). Centered. Voice recording
               // takes precedence over typing — the peer cannot do both,so

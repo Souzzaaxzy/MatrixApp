@@ -23,7 +23,7 @@ class MatrixApp extends StatefulWidget {
   State<MatrixApp> createState() => _MatrixAppState();
 }
 
-class _MatrixAppState extends State<MatrixApp> {
+class _MatrixAppState extends State<MatrixApp> with WidgetsBindingObserver {
   final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
   final _RouteWatcher _routeWatcher = _RouteWatcher();
   StreamSubscription<SharedStickerBatch>? _shareSub;
@@ -36,8 +36,20 @@ class _MatrixAppState extends State<MatrixApp> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _shareSub?.cancel();
     super.dispose();
+  }
+
+  /// The app moved to/from the foreground. This is the ONLINE signal: MATRIX
+  /// only counts a user as online while the app is actually in front of them,
+  /// so a backgrounded app (still holding its socket for pushes) reports
+  /// itself offline. The server relays the change to the people who talk to
+  /// this user.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (!Services.isInitialized) return;
+    Services.instance.push.setForeground(state == AppLifecycleState.resumed);
   }
 
   @override
@@ -47,6 +59,7 @@ class _MatrixAppState extends State<MatrixApp> {
     // LIKE/COMMENT → the post; FRIEND_REQUEST → Atividades;
     // FRIEND_ACCEPTED → the friend's profile.
     if (Services.isInitialized) {
+      WidgetsBinding.instance.addObserver(this);
       Services.instance.push.onNavigate = _onPushNavigate;
       Services.instance.push.onChatMessage = _onChatMessage;
       Services.instance.push.onChatTyping = _onChatTyping;
@@ -57,6 +70,7 @@ class _MatrixAppState extends State<MatrixApp> {
       Services.instance.push.onChatGroupBanned = _onChatGroupBanned;
       Services.instance.push.onChatGroupDeleted = _onChatGroupDeleted;
       Services.instance.push.onCommentDeleted = _onCommentDeleted;
+      Services.instance.push.onPresence = _onPresence;
       // Compartir de Android: contenido recibido mientras el app está
       // abierto → abre la pantalla de importación.
       ShareStickerService.instance.listen();
@@ -158,6 +172,31 @@ class _MatrixAppState extends State<MatrixApp> {
         messageId: messageId,
       ),
     );
+  }
+
+  /// Someone's online state changed (realtime). The SERVER decided it (it
+  /// owns the live sockets); this only routes it into AppState so open
+  /// conversations and the chat list repaint the dot / the group count.
+  void _onPresence(Map<String, dynamic> data) {
+    final state = _state;
+    if (state == null) return;
+    final userId = data['userId'] as String? ?? '';
+    if (userId.isEmpty) return;
+    final rawGroups = data['groups'];
+    state.handleIncomingPresence(PresenceEvent(
+      userId: userId,
+      online: (data['online'] as bool?) ?? false,
+      groups: rawGroups is List
+          ? rawGroups
+              .whereType<Map<String, dynamic>>()
+              .map((g) => (
+                    groupId: (g['groupId'] as String?) ?? '',
+                    onlineCount: (g['onlineCount'] as num?)?.toInt() ?? 0,
+                  ))
+              .where((g) => g.groupId.isNotEmpty)
+              .toList()
+          : const [],
+    ));
   }
 
   /// A comment was deleted (by its owner or the post author). AppState
